@@ -3,8 +3,12 @@ import { notFound } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { getInquiryById, listAttachmentSignedUrls } from "@/lib/inquiries";
 import { getAccountHistory } from "@/lib/account-history";
+import { listCategoryLabels } from "@/lib/categories";
+import InquiryHeader from "@/components/inquiries/InquiryHeader";
 import InquiryDetail from "@/components/inquiries/InquiryDetail";
+import InquiryMetaCard from "@/components/inquiries/InquiryMetaCard";
 import StatusSelect from "@/components/inquiries/StatusSelect";
+import PrioritySelect from "@/components/inquiries/PrioritySelect";
 import ReplyForm from "@/components/inquiries/ReplyForm";
 import AccountHistoryPanel from "@/components/inquiries/AccountHistoryPanel";
 
@@ -18,27 +22,44 @@ export default async function InquiryDetailPage({ params }: { params: { id: stri
     notFound();
   }
 
-  const [attachments, history] = await Promise.all([
+  const [attachments, history, labels] = await Promise.all([
     listAttachmentSignedUrls(supabase, inquiry.id),
     getAccountHistory(supabase, inquiry.gameId, inquiry.gameAccount, inquiry.id),
+    listCategoryLabels(supabase, inquiry.gameId),
   ]);
 
   return (
-    <>
+    <div className="flex flex-col gap-4">
       <Link
         href={`/games/${inquiry.gameId}/inquiries`}
         className="text-sm text-muted hover:text-ink transition-colors"
       >
-        ← 문의 목록
+        ← 목록
       </Link>
-      <div className="grid grid-cols-[2fr_1fr] gap-8 mt-2">
-        <div className="flex flex-col gap-6">
+
+      <InquiryHeader inquiry={inquiry} labels={labels} />
+
+      <div className="grid grid-cols-[2fr_1fr] gap-6 items-start">
+        <div className="flex flex-col gap-4">
           <InquiryDetail inquiry={inquiry} attachments={attachments} />
-          <StatusSelect inquiryId={inquiry.id} currentStatus={inquiry.status} />
-          <ReplyForm inquiryId={inquiry.id} />
+          <section className="bg-panel border border-line rounded-2xl p-4">
+            <h2 className="font-semibold mb-3">답변</h2>
+            <ReplyForm inquiryId={inquiry.id} />
+          </section>
         </div>
-        <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} />
+
+        <div className="flex flex-col gap-4">
+          <section className="bg-panel border border-line rounded-2xl p-4">
+            <h2 className="font-semibold mb-3">처리</h2>
+            <div className="flex flex-col gap-3">
+              <StatusSelect inquiryId={inquiry.id} currentStatus={inquiry.status} />
+              <PrioritySelect inquiryId={inquiry.id} currentPriority={inquiry.priority} />
+            </div>
+          </section>
+          <InquiryMetaCard inquiry={inquiry} />
+          <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} />
+        </div>
       </div>
-    </>
+    </div>
   );
 }
