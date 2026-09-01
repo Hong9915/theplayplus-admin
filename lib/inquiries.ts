@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type InquiryStatus = "new" | "in_progress" | "resolved";
+export type InquiryPriority = "urgent" | "high" | "normal" | "low";
 
 export interface InquiryRow {
   id: string;
+  inquiryNo: string | null;
   gameId: string;
   groupKey: string;
   typeKey: string;
@@ -13,6 +15,8 @@ export interface InquiryRow {
   title: string;
   content: string;
   status: InquiryStatus;
+  priority: InquiryPriority;
+  meta: Record<string, unknown>;
   replyContent: string | null;
   repliedAt: string | null;
   createdAt: string;
@@ -26,6 +30,7 @@ export interface AttachmentWithUrl {
 
 function mapInquiryRow(row: {
   id: string;
+  inquiry_no: string | null;
   game_id: string;
   group_key: string;
   type_key: string;
@@ -35,12 +40,15 @@ function mapInquiryRow(row: {
   title: string;
   content: string;
   status: string;
+  priority: string | null;
+  meta: Record<string, unknown> | null;
   reply_content: string | null;
   replied_at: string | null;
   created_at: string;
 }): InquiryRow {
   return {
     id: row.id,
+    inquiryNo: row.inquiry_no ?? null,
     gameId: row.game_id,
     groupKey: row.group_key,
     typeKey: row.type_key,
@@ -50,6 +58,8 @@ function mapInquiryRow(row: {
     title: row.title,
     content: row.content,
     status: row.status as InquiryStatus,
+    priority: (row.priority ?? "normal") as InquiryPriority,
+    meta: row.meta ?? {},
     replyContent: row.reply_content,
     repliedAt: row.replied_at,
     createdAt: row.created_at,
