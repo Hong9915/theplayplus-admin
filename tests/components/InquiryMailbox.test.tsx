@@ -92,7 +92,7 @@ describe("InquiryMailbox", () => {
       />
     );
 
-    await userEvent.type(screen.getByLabelText("제목 검색"), "결제");
+    await userEvent.type(screen.getByLabelText("검색"), "결제");
 
     expect(screen.getByText("결제 오류")).toBeInTheDocument();
     expect(screen.queryByText("계정 복구 요청")).not.toBeInTheDocument();
@@ -100,7 +100,7 @@ describe("InquiryMailbox", () => {
 
   it("shows a no-match message when filters exclude everything", async () => {
     render(<InquiryMailbox inquiries={[makeInquiry({})]} labels={labels} />);
-    await userEvent.type(screen.getByLabelText("제목 검색"), "없는검색어");
+    await userEvent.type(screen.getByLabelText("검색"), "없는검색어");
     expect(screen.getByText("조건에 맞는 문의가 없습니다.")).toBeInTheDocument();
   });
 
@@ -110,5 +110,46 @@ describe("InquiryMailbox", () => {
       "href",
       "/inquiries/aaaabbbb-0000-0000-0000-000000000000"
     );
+  });
+
+  it("shows the inquiry number instead of a UUID fragment", () => {
+    render(<InquiryMailbox inquiries={[makeInquiry({ inquiryNo: "R-20260723-0005" })]} labels={labels} />);
+    expect(screen.getByText("R-20260723-0005")).toBeInTheDocument();
+    expect(screen.queryByText("aaaabbbb")).not.toBeInTheDocument();
+  });
+
+  it("shows an em dash when the inquiry has no number", () => {
+    render(<InquiryMailbox inquiries={[makeInquiry({ inquiryNo: null })]} labels={labels} />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("filters by inquiry number as well as title", async () => {
+    render(
+      <InquiryMailbox
+        inquiries={[
+          makeInquiry({
+            id: "11111111-0000-0000-0000-000000000000",
+            inquiryNo: "R-20260723-0005",
+            title: "결제 오류",
+          }),
+          makeInquiry({
+            id: "22222222-0000-0000-0000-000000000000",
+            inquiryNo: "R-20260724-0001",
+            title: "계정 복구 요청",
+          }),
+        ]}
+        labels={labels}
+      />
+    );
+
+    await userEvent.type(screen.getByLabelText("검색"), "0005");
+
+    expect(screen.getByText("결제 오류")).toBeInTheDocument();
+    expect(screen.queryByText("계정 복구 요청")).not.toBeInTheDocument();
+  });
+
+  it("shows elapsed time in minutes for a fresh inquiry", () => {
+    render(<InquiryMailbox inquiries={[makeInquiry({})]} labels={labels} />);
+    expect(screen.getByText("0분")).toBeInTheDocument();
   });
 });
