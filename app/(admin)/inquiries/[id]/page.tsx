@@ -27,7 +27,7 @@ export default async function InquiryDetailPage({ params }: { params: { id: stri
     <>
       <Link
         href={`/games/${inquiry.gameId}/inquiries`}
-        className="text-sm text-white/50 hover:text-white transition-colors"
+        className="text-sm text-muted hover:text-ink transition-colors"
       >
         ← 문의 목록
       </Link>

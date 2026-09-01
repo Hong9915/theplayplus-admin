@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import type { GameRow } from "@/lib/categories";
 
-export default function GameForm({ onCreated }: { onCreated: () => void }) {
+export default function GameForm({ onCreated }: { onCreated: (game: GameRow) => void }) {
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"active" | "ended">("active");
   const [ownerName, setOwnerName] = useState("");
@@ -27,7 +28,7 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
       formData.set("logo", logo);
     }
 
-    let json: { success: boolean; logoWarning?: string };
+    let json: { success: boolean; error?: string; game?: GameRow };
     try {
       const response = await fetch("/api/games", { method: "POST", body: formData });
       json = await response.json();
@@ -38,21 +39,20 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
     }
     setSubmitting(false);
 
-    if (!json.success) {
-      setMessage("게임 추가에 실패했습니다. 다시 시도해주세요.");
+    if (!json.success || !json.game) {
+      if (json.error === "logo_upload_failed") {
+        setMessage("로고 업로드에 실패해 게임이 추가되지 않았습니다. 다시 시도해주세요.");
+      } else {
+        setMessage("게임 추가에 실패했습니다. 다시 시도해주세요.");
+      }
       return;
     }
 
-    if (json.logoWarning) {
-      setMessage(`게임은 저장됐지만 로고 업로드에 실패했습니다: ${json.logoWarning}`);
-    } else {
-      setMessage("게임이 추가되었습니다.");
-    }
-
+    setMessage("게임이 추가되었습니다.");
     setName("");
     setOwnerName("");
     setLogo(null);
-    onCreated();
+    onCreated(json.game);
   }
 
   return (
@@ -63,7 +63,7 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          className="bg-black border border-white/20 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
+          className="bg-panel border border-line rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -71,7 +71,7 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value as "active" | "ended")}
-          className="bg-black border border-white/20 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
+          className="bg-panel border border-line rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
         >
           <option value="active">서비스중</option>
           <option value="ended">종료</option>
@@ -82,7 +82,7 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
         <input
           value={ownerName}
           onChange={(e) => setOwnerName(e.target.value)}
-          className="bg-black border border-white/20 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
+          className="bg-panel border border-line rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -93,7 +93,7 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
       <button
         type="submit"
         disabled={submitting}
-        className="bg-accent text-white rounded px-4 py-2 hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-colors"
+        className="bg-accent text-white rounded px-4 py-2 hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50 transition-colors"
       >
         게임 추가
       </button>

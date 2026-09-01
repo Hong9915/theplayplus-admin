@@ -32,23 +32,24 @@ export async function POST(request: Request) {
       status: input.status,
       owner_name: input.ownerName || null,
     })
-    .select("id")
+    .select("id, created_at")
     .single();
 
   if (insertError || !inserted) {
     return NextResponse.json({ success: false, error: "save_failed" }, { status: 500 });
   }
 
-  let logoWarning: string | undefined;
+  let logoPath: string | null = null;
   const logo = formData.get("logo");
   if (logo instanceof File && logo.size > 0) {
     const path = `${inserted.id}/${randomUUID()}-${logo.name}`;
     const { error: uploadError } = await supabase.storage.from("game-logos").upload(path, logo);
     if (uploadError) {
-      logoWarning = logo.name;
-    } else {
-      await supabase.from("games").update({ logo_path: path }).eq("id", inserted.id);
+      await supabase.from("games").delete().eq("id", inserted.id);
+      return NextResponse.json({ success: false, error: "logo_upload_failed" }, { status: 500 });
     }
+    logoPath = path;
+    await supabase.from("games").update({ logo_path: logoPath }).eq("id", inserted.id);
   }
 
   try {
@@ -58,5 +59,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "category_seed_failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, id: inserted.id, ...(logoWarning ? { logoWarning } : {}) }, { status: 200 });
+  return NextResponse.json(
+    {
+      success: true,
+      game: {
+        id: inserted.id,
+        name: input.name,
+        status: input.status,
+        logoPath,
+        ownerName: input.ownerName || null,
+        createdAt: inserted.created_at,
+      },
+    },
+    { status: 200 }
+  );
 }

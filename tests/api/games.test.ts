@@ -27,7 +27,7 @@ function buildFormData(overrides: Record<string, string> = {}) {
 }
 
 function mockSupabaseSuccess() {
-  const single = vi.fn().mockResolvedValue({ data: { id: "game-1" }, error: null });
+  const single = vi.fn().mockResolvedValue({ data: { id: "game-1", created_at: "2026-01-01T00:00:00.000Z" }, error: null });
   const select = vi.fn().mockReturnValue({ single });
   const insert = vi.fn().mockReturnValue({ select });
   const update = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) });
@@ -85,7 +85,17 @@ describe("POST /api/games", () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json).toEqual({ success: true, id: "game-1" });
+    expect(json).toEqual({
+      success: true,
+      game: {
+        id: "game-1",
+        name: "여신키우기",
+        status: "active",
+        logoPath: null,
+        ownerName: "홍길동",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
     expect(categoriesModule.createDefaultCategoriesForGame).toHaveBeenCalledWith(expect.anything(), "game-1");
   });
 
@@ -111,11 +121,13 @@ describe("POST /api/games", () => {
     expect(response.status).toBe(500);
   });
 
-  it("saves the game even if logo upload fails, reporting a warning", async () => {
-    const single = vi.fn().mockResolvedValue({ data: { id: "game-1" }, error: null });
+  it("deletes the game and returns logo_upload_failed when logo upload fails", async () => {
+    const single = vi.fn().mockResolvedValue({ data: { id: "game-1", created_at: "2026-01-01T00:00:00.000Z" }, error: null });
     const select = vi.fn().mockReturnValue({ single });
     const insert = vi.fn().mockReturnValue({ select });
-    const from = vi.fn().mockReturnValue({ insert });
+    const deleteEq = vi.fn().mockResolvedValue({ error: null });
+    const deleteFn = vi.fn().mockReturnValue({ eq: deleteEq });
+    const from = vi.fn().mockReturnValue({ insert, delete: deleteFn });
     const upload = vi.fn().mockResolvedValue({ error: { message: "storage error" } });
     const storageFrom = vi.fn().mockReturnValue({ upload });
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReturnValue({ from, storage: { from: storageFrom } } as never);
@@ -127,8 +139,10 @@ describe("POST /api/games", () => {
     const response = await POST(request);
     const json = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(json.success).toBe(true);
-    expect(json.logoWarning).toBe("logo.png");
+    expect(response.status).toBe(500);
+    expect(json).toEqual({ success: false, error: "logo_upload_failed" });
+    expect(deleteFn).toHaveBeenCalled();
+    expect(deleteEq).toHaveBeenCalledWith("id", "game-1");
+    expect(categoriesModule.createDefaultCategoriesForGame).not.toHaveBeenCalled();
   });
 });

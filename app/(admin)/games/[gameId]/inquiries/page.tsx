@@ -1,33 +1,39 @@
-import Link from "next/link";
+import { notFound } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
-import { listInquiriesByGame, type InquiryStatus } from "@/lib/inquiries";
-import InquiryList from "@/components/inquiries/InquiryList";
+import { listInquiriesByGame } from "@/lib/inquiries";
+import { listCategoryLabels, listGames } from "@/lib/categories";
+import InquiryMailbox from "@/components/inquiries/InquiryMailbox";
 
 export const dynamic = "force-dynamic";
 
-const VALID_STATUSES: InquiryStatus[] = ["new", "in_progress", "resolved"];
-
-export default async function GameInquiriesPage({
-  params,
-  searchParams,
-}: {
-  params: { gameId: string };
-  searchParams: { status?: string };
-}) {
-  const status = VALID_STATUSES.includes(searchParams.status as InquiryStatus)
-    ? (searchParams.status as InquiryStatus)
-    : undefined;
-
+export default async function GameInquiriesPage({ params }: { params: { gameId: string } }) {
   const supabase = getSupabaseServerClient();
-  const inquiries = await listInquiriesByGame(supabase, params.gameId, status);
+
+  const [games, inquiries, labels] = await Promise.all([
+    listGames(supabase),
+    listInquiriesByGame(supabase, params.gameId),
+    listCategoryLabels(supabase, params.gameId),
+  ]);
+
+  const game = games.find((entry) => entry.id === params.gameId);
+  if (!game) {
+    notFound();
+  }
 
   return (
-    <>
-      <Link href="/games" className="text-sm text-white/50 hover:text-white transition-colors">
-        ← 게임 목록
-      </Link>
-      <h1 className="text-2xl font-bold mt-2 mb-6">문의 목록</h1>
-      <InquiryList inquiries={inquiries} activeStatus={status ?? "all"} gameId={params.gameId} />
-    </>
+    <div className="flex flex-col gap-4">
+      <header className="flex items-baseline gap-3">
+        <h1 className="text-xl font-bold">{game.name}</h1>
+        <span className="text-sm text-muted">문의함</span>
+        <span
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            game.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-ground text-muted"
+          }`}
+        >
+          {game.status === "active" ? "서비스중" : "종료"}
+        </span>
+      </header>
+      <InquiryMailbox inquiries={inquiries} labels={labels} />
+    </div>
   );
 }

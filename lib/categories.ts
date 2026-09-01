@@ -195,6 +195,45 @@ function mapGameRow(row: {
   };
 }
 
+export interface CategoryLabelMaps {
+  groupLabels: Record<string, string>;
+  typeLabels: Record<string, string>;
+}
+
+export async function listCategoryLabels(supabase: SupabaseClient, gameId: string): Promise<CategoryLabelMaps> {
+  const groupLabels: Record<string, string> = {};
+  const typeLabels: Record<string, string> = {};
+
+  const { data: groups, error: groupsError } = await supabase
+    .from("inquiry_groups")
+    .select("id, key, label_ko")
+    .eq("game_id", gameId);
+
+  if (groupsError || !groups || groups.length === 0) {
+    return { groupLabels, typeLabels };
+  }
+
+  for (const group of groups) {
+    groupLabels[group.key] = group.label_ko;
+  }
+
+  const { data: types, error: typesError } = await supabase
+    .from("inquiry_types")
+    .select("key, label_ko")
+    .in(
+      "group_id",
+      groups.map((group) => group.id)
+    );
+
+  if (!typesError && types) {
+    for (const type of types) {
+      typeLabels[type.key] = type.label_ko;
+    }
+  }
+
+  return { groupLabels, typeLabels };
+}
+
 export async function listGames(supabase: SupabaseClient): Promise<GameRow[]> {
   const { data, error } = await supabase.from("games").select("*").order("created_at", { ascending: false });
   if (error) {

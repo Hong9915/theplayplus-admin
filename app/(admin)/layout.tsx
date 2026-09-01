@@ -1,11 +1,18 @@
 import type { ReactNode } from "react";
-import AdminHeader from "@/components/layout/AdminHeader";
+import { getSupabaseServerClient } from "@/lib/supabase";
+import { listGames } from "@/lib/categories";
+import GameRail from "@/components/layout/GameRail";
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+export const dynamic = "force-dynamic";
+
+export default async function AdminLayout({ children }: { children: ReactNode }) {
+  const supabase = getSupabaseServerClient();
+  const games = await listGames(supabase);
+
   return (
-    <div className="min-h-screen flex flex-col">
-      <AdminHeader />
-      <main className="flex-1 w-full max-w-5xl mx-auto px-6 py-8">{children}</main>
+    <div className="min-h-screen flex">
+      <GameRail games={games} />
+      <main className="flex-1 min-w-0 px-8 py-6">{children}</main>
     </div>
   );
 }

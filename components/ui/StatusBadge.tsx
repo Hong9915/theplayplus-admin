@@ -7,9 +7,9 @@ const STATUS_LABEL: Record<InquiryStatus, string> = {
 };
 
 const STATUS_STYLE: Record<InquiryStatus, string> = {
-  new: "bg-white/10 text-white/80",
-  in_progress: "bg-amber-500/15 text-amber-400",
-  resolved: "bg-emerald-500/15 text-emerald-400",
+  new: "bg-accent/10 text-accent border border-accent/30",
+  in_progress: "bg-amber-50 text-amber-700 border border-amber-200",
+  resolved: "bg-emerald-50 text-emerald-700 border border-emerald-200",
 };
 
 export default function StatusBadge({ status }: { status: InquiryStatus }) {
