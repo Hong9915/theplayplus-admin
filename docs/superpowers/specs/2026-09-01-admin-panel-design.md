@@ -182,3 +182,47 @@ create table inquiry_attachments (
 - 통합: `POST /api/games`(정상 생성, 필수값 누락, 로고 업로드 실패), `PATCH /api/inquiries/[id]/status`, `POST /api/inquiries/[id]/reply`(발송 성공/실패에 따른 상태 반영)
 - 컴포넌트: `GameForm` 검증, `InquiryList` 필터, `AccountHistoryPanel` 렌더링(이력 있음/없음)
 - 수동 확인: 실제 Supabase 프로젝트에서 게임 추가 → (문의폼에서 그 게임 선택해 문의 접수, `theplayplus-contact` 쪽 작업 완료 후) → 관리자에서 조회 → 상태 변경 → 답변 발송까지 엔드투엔드 1회 확인
+
+## 2026-09-01 추가: 서비스(게임 무관) 문의
+
+문의폼(`theplayplus-contact`) 쪽에 "게임 관련 문의"와 별도로 "서비스 문의"(사업 제휴, 언론·취재 등 게임과 무관한 문의) 경로가 추가됐다. 사용자가 게임을 아예 선택하지 않고 곧바로 카테고리를 골라 접수할 수 있다. **이 섹션이 그 변경의 관리자 쪽 스펙이며, `theplayplus-contact` 쪽 구현은 이미 완료되어 있다** (아래 스키마를 전제로 작동하도록 짜여 있음). 이 저장소 쪽 구현(마이그레이션 적용, 관리자 UI)은 아직 안 되어 있다.
+
+**데이터 모델 변경:**
+
+```sql
+-- inquiries.game_id를 nullable로 (서비스 문의는 게임이 없음)
+alter table inquiries alter column game_id drop not null;
+
+-- 게임과 무관한 전역 카테고리 (이 저장소가 소유, games 테이블처럼 anon은 select만 가능)
+create table service_groups (
+  id         uuid primary key default gen_random_uuid(),
+  key        text not null,       -- business | other
+  label_ko   text not null,
+  label_zh   text,
+  label_en   text,
+  sort_order int not null default 0
+);
+
+create table service_types (
+  id                     uuid primary key default gen_random_uuid(),
+  group_id               uuid not null references service_groups(id) on delete cascade,
+  key                    text not null,
+  label_ko               text not null,
+  label_zh               text,
+  label_en               text,
+  requires_company_name  boolean not null default false,
+  allow_attachments      boolean not null default false,
+  sort_order             int not null default 0
+);
+```
+
+`inquiry_groups`/`inquiry_types`와 같은 패턴이지만 `game_id`가 없다 — 게임과 무관하게 전역으로 하나만 존재한다. `requires_game_account` 컬럼도 없다(서비스 문의는 게임 계정 필드를 절대 요구하지 않음). 시드 데이터는 기존 게임별 템플릿의 "사업 제휴 문의"(`publishing`/`marketing`)와 "기타 문의"(`press`/`etc`) 그룹을 그대로 옮긴 것이다.
+
+**관리자 UI 요구사항 (아직 미구현):**
+- 상단 네비에 게임 목록과 별도로 "서비스 문의" 메뉴 추가
+- "서비스 문의" 목록 페이지: `inquiries where game_id is null` 조회, 상태 필터 동일하게 적용
+- 문의 상세/답변/상태변경은 기존 `InquiryDetail`/`ReplyForm`/`StatusSelect` 컴포넌트 재사용 (게임 문의와 데이터 모양이 동일 — `game_id`만 null일 뿐)
+- 계정 이력 패널(`AccountHistoryPanel`)은 서비스 문의에서는 의미가 없으므로(game_account가 항상 비어있음) 숨김 처리
+- `service_groups`/`service_types` 편집 UI는 이번 범위에 포함하지 않음 (필요해지면 Supabase에서 직접 관리) — 게임별 카테고리 관리 UI와 달리, 서비스 카테고리는 자주 안 바뀔 것으로 예상되어 최소 범위로 시작
+
+**RLS:** `service_groups`/`service_types` 모두 `games`/`inquiry_groups`/`inquiry_types`와 동일한 패턴 — anon은 select만, 나머지는 이 저장소의 service-role 클라이언트로만 접근.
