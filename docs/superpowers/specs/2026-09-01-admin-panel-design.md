@@ -93,7 +93,9 @@ create table inquiry_groups (
   id           uuid primary key default gen_random_uuid(),
   game_id      uuid not null references games(id) on delete cascade,
   key          text not null,       -- game_usage | business | other 등
-  label        text not null,
+  label_ko     text not null,
+  label_zh     text,                -- nullable, 비어있으면 문의폼에서 label_ko로 대체 표시
+  label_en     text,                -- nullable, 비어있으면 문의폼에서 label_ko로 대체 표시
   sort_order   int not null default 0
 );
 
@@ -101,7 +103,9 @@ create table inquiry_types (
   id                      uuid primary key default gen_random_uuid(),
   group_id                uuid not null references inquiry_groups(id) on delete cascade,
   key                     text not null,
-  label                   text not null,
+  label_ko                text not null,
+  label_zh                text,
+  label_en                text,
   requires_game_account   boolean not null default false,
   requires_company_name   boolean not null default false,
   allow_attachments       boolean not null default false,
@@ -135,7 +139,8 @@ create table inquiry_attachments (
 );
 ```
 
-- `game_usage` 그룹의 유형(`account_login`, `payment_refund`, `bug_report`, `general`)은 게임 생성 시 기본 템플릿으로 자동 복사되고, 이후 관리자가 게임별로 그룹/유형을 수정할 수 있다. 기본 템플릿 자체는 `lib/categories.ts`에 시드 데이터로 정의한다.
+- `game_usage` 그룹의 유형(`account_login`, `payment_refund`, `bug_report`, `general`)은 게임 생성 시 기본 템플릿으로 자동 복사되고, 이후 관리자가 게임별로 그룹/유형을 수정할 수 있다. 기본 템플릿 자체는 `lib/categories.ts`에 시드 데이터로 정의하며, 시드 데이터는 `label_ko`/`label_zh`/`label_en`을 모두 채워서 제공한다.
+- 관리자 UI는 한국어 전용이므로, 게임 생성 후 관리자가 새로 추가/수정하는 그룹·유형은 `label_ko`만 입력받는다. `label_zh`/`label_en`은 입력 폼에 없고 비워둔다 — `theplayplus-contact` 쪽에서 표시할 때 비어있으면 `label_ko`로 대체(fallback) 표시한다. 다국어 번역이 필요한 커스텀 카테고리는 이후 누군가 Supabase에서 직접 채워 넣어야 한다 (이번 범위에서 번역 UI는 만들지 않음).
 - `inquiries.game_account`가 채워지는 유형(`requires_game_account = true`)에서만 계정 이력 매칭이 의미가 있다.
 - Storage 버킷: `game-logos`(공개 읽기, 관리자만 쓰기), `inquiry-attachments`(비공개, 관리자만 서명 URL로 접근 — `theplayplus-contact`가 이미 정의한 버킷 재사용).
 - RLS: `games`, `inquiry_groups`, `inquiry_types`, `inquiries`, `inquiry_attachments` 모두 인증된(Supabase Auth) 사용자만 select/update 가능, anon 키는 `inquiries`/`inquiry_attachments`에 insert만 가능(문의폼용, 기존 정책 유지), `games`/`inquiry_groups`/`inquiry_types`는 anon 키로 select만 가능(문의폼이 게임/카테고리 목록을 읽어야 하므로).
