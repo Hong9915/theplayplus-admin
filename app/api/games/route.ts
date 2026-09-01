@@ -3,8 +3,13 @@ import { randomUUID } from "node:crypto";
 import { gameFormSchema } from "@/lib/game-schema";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { createDefaultCategoriesForGame } from "@/lib/categories";
+import { requireAdminSession } from "@/lib/require-admin-session";
 
 export async function POST(request: Request) {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
+  }
+
   const formData = await request.formData();
 
   const parsed = gameFormSchema.safeParse({
@@ -46,7 +51,12 @@ export async function POST(request: Request) {
     }
   }
 
-  await createDefaultCategoriesForGame(supabase, inserted.id);
+  try {
+    await createDefaultCategoriesForGame(supabase, inserted.id);
+  } catch {
+    await supabase.from("games").delete().eq("id", inserted.id);
+    return NextResponse.json({ success: false, error: "category_seed_failed" }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true, id: inserted.id, ...(logoWarning ? { logoWarning } : {}) }, { status: 200 });
 }

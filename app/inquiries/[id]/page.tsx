@@ -7,6 +7,8 @@ import StatusSelect from "@/components/inquiries/StatusSelect";
 import ReplyForm from "@/components/inquiries/ReplyForm";
 import AccountHistoryPanel from "@/components/inquiries/AccountHistoryPanel";
 
+export const dynamic = "force-dynamic";
+
 export default async function InquiryDetailPage({ params }: { params: { id: string } }) {
   const supabase = getSupabaseServerClient();
   const inquiry = await getInquiryById(supabase, params.id);

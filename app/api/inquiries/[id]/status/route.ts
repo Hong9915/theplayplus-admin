@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseServerClient } from "@/lib/supabase";
+import { requireAdminSession } from "@/lib/require-admin-session";
 
 const statusSchema = z.object({ status: z.enum(["new", "in_progress", "resolved"]) });
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json();
   const parsed = statusSchema.safeParse(body);
   if (!parsed.success) {

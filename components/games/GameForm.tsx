@@ -27,8 +27,15 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
       formData.set("logo", logo);
     }
 
-    const response = await fetch("/api/games", { method: "POST", body: formData });
-    const json = await response.json();
+    let json: { success: boolean; logoWarning?: string };
+    try {
+      const response = await fetch("/api/games", { method: "POST", body: formData });
+      json = await response.json();
+    } catch {
+      setSubmitting(false);
+      setMessage("게임 추가에 실패했습니다. 다시 시도해주세요.");
+      return;
+    }
     setSubmitting(false);
 
     if (!json.success) {

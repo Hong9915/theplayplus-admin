@@ -14,11 +14,18 @@ export default function ReplyForm({ inquiryId }: { inquiryId: string }) {
     setSubmitting(true);
     setMessage(null);
 
-    const response = await fetch(`/api/inquiries/${inquiryId}/reply`, {
-      method: "POST",
-      body: JSON.stringify({ replyContent }),
-    });
-    const json = await response.json();
+    let json: { success: boolean };
+    try {
+      const response = await fetch(`/api/inquiries/${inquiryId}/reply`, {
+        method: "POST",
+        body: JSON.stringify({ replyContent }),
+      });
+      json = await response.json();
+    } catch {
+      setSubmitting(false);
+      setMessage("발송 실패, 다시 시도해주세요.");
+      return;
+    }
     setSubmitting(false);
 
     if (!json.success) {

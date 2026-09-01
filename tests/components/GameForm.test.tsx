@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import GameForm from "@/components/games/GameForm";
 
@@ -9,10 +9,6 @@ describe("GameForm", () => {
     global.fetch = vi.fn().mockResolvedValue({
       json: () => Promise.resolve({ success: true, id: "game-1" }),
     }) as never;
-  });
-
-  afterEach(() => {
-    cleanup();
   });
 
   it("requires a game name before submitting", async () => {
@@ -31,5 +27,17 @@ describe("GameForm", () => {
     expect(global.fetch).toHaveBeenCalledWith("/api/games", expect.objectContaining({ method: "POST" }));
     expect(await screen.findByText("게임이 추가되었습니다.")).toBeInTheDocument();
     expect(onCreated).toHaveBeenCalled();
+  });
+
+  it("shows a failure message and re-enables the button when the request throws", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error("network error")) as never;
+    render(<GameForm onCreated={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText("게임명"), "여신키우기");
+    const button = screen.getByRole("button", { name: "게임 추가" });
+    await userEvent.click(button);
+
+    expect(await screen.findByText("게임 추가에 실패했습니다. 다시 시도해주세요.")).toBeInTheDocument();
+    expect(button).not.toBeDisabled();
   });
 });

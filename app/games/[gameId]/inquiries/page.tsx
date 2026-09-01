@@ -2,6 +2,8 @@ import { getSupabaseServerClient } from "@/lib/supabase";
 import { listInquiriesByGame, type InquiryStatus } from "@/lib/inquiries";
 import InquiryList from "@/components/inquiries/InquiryList";
 
+export const dynamic = "force-dynamic";
+
 const VALID_STATUSES: InquiryStatus[] = ["new", "in_progress", "resolved"];
 
 export default async function GameInquiriesPage({

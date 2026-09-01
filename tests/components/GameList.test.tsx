@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
 import GameList from "@/components/games/GameList";
 import type { GameRow } from "@/lib/categories";
 
@@ -9,10 +9,6 @@ describe("GameList", () => {
     { id: "game-1", name: "여신키우기", status: "active", logoPath: null, ownerName: "홍길동", createdAt: "2026-01-01" },
     { id: "game-2", name: "종료된 게임", status: "ended", logoPath: null, ownerName: null, createdAt: "2025-01-01" },
   ];
-
-  afterEach(() => {
-    cleanup();
-  });
 
   it("renders a link per game showing name and status", () => {
     render(<GameList games={games} />);

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/games/route";
 import * as supabaseModule from "@/lib/supabase";
 import * as categoriesModule from "@/lib/categories";
+import * as requireAdminSessionModule from "@/lib/require-admin-session";
 
 vi.mock("@/lib/supabase", () => ({
   getSupabaseServerClient: vi.fn(),
@@ -9,6 +10,10 @@ vi.mock("@/lib/supabase", () => ({
 
 vi.mock("@/lib/categories", () => ({
   createDefaultCategoriesForGame: vi.fn(),
+}));
+
+vi.mock("@/lib/require-admin-session", () => ({
+  requireAdminSession: vi.fn(),
 }));
 
 function buildFormData(overrides: Record<string, string> = {}) {
@@ -38,6 +43,39 @@ describe("POST /api/games", () => {
   beforeEach(() => {
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReset();
     vi.mocked(categoriesModule.createDefaultCategoriesForGame).mockReset().mockResolvedValue(undefined);
+    vi.mocked(requireAdminSessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
+  });
+
+  it("returns 401 when there is no admin session", async () => {
+    vi.mocked(requireAdminSessionModule.requireAdminSession).mockResolvedValue(false);
+    mockSupabaseSuccess();
+
+    const request = new Request("http://localhost/api/games", { method: "POST", body: buildFormData() });
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(json).toEqual({ success: false, error: "unauthorized" });
+  });
+
+  it("deletes the game and returns category_seed_failed when category seeding throws", async () => {
+    const deleteEq = vi.fn().mockResolvedValue({ error: null });
+    const deleteFn = vi.fn().mockReturnValue({ eq: deleteEq });
+    const single = vi.fn().mockResolvedValue({ data: { id: "game-1" }, error: null });
+    const select = vi.fn().mockReturnValue({ single });
+    const insert = vi.fn().mockReturnValue({ select });
+    const from = vi.fn().mockReturnValue({ insert, delete: deleteFn });
+    vi.mocked(supabaseModule.getSupabaseServerClient).mockReturnValue({ from, storage: { from: vi.fn() } } as never);
+    vi.mocked(categoriesModule.createDefaultCategoriesForGame).mockRejectedValue(new Error("seed failed"));
+
+    const request = new Request("http://localhost/api/games", { method: "POST", body: buildFormData() });
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(json).toEqual({ success: false, error: "category_seed_failed" });
+    expect(deleteFn).toHaveBeenCalled();
+    expect(deleteEq).toHaveBeenCalledWith("id", "game-1");
   });
 
   it("creates a game and seeds default categories", async () => {

@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { cleanup } from "@testing-library/react";
-import { afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import LoginForm from "@/components/auth/LoginForm";
@@ -25,10 +23,6 @@ describe("LoginForm", () => {
     signInWithPasswordMock.mockReset();
     pushMock.mockReset();
     refreshMock.mockReset();
-  });
-
-  afterEach(() => {
-    cleanup();
   });
 
   it("signs in and redirects to /games on success", async () => {

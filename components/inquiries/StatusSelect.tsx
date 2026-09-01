@@ -26,11 +26,18 @@ export default function StatusSelect({
     setStatus(next);
     setError(null);
 
-    const response = await fetch(`/api/inquiries/${inquiryId}/status`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: next }),
-    });
-    const json = await response.json();
+    let json: { success: boolean };
+    try {
+      const response = await fetch(`/api/inquiries/${inquiryId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: next }),
+      });
+      json = await response.json();
+    } catch {
+      setStatus(previous);
+      setError("상태 변경에 실패했습니다.");
+      return;
+    }
 
     if (!json.success) {
       setStatus(previous);

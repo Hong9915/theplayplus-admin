@@ -32,7 +32,7 @@ describe("createDefaultCategoriesForGame", () => {
     const groupsSelect = vi.fn(() => ({ single: groupsSingle }));
     const groupsInsert = vi.fn(() => ({ select: groupsSelect }));
 
-    const typesInsert = vi.fn(() => Promise.resolve({ error: null }));
+    const typesInsert = vi.fn((_rows: unknown[]) => Promise.resolve({ error: null }));
 
     const from = vi.fn((table: string) => {
       if (table === "inquiry_groups") return { insert: groupsInsert };

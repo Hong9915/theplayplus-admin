@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/inquiries/[id]/reply/route";
 import * as supabaseModule from "@/lib/supabase";
 import * as gmailModule from "@/lib/gmail";
+import * as requireAdminSessionModule from "@/lib/require-admin-session";
 
 vi.mock("@/lib/supabase", () => ({
   getSupabaseServerClient: vi.fn(),
@@ -9,6 +10,10 @@ vi.mock("@/lib/supabase", () => ({
 
 vi.mock("@/lib/gmail", () => ({
   sendReplyEmail: vi.fn(),
+}));
+
+vi.mock("@/lib/require-admin-session", () => ({
+  requireAdminSession: vi.fn(),
 }));
 
 function jsonRequest(body: unknown) {
@@ -22,6 +27,18 @@ describe("POST /api/inquiries/[id]/reply", () => {
   beforeEach(() => {
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReset();
     vi.mocked(gmailModule.sendReplyEmail).mockReset();
+    vi.mocked(requireAdminSessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
+  });
+
+  it("returns 401 when there is no admin session", async () => {
+    vi.mocked(requireAdminSessionModule.requireAdminSession).mockResolvedValue(false);
+
+    const response = await POST(jsonRequest({ replyContent: "답변 내용입니다" }), { params: { id: "inq-1" } });
+    const json = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(json).toEqual({ success: false, error: "unauthorized" });
+    expect(gmailModule.sendReplyEmail).not.toHaveBeenCalled();
   });
 
   function mockFetchInquiry(inquiry: { id: string; reply_email: string; title: string } | null, error: { message: string } | null = null) {

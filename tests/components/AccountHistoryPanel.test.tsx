@@ -1,14 +1,10 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
 import AccountHistoryPanel from "@/components/inquiries/AccountHistoryPanel";
 import type { AccountHistoryEntry } from "@/lib/account-history";
 
 describe("AccountHistoryPanel", () => {
-  afterEach(() => {
-    cleanup();
-  });
-
   it("shows a message when there is no game account on this inquiry", () => {
     render(<AccountHistoryPanel history={[]} gameAccount={null} />);
     expect(screen.getByText("게임 계정 정보가 없어 이력을 조회할 수 없습니다.")).toBeInTheDocument();

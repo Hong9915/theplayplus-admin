@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ReplyForm from "@/components/inquiries/ReplyForm";
 
@@ -12,10 +12,6 @@ vi.mock("next/navigation", () => ({
 describe("ReplyForm", () => {
   beforeEach(() => {
     refreshMock.mockReset();
-  });
-
-  afterEach(() => {
-    cleanup();
   });
 
   it("sends the reply and refreshes on success", async () => {
@@ -44,6 +40,20 @@ describe("ReplyForm", () => {
 
     expect(await screen.findByText("발송 실패, 다시 시도해주세요.")).toBeInTheDocument();
     expect(screen.getByLabelText("답변 내용")).toHaveValue("확인 후 조치하겠습니다");
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the typed content and shows an error when the request throws", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error("network error")) as never;
+    render(<ReplyForm inquiryId="inq-1" />);
+
+    await userEvent.type(screen.getByLabelText("답변 내용"), "확인 후 조치하겠습니다");
+    const button = screen.getByRole("button", { name: "답변 발송" });
+    await userEvent.click(button);
+
+    expect(await screen.findByText("발송 실패, 다시 시도해주세요.")).toBeInTheDocument();
+    expect(screen.getByLabelText("답변 내용")).toHaveValue("확인 후 조치하겠습니다");
+    expect(button).not.toBeDisabled();
     expect(refreshMock).not.toHaveBeenCalled();
   });
 });
