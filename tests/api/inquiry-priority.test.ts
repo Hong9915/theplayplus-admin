@@ -1,0 +1,69 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { PATCH } from "@/app/api/inquiries/[id]/priority/route";
+import * as supabaseModule from "@/lib/supabase";
+import * as requireAdminSessionModule from "@/lib/require-admin-session";
+
+vi.mock("@/lib/supabase", () => ({
+  getSupabaseServerClient: vi.fn(),
+}));
+
+vi.mock("@/lib/require-admin-session", () => ({
+  requireAdminSession: vi.fn(),
+}));
+
+function patchRequest(body: unknown) {
+  return new Request("http://localhost/api/inquiries/inq-1/priority", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+describe("PATCH /api/inquiries/[id]/priority", () => {
+  beforeEach(() => {
+    vi.mocked(supabaseModule.getSupabaseServerClient).mockReset();
+    vi.mocked(requireAdminSessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
+  });
+
+  it("returns 401 when there is no admin session", async () => {
+    vi.mocked(requireAdminSessionModule.requireAdminSession).mockResolvedValue(false);
+
+    const response = await PATCH(patchRequest({ priority: "urgent" }), { params: { id: "inq-1" } });
+    const json = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(json).toEqual({ success: false, error: "unauthorized" });
+  });
+
+  it("updates the priority and returns success", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn(() => ({ eq }));
+    const from = vi.fn(() => ({ update }));
+    vi.mocked(supabaseModule.getSupabaseServerClient).mockReturnValue({ from } as never);
+
+    const response = await PATCH(patchRequest({ priority: "urgent" }), { params: { id: "inq-1" } });
+    const json = await response.json();
+
+    expect(from).toHaveBeenCalledWith("inquiries");
+    expect(update).toHaveBeenCalledWith({ priority: "urgent" });
+    expect(eq).toHaveBeenCalledWith("id", "inq-1");
+    expect(json).toEqual({ success: true });
+  });
+
+  it("rejects an invalid priority value", async () => {
+    const response = await PATCH(patchRequest({ priority: "bogus" }), { params: { id: "inq-1" } });
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json).toEqual({ success: false, error: "invalid_priority" });
+  });
+
+  it("returns 500 when the update fails", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: { message: "db error" } });
+    const update = vi.fn(() => ({ eq }));
+    const from = vi.fn(() => ({ update }));
+    vi.mocked(supabaseModule.getSupabaseServerClient).mockReturnValue({ from } as never);
+
+    const response = await PATCH(patchRequest({ priority: "low" }), { params: { id: "inq-1" } });
+    expect(response.status).toBe(500);
+  });
+});
