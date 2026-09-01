@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { getInquiryById, listAttachmentSignedUrls } from "@/lib/inquiries";
@@ -23,13 +24,21 @@ export default async function InquiryDetailPage({ params }: { params: { id: stri
   ]);
 
   return (
-    <main className="p-8 grid grid-cols-[2fr_1fr] gap-8">
-      <div className="flex flex-col gap-6">
-        <InquiryDetail inquiry={inquiry} attachments={attachments} />
-        <StatusSelect inquiryId={inquiry.id} currentStatus={inquiry.status} />
-        <ReplyForm inquiryId={inquiry.id} />
+    <>
+      <Link
+        href={`/games/${inquiry.gameId}/inquiries`}
+        className="text-sm text-white/50 hover:text-white transition-colors"
+      >
+        ← 문의 목록
+      </Link>
+      <div className="grid grid-cols-[2fr_1fr] gap-8 mt-2">
+        <div className="flex flex-col gap-6">
+          <InquiryDetail inquiry={inquiry} attachments={attachments} />
+          <StatusSelect inquiryId={inquiry.id} currentStatus={inquiry.status} />
+          <ReplyForm inquiryId={inquiry.id} />
+        </div>
+        <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} />
       </div>
-      <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} />
-    </main>
+    </>
   );
 }

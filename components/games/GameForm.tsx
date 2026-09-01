@@ -63,7 +63,7 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          className="bg-black border border-white/20 rounded px-3 py-2"
+          className="bg-black border border-white/20 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -71,7 +71,7 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value as "active" | "ended")}
-          className="bg-black border border-white/20 rounded px-3 py-2"
+          className="bg-black border border-white/20 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
         >
           <option value="active">서비스중</option>
           <option value="ended">종료</option>
@@ -82,7 +82,7 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
         <input
           value={ownerName}
           onChange={(e) => setOwnerName(e.target.value)}
-          className="bg-black border border-white/20 rounded px-3 py-2"
+          className="bg-black border border-white/20 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -93,7 +93,7 @@ export default function GameForm({ onCreated }: { onCreated: () => void }) {
       <button
         type="submit"
         disabled={submitting}
-        className="bg-accent text-white rounded px-4 py-2 disabled:opacity-50"
+        className="bg-accent text-white rounded px-4 py-2 hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-colors"
       >
         게임 추가
       </button>

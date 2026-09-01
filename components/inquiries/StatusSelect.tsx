@@ -55,7 +55,7 @@ export default function StatusSelect({
         <select
           value={status}
           onChange={(e) => handleChange(e.target.value as InquiryStatus)}
-          className="bg-black border border-white/20 rounded px-2 py-1"
+          className="bg-black border border-white/20 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
         >
           {OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

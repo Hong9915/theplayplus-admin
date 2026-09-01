@@ -9,9 +9,9 @@ export default async function GamesPage() {
   const games = await listGames(supabase);
 
   return (
-    <main className="p-8">
-      <h1 className="text-xl font-bold mb-6">게임 관리</h1>
+    <>
+      <h1 className="text-2xl font-bold mb-6">게임 관리</h1>
       <GamesPageClient games={games} />
-    </main>
+    </>
   );
 }

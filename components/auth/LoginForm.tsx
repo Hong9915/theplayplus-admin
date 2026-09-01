@@ -31,7 +31,7 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-w-sm">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-full">
       <label className="flex flex-col gap-1">
         <span>이메일</span>
         <input
@@ -39,7 +39,7 @@ export default function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="bg-black border border-white/20 rounded px-3 py-2"
+          className="bg-black border border-white/20 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -49,14 +49,14 @@ export default function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="bg-black border border-white/20 rounded px-3 py-2"
+          className="bg-black border border-white/20 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
         />
       </label>
       {error && <p className="text-red-400 text-sm">{error}</p>}
       <button
         type="submit"
         disabled={submitting}
-        className="bg-accent text-white rounded px-4 py-2 disabled:opacity-50"
+        className="bg-accent text-white rounded px-4 py-2 hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-colors"
       >
         로그인
       </button>

@@ -10,7 +10,7 @@ export default function InquiryDetail({
   return (
     <article className="flex flex-col gap-4">
       <header>
-        <h1 className="text-xl font-bold">{inquiry.title}</h1>
+        <h1 className="text-2xl font-bold">{inquiry.title}</h1>
         <p className="text-sm text-white/60">
           {inquiry.groupKey} · {inquiry.typeKey} · {new Date(inquiry.createdAt).toLocaleString("ko-KR")}
         </p>
@@ -57,7 +57,7 @@ export default function InquiryDetail({
       )}
 
       {inquiry.replyContent && (
-        <div className="border border-white/10 rounded p-4">
+        <div className="border border-white/10 rounded-lg p-4 bg-white/[0.03]">
           <h2 className="font-semibold mb-2">
             보낸 답변 {inquiry.repliedAt && `(${new Date(inquiry.repliedAt).toLocaleString("ko-KR")})`}
           </h2>

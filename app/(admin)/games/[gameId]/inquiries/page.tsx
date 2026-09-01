@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { listInquiriesByGame, type InquiryStatus } from "@/lib/inquiries";
 import InquiryList from "@/components/inquiries/InquiryList";
@@ -21,9 +22,12 @@ export default async function GameInquiriesPage({
   const inquiries = await listInquiriesByGame(supabase, params.gameId, status);
 
   return (
-    <main className="p-8">
-      <h1 className="text-xl font-bold mb-6">문의 목록</h1>
+    <>
+      <Link href="/games" className="text-sm text-white/50 hover:text-white transition-colors">
+        ← 게임 목록
+      </Link>
+      <h1 className="text-2xl font-bold mt-2 mb-6">문의 목록</h1>
       <InquiryList inquiries={inquiries} activeStatus={status ?? "all"} gameId={params.gameId} />
-    </main>
+    </>
   );
 }

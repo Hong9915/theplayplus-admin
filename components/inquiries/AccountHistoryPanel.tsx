@@ -1,10 +1,5 @@
 import type { AccountHistoryEntry } from "@/lib/account-history";
-
-const STATUS_LABEL: Record<AccountHistoryEntry["status"], string> = {
-  new: "접수",
-  in_progress: "처리중",
-  resolved: "완료",
-};
+import StatusBadge from "@/components/ui/StatusBadge";
 
 export default function AccountHistoryPanel({
   history,
@@ -14,7 +9,7 @@ export default function AccountHistoryPanel({
   gameAccount: string | null;
 }) {
   return (
-    <aside className="border border-white/10 rounded p-4 flex flex-col gap-4">
+    <aside className="border border-white/10 rounded-lg p-4 bg-white/[0.03] flex flex-col gap-4">
       <div>
         <h2 className="font-semibold mb-2">계정 이력</h2>
         {!gameAccount ? (
@@ -24,9 +19,9 @@ export default function AccountHistoryPanel({
         ) : (
           <ul className="flex flex-col gap-2">
             {history.map((entry) => (
-              <li key={entry.id} className="text-sm">
+              <li key={entry.id} className="text-sm flex items-center justify-between gap-2">
                 <span>{entry.title}</span>
-                <span className="text-white/60"> · {STATUS_LABEL[entry.status]}</span>
+                <StatusBadge status={entry.status} />
               </li>
             ))}
           </ul>
