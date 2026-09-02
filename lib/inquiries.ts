@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PAGE_SIZE, type InquiryListQuery } from "@/lib/inquiry-filters";
 
 export type InquiryStatus = "new" | "in_progress" | "resolved";
 export type InquiryPriority = "urgent" | "high" | "normal" | "low";
@@ -72,21 +73,126 @@ function mapInquiryRow(row: {
   };
 }
 
-export async function listInquiriesByGame(
+export interface InquiryPage {
+  rows: InquiryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * PostgREST의 or() 필터는 쉼표와 괄호로 조건을 나누므로 검색어에 들어 있으면
+ * 문법이 깨진다. 와일드카드(%, _)도 사용자가 의도한 게 아니니 지운다.
+ */
+export function sanitizeSearch(q: string): string {
+  return q.replace(/[,()%_]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// supabase-js 빌더의 정확한 제네릭을 여기서 다 적으면 읽기 어렵다.
+// 필요한 메서드만 가진 최소 형태로 다룬다.
+interface FilterBuilder {
+  eq(column: string, value: string): FilterBuilder;
+  or(filters: string): FilterBuilder;
+  order(column: string, options: { ascending: boolean }): FilterBuilder;
+  range(from: number, to: number): FilterBuilder;
+  limit(count: number): FilterBuilder;
+}
+
+function applyFilters<T extends FilterBuilder>(builder: T, gameId: string, query: InquiryListQuery): T {
+  let next = builder.eq("game_id", gameId) as T;
+  if (query.group) next = next.eq("group_key", query.group) as T;
+  if (query.type) next = next.eq("type_key", query.type) as T;
+  if (query.status) next = next.eq("status", query.status) as T;
+
+  const q = sanitizeSearch(query.q);
+  if (q) {
+    const pattern = `%${q}%`;
+    next = next.or(
+      `title.ilike.${pattern},inquiry_no.ilike.${pattern},game_account.ilike.${pattern},content.ilike.${pattern}`
+    ) as T;
+  }
+  return next;
+}
+
+function applyOrder<T extends FilterBuilder>(builder: T, query: InquiryListQuery): T {
+  switch (query.sort) {
+    case "oldest":
+      return builder.order("created_at", { ascending: true }) as T;
+    case "priority":
+      // priority_rank는 마이그레이션 0005의 생성 컬럼(urgent=0 … low=3).
+      return builder.order("priority_rank", { ascending: true }).order("created_at", { ascending: false }) as T;
+    default:
+      return builder.order("created_at", { ascending: false }) as T;
+  }
+}
+
+/** 목록 한 페이지. 필터·정렬·검색을 DB에서 처리해야 문의가 쌓여도 버틴다. */
+export async function queryInquiries(
   supabase: SupabaseClient,
   gameId: string,
-  status?: InquiryStatus
-): Promise<InquiryRow[]> {
-  let query = supabase.from("inquiries").select("*").eq("game_id", gameId);
-  if (status) {
-    query = query.eq("status", status);
-  }
-  const { data, error } = await query.order("created_at", { ascending: false });
+  query: InquiryListQuery
+): Promise<InquiryPage> {
+  const from = (query.page - 1) * PAGE_SIZE;
+  const builder = applyOrder(
+    applyFilters(supabase.from("inquiries").select("*", { count: "exact" }) as unknown as FilterBuilder, gameId, query),
+    query
+  ).range(from, from + PAGE_SIZE - 1);
+
+  const { data, error, count } = await (builder as unknown as PromiseLike<{
+    data: Parameters<typeof mapInquiryRow>[0][] | null;
+    error: { message: string } | null;
+    count: number | null;
+  }>);
 
   if (error) {
     throw new Error(`Failed to list inquiries: ${error.message}`);
   }
-  return (data ?? []).map(mapInquiryRow);
+  return { rows: (data ?? []).map(mapInquiryRow), total: count ?? 0, page: query.page, pageSize: PAGE_SIZE };
+}
+
+/**
+ * 같은 조건·정렬의 id 목록. 상세에서 이전/다음 문의로 옮겨 다닐 때 쓴다.
+ * 페이지와 무관하게 전체를 보되, 비정상적으로 큰 목록은 잘라낸다.
+ */
+export async function listInquiryIds(
+  supabase: SupabaseClient,
+  gameId: string,
+  query: InquiryListQuery,
+  limit = 1000
+): Promise<string[]> {
+  const builder = applyOrder(
+    applyFilters(supabase.from("inquiries").select("id") as unknown as FilterBuilder, gameId, query),
+    query
+  ).limit(limit);
+
+  const { data, error } = await (builder as unknown as PromiseLike<{
+    data: Array<{ id: string }> | null;
+    error: { message: string } | null;
+  }>);
+
+  if (error || !data) {
+    return [];
+  }
+  return data.map((row) => row.id);
+}
+
+export async function countInquiriesByGame(supabase: SupabaseClient, gameId: string): Promise<number> {
+  const { count } = await supabase.from("inquiries").select("id", { count: "exact", head: true }).eq("game_id", gameId);
+  return count ?? 0;
+}
+
+/** 게임별 미처리(new) 건수. 게임 레일의 배지가 쓴다. */
+export async function countNewInquiriesByGame(supabase: SupabaseClient): Promise<Record<string, number>> {
+  const { data, error } = await supabase.from("inquiries").select("game_id").eq("status", "new");
+  if (error || !data) {
+    return {};
+  }
+  const counts: Record<string, number> = {};
+  for (const row of data as Array<{ game_id: string | null }>) {
+    if (!row.game_id) continue;
+    counts[row.game_id] = (counts[row.game_id] ?? 0) + 1;
+  }
+  return counts;
 }
 
 export async function getInquiryById(supabase: SupabaseClient, id: string): Promise<InquiryRow | null> {

@@ -1,5 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
-import { listInquiriesByGame, getInquiryById, listAttachmentSignedUrls } from "@/lib/inquiries";
+import {
+  countInquiriesByGame,
+  countNewInquiriesByGame,
+  getInquiryById,
+  listAttachmentSignedUrls,
+  listInquiryIds,
+  queryInquiries,
+  sanitizeSearch,
+} from "@/lib/inquiries";
+import { DEFAULT_QUERY } from "@/lib/inquiry-filters";
 
 const sampleRow = {
   id: "inq-1",
@@ -21,27 +30,149 @@ const sampleRow = {
   draft_reply: "작성 중",
 };
 
-describe("listInquiriesByGame", () => {
-  it("filters by game_id and orders by created_at desc", async () => {
-    const order = vi.fn().mockResolvedValue({ data: [sampleRow], error: null });
-    const eqGame = vi.fn(() => ({ order }));
-    const select = vi.fn(() => ({ eq: eqGame }));
-    const from = vi.fn(() => ({ select }));
+/**
+ * supabase-js 빌더를 흉내 낸다. 모든 필터 메서드가 자기 자신을 돌려주고,
+ * await 하면 준비된 결과가 나온다.
+ */
+function mockBuilder(result: { data?: unknown; error?: { message: string } | null; count?: number | null }) {
+  const builder: Record<string, unknown> = {};
+  const calls: Record<string, unknown[][]> = {};
+  for (const name of ["eq", "or", "order", "range", "limit", "in"]) {
+    calls[name] = [];
+    builder[name] = vi.fn((...args: unknown[]) => {
+      calls[name].push(args);
+      return builder;
+    });
+  }
+  builder.then = (resolve: (value: unknown) => unknown) =>
+    Promise.resolve({ data: null, error: null, count: null, ...result }).then(resolve);
+  const select = vi.fn(() => builder);
+  const from = vi.fn(() => ({ select }));
+  return { from, select, calls };
+}
 
-    const result = await listInquiriesByGame({ from } as never, "game-1");
-    expect(eqGame).toHaveBeenCalledWith("game_id", "game-1");
-    expect(result[0].gameAccount).toBe("player1");
+describe("queryInquiries", () => {
+  it("filters by game, orders newest first, and pages with an exact count", async () => {
+    const { from, select, calls } = mockBuilder({ data: [sampleRow], count: 120 });
+
+    const page = await queryInquiries({ from } as never, "game-1", DEFAULT_QUERY);
+
+    expect(select).toHaveBeenCalledWith("*", { count: "exact" });
+    expect(calls.eq).toEqual([["game_id", "game-1"]]);
+    expect(calls.or).toEqual([]);
+    expect(calls.order).toEqual([["created_at", { ascending: false }]]);
+    expect(calls.range).toEqual([[0, 49]]);
+    expect(page).toMatchObject({ total: 120, page: 1, pageSize: 50 });
+    expect(page.rows[0].gameAccount).toBe("player1");
   });
 
-  it("applies an additional status filter when provided", async () => {
-    const order = vi.fn().mockResolvedValue({ data: [], error: null });
-    const eqStatus = vi.fn(() => ({ order }));
-    const eqGame = vi.fn(() => ({ eq: eqStatus, order }));
-    const select = vi.fn(() => ({ eq: eqGame }));
+  it("applies group, type, status filters and the page offset", async () => {
+    const { from, calls } = mockBuilder({ data: [], count: 0 });
+
+    await queryInquiries({ from } as never, "game-1", {
+      ...DEFAULT_QUERY,
+      group: "game_usage",
+      type: "bug_report",
+      status: "resolved",
+      page: 3,
+    });
+
+    expect(calls.eq).toEqual([
+      ["game_id", "game-1"],
+      ["group_key", "game_usage"],
+      ["type_key", "bug_report"],
+      ["status", "resolved"],
+    ]);
+    expect(calls.range).toEqual([[100, 149]]);
+  });
+
+  it("searches title, number, account, and body with one or() filter", async () => {
+    const { from, calls } = mockBuilder({ data: [], count: 0 });
+
+    await queryInquiries({ from } as never, "game-1", { ...DEFAULT_QUERY, q: "환불" });
+
+    expect(calls.or).toEqual([
+      ["title.ilike.%환불%,inquiry_no.ilike.%환불%,game_account.ilike.%환불%,content.ilike.%환불%"],
+    ]);
+  });
+
+  it("sorts oldest first and by priority rank", async () => {
+    const oldest = mockBuilder({ data: [], count: 0 });
+    await queryInquiries({ from: oldest.from } as never, "game-1", { ...DEFAULT_QUERY, sort: "oldest" });
+    expect(oldest.calls.order).toEqual([["created_at", { ascending: true }]]);
+
+    const priority = mockBuilder({ data: [], count: 0 });
+    await queryInquiries({ from: priority.from } as never, "game-1", { ...DEFAULT_QUERY, sort: "priority" });
+    expect(priority.calls.order).toEqual([
+      ["priority_rank", { ascending: true }],
+      ["created_at", { ascending: false }],
+    ]);
+  });
+
+  it("throws when the query errors", async () => {
+    const { from } = mockBuilder({ error: { message: "db down" } });
+    await expect(queryInquiries({ from } as never, "game-1", DEFAULT_QUERY)).rejects.toThrow(/db down/);
+  });
+});
+
+describe("sanitizeSearch", () => {
+  it("removes characters that would break the PostgREST or() syntax", () => {
+    expect(sanitizeSearch("a,b(c)%d_e")).toBe("a b c d e");
+    expect(sanitizeSearch("  결제   오류 ")).toBe("결제 오류");
+  });
+});
+
+describe("listInquiryIds", () => {
+  it("returns ids in the same order as the list, without paging", async () => {
+    const { from, select, calls } = mockBuilder({ data: [{ id: "a" }, { id: "b" }] });
+
+    const ids = await listInquiryIds({ from } as never, "game-1", { ...DEFAULT_QUERY, status: "new", page: 4 });
+
+    expect(select).toHaveBeenCalledWith("id");
+    expect(calls.eq).toEqual([
+      ["game_id", "game-1"],
+      ["status", "new"],
+    ]);
+    expect(calls.range).toEqual([]);
+    expect(calls.limit).toEqual([[1000]]);
+    expect(ids).toEqual(["a", "b"]);
+  });
+
+  it("returns an empty list on error", async () => {
+    const { from } = mockBuilder({ error: { message: "x" } });
+    await expect(listInquiryIds({ from } as never, "game-1", DEFAULT_QUERY)).resolves.toEqual([]);
+  });
+});
+
+describe("countInquiriesByGame", () => {
+  it("asks for a head count", async () => {
+    const eq = vi.fn().mockResolvedValue({ count: 7 });
+    const select = vi.fn(() => ({ eq }));
     const from = vi.fn(() => ({ select }));
 
-    await listInquiriesByGame({ from } as never, "game-1", "resolved");
-    expect(eqStatus).toHaveBeenCalledWith("status", "resolved");
+    await expect(countInquiriesByGame({ from } as never, "game-1")).resolves.toBe(7);
+    expect(select).toHaveBeenCalledWith("id", { count: "exact", head: true });
+    expect(eq).toHaveBeenCalledWith("game_id", "game-1");
+  });
+});
+
+describe("countNewInquiriesByGame", () => {
+  it("tallies new inquiries per game", async () => {
+    const eq = vi.fn().mockResolvedValue({
+      data: [{ game_id: "g1" }, { game_id: "g1" }, { game_id: "g2" }, { game_id: null }],
+      error: null,
+    });
+    const select = vi.fn(() => ({ eq }));
+    const from = vi.fn(() => ({ select }));
+
+    await expect(countNewInquiriesByGame({ from } as never)).resolves.toEqual({ g1: 2, g2: 1 });
+    expect(eq).toHaveBeenCalledWith("status", "new");
+  });
+
+  it("returns an empty map on error", async () => {
+    const eq = vi.fn().mockResolvedValue({ data: null, error: { message: "x" } });
+    const from = vi.fn(() => ({ select: vi.fn(() => ({ eq })) }));
+    await expect(countNewInquiriesByGame({ from } as never)).resolves.toEqual({});
   });
 });
 

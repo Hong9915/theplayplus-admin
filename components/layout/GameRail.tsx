@@ -9,7 +9,14 @@ import { getGameLogoPublicUrl } from "@/lib/storage";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import GameForm from "@/components/games/GameForm";
 
-export default function GameRail({ games }: { games: GameRow[] }) {
+export default function GameRail({
+  games,
+  newCounts = {},
+}: {
+  games: GameRow[];
+  /** 게임별 접수(new) 건수. 없으면 배지를 그리지 않는다. */
+  newCounts?: Record<string, number>;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -37,23 +44,32 @@ export default function GameRail({ games }: { games: GameRow[] }) {
           {games.map((game) => {
             const active = pathname.startsWith(`/games/${game.id}/`);
             const logoUrl = getGameLogoPublicUrl(game.logoPath);
+            const pending = newCounts[game.id] ?? 0;
             return (
               <Link
                 key={game.id}
                 href={`/games/${game.id}/inquiries`}
-                title={game.name}
+                title={pending > 0 ? `${game.name} · 접수 ${pending}건` : game.name}
                 aria-current={active ? "page" : undefined}
-                className={`w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center transition-all ${
+                className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
                   active
                     ? "ring-2 ring-accent ring-offset-2 ring-offset-panel"
                     : "opacity-70 hover:opacity-100 hover:ring-2 hover:ring-line hover:ring-offset-2 hover:ring-offset-panel"
                 }`}
               >
                 {logoUrl ? (
-                  <Image src={logoUrl} alt={game.name} width={40} height={40} className="w-10 h-10 object-cover" unoptimized />
+                  <Image src={logoUrl} alt={game.name} width={40} height={40} className="w-10 h-10 rounded-xl object-cover" unoptimized />
                 ) : (
                   <span className="w-10 h-10 bg-ground border border-line rounded-xl flex items-center justify-center font-semibold text-muted">
                     {game.name.charAt(0)}
+                  </span>
+                )}
+                {pending > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-white text-[10px] font-semibold leading-[18px] text-center ring-2 ring-panel"
+                    aria-label={`접수 ${pending}건`}
+                  >
+                    {pending > 99 ? "99+" : pending}
                   </span>
                 )}
               </Link>

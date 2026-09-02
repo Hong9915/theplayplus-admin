@@ -36,6 +36,7 @@ export default function ReplyForm({
       return;
     }
     setPendingReplace(next);
+    setMessageTone("warning");
     setMessage("작성 중인 내용을 대체합니다. 한 번 더 선택하면 대체됩니다.");
   }
 
@@ -44,7 +45,7 @@ export default function ReplyForm({
     setSubmitting(true);
     setMessage(null);
 
-    let json: { success: boolean };
+    let json: { success: boolean; warning?: string };
     try {
       const response = await fetch(`/api/inquiries/${inquiryId}/reply`, {
         method: "POST",
@@ -53,19 +54,31 @@ export default function ReplyForm({
       json = await response.json();
     } catch {
       setSubmitting(false);
+      setMessageTone("error");
       setMessage("발송 실패, 다시 시도해주세요.");
       return;
     }
     setSubmitting(false);
 
     if (!json.success) {
+      setMessageTone("error");
       setMessage("발송 실패, 다시 시도해주세요.");
       return;
     }
 
-    setMessage("답변이 발송되었습니다.");
     setReplyContent("");
     router.refresh();
+
+    // 메일 발송 자체는 성공했지만 대화 기록 저장은 실패한 경우다. 발송을
+    // 되돌릴 수 없으니, "대화" 카드에 이 답변이 안 보일 수 있다는 걸 알린다.
+    if (json.warning === "message_save_failed") {
+      setMessageTone("warning");
+      setMessage("답변은 발송되었지만 대화 기록 저장에는 실패했습니다. 아래 대화 목록에 표시되지 않을 수 있습니다.");
+      return;
+    }
+
+    setMessageTone("success");
+    setMessage("답변이 발송되었습니다.");
   }
 
   async function handleSaveDraft() {
@@ -81,16 +94,19 @@ export default function ReplyForm({
       json = await response.json();
     } catch {
       setSavingDraft(false);
+      setMessageTone("error");
       setMessage("초안 저장에 실패했습니다.");
       return;
     }
     setSavingDraft(false);
 
     if (!json.success) {
+      setMessageTone("error");
       setMessage("초안 저장에 실패했습니다.");
       return;
     }
 
+    setMessageTone("success");
     setMessage("초안을 저장했습니다.");
   }
 
@@ -107,7 +123,19 @@ export default function ReplyForm({
         placeholder="사용자에게 전달할 답변을 작성합니다."
         className="bg-ground border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-colors"
       />
-      {message && <p className="text-sm">{message}</p>}
+      {message && (
+        <p
+          className={`text-sm ${
+            messageTone === "success"
+              ? "text-emerald-700"
+              : messageTone === "warning"
+                ? "text-amber-700"
+                : "text-red-600"
+          }`}
+        >
+          {message}
+        </p>
+      )}
       <div className="flex flex-wrap items-start gap-2">
         <TemplatePicker templates={templates} typeKey={typeKey} onPick={applyText} />
         <SuggestButton inquiryId={inquiryId} onApply={applyText} />

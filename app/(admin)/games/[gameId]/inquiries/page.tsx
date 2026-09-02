@@ -1,19 +1,28 @@
 import { notFound } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
-import { listInquiriesByGame } from "@/lib/inquiries";
+import { countInquiriesByGame, queryInquiries } from "@/lib/inquiries";
+import { parseInquiryListQuery } from "@/lib/inquiry-filters";
 import { listCategoryLabels, listGames } from "@/lib/categories";
 import InquiryMailbox from "@/components/inquiries/InquiryMailbox";
 import DeleteGameButton from "@/components/games/DeleteGameButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function GameInquiriesPage({ params }: { params: { gameId: string } }) {
+export default async function GameInquiriesPage({
+  params,
+  searchParams,
+}: {
+  params: { gameId: string };
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
   const supabase = getSupabaseServerClient();
+  const query = parseInquiryListQuery(searchParams);
 
-  const [games, inquiries, labels] = await Promise.all([
+  const [games, page, labels, totalInquiries] = await Promise.all([
     listGames(supabase),
-    listInquiriesByGame(supabase, params.gameId),
+    queryInquiries(supabase, params.gameId, query),
     listCategoryLabels(supabase, params.gameId),
+    countInquiriesByGame(supabase, params.gameId),
   ]);
 
   const game = games.find((entry) => entry.id === params.gameId);
@@ -33,9 +42,9 @@ export default async function GameInquiriesPage({ params }: { params: { gameId: 
         >
           {game.status === "active" ? "서비스중" : "종료"}
         </span>
-        <DeleteGameButton gameId={game.id} gameName={game.name} inquiryCount={inquiries.length} />
+        <DeleteGameButton gameId={game.id} gameName={game.name} inquiryCount={totalInquiries} />
       </header>
-      <InquiryMailbox inquiries={inquiries} labels={labels} />
+      <InquiryMailbox page={page} query={query} labels={labels} />
     </div>
   );
 }

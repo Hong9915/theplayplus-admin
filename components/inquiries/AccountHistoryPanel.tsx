@@ -32,7 +32,7 @@ export default function AccountHistoryPanel({
                     <span className="text-sm font-medium text-ink">{entry.title}</span>
                     <StatusBadge status={entry.status} />
                   </div>
-                  {entry.content && (
+                  {entry.content && entry.content.trim() !== entry.title.trim() && (
                     <p className="mt-1 text-xs text-muted line-clamp-2 whitespace-pre-line break-words">
                       {entry.content}
                     </p>
