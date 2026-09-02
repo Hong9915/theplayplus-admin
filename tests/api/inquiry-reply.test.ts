@@ -59,19 +59,42 @@ describe("POST /api/inquiries/[id]/reply", () => {
       id: string;
       reply_email: string;
       title: string;
+      content?: string;
+      game_id?: string | null;
+      group_key?: string;
+      type_key?: string;
+      game_account?: string | null;
       inquiry_no?: string | null;
       gmail_thread_id?: string | null;
     } | null,
-    error: { message: string } | null = null
+    error: { message: string } | null = null,
+    game: { name: string } | null = null
   ) {
-    const single = vi.fn().mockResolvedValue({ data: inquiry, error });
+    const row = inquiry ? { content: "문의 본문", game_id: null, group_key: "g", type_key: "t", game_account: null, ...inquiry } : null;
+    const single = vi.fn().mockResolvedValue({ data: row, error });
     const eqSelect = vi.fn(() => ({ single }));
     const select = vi.fn(() => ({ eq: eqSelect }));
     const eqUpdate = vi.fn().mockResolvedValue({ error: null });
     const update = vi.fn(() => ({ eq: eqUpdate }));
-    const from = vi.fn(() => ({ select, update }));
+
+    // 메일 꾸밈용 조회: games.name, inquiry_groups/inquiry_types 라벨
+    const gameSingle = vi.fn().mockResolvedValue({ data: game, error: game ? null : { message: "none" } });
+    const gameSelect = vi.fn(() => ({ eq: vi.fn(() => ({ single: gameSingle })) }));
+    const groupsSelect = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ data: [{ id: "grp-1", key: "g", label_ko: "게임 이용 문의" }], error: null }),
+    }));
+    const typesSelect = vi.fn(() => ({
+      in: vi.fn().mockResolvedValue({ data: [{ key: "t", label_ko: "결제/환불" }], error: null }),
+    }));
+
+    const from = vi.fn((table: string) => {
+      if (table === "games") return { select: gameSelect };
+      if (table === "inquiry_groups") return { select: groupsSelect };
+      if (table === "inquiry_types") return { select: typesSelect };
+      return { select, update };
+    });
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReturnValue({ from } as never);
-    return { update, eqUpdate };
+    return { update, eqUpdate, from };
   }
 
   it("sends the email and marks the inquiry in_progress on success", async () => {
@@ -86,13 +109,27 @@ describe("POST /api/inquiries/[id]/reply", () => {
     const response = await POST(jsonRequest({ replyContent: "답변 내용입니다" }), { params: { id: "inq-1" } });
     const json = await response.json();
 
-    expect(gmailModule.sendReplyEmail).toHaveBeenCalledWith({
-      to: "user@example.com",
-      subject: "[R-20260723-0005] Re: 제목",
-      body: "답변 내용입니다",
-      threadId: null,
-      references: [],
-    });
+    expect(gmailModule.sendReplyEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "user@example.com",
+        subject: "[R-20260723-0005] Re: 제목",
+        threadId: null,
+        references: [],
+      })
+    );
+    const sendInput = vi.mocked(gmailModule.sendReplyEmail).mock.calls[0][0];
+    // 텍스트 본문은 답변이 맨 앞, 그 아래 원문 인용
+    expect(sendInput.body.startsWith("답변 내용입니다")).toBe(true);
+    expect(sendInput.body).toContain("접수번호: R-20260723-0005");
+    expect(sendInput.body).toContain("문의 본문");
+    // HTML 본문은 브랜드 템플릿 안에 답변과 원문이 들어가고 로고를 cid로 참조한다
+    expect(sendInput.html).toContain("답변 내용입니다");
+    expect(sendInput.html).toContain("문의 본문");
+    expect(sendInput.html).toContain('src="cid:theplayplus-logo"');
+    expect(sendInput.inlineImages).toEqual([
+      expect.objectContaining({ cid: "theplayplus-logo", contentType: "image/png", filename: "theplayplus-logo.png" }),
+    ]);
+    expect(sendInput.inlineImages?.[0].data.length).toBeGreaterThan(1000);
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "in_progress",
@@ -118,6 +155,56 @@ describe("POST /api/inquiries/[id]/reply", () => {
     });
     expect(eqUpdate).toHaveBeenCalledWith("id", "inq-1");
     expect(json).toEqual({ success: true });
+  });
+
+  it("puts the game name, category labels, and account in the branded email", async () => {
+    mockFetchInquiry(
+      {
+        id: "inq-1",
+        reply_email: "user@example.com",
+        title: "제목",
+        game_id: "game-1",
+        group_key: "g",
+        type_key: "t",
+        game_account: "mahamaster",
+        inquiry_no: "R-1",
+      },
+      null,
+      { name: "여신키우기" }
+    );
+    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(SENT);
+
+    await POST(jsonRequest({ replyContent: "답변" }), { params: { id: "inq-1" } });
+
+    const sendInput = vi.mocked(gmailModule.sendReplyEmail).mock.calls[0][0];
+    expect(sendInput.html).toContain("여신키우기 고객센터");
+    expect(sendInput.html).toContain("게임 이용 문의 · 결제/환불");
+    expect(sendInput.html).toContain("mahamaster");
+    expect(sendInput.body).toContain("게임 계정: mahamaster");
+  });
+
+  it("still sends when the game and label lookups fail", async () => {
+    const { from } = mockFetchInquiry({
+      id: "inq-1",
+      reply_email: "user@example.com",
+      title: "제목",
+      game_id: "game-1",
+      inquiry_no: "R-1",
+    });
+    const original = from.getMockImplementation()!;
+    from.mockImplementation((table: string) => {
+      if (table === "games" || table === "inquiry_groups" || table === "inquiry_types") {
+        throw new Error("db down");
+      }
+      return original(table);
+    });
+    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(SENT);
+
+    const response = await POST(jsonRequest({ replyContent: "답변" }), { params: { id: "inq-1" } });
+
+    expect(response.status).toBe(200);
+    const sendInput = vi.mocked(gmailModule.sendReplyEmail).mock.calls[0][0];
+    expect(sendInput.html).toContain("THE PLAY+ 고객센터");
   });
 
   it("rejects an empty reply", async () => {

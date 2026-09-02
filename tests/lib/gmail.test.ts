@@ -210,3 +210,67 @@ describe("fetchInboundReplies", () => {
     await expect(fetchInboundReplies("thread-1")).rejects.toThrow("insufficient scope");
   });
 });
+
+describe("sendReplyEmail with an HTML body", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    sendMock.mockReset().mockResolvedValue({ data: { id: "gm-1", threadId: "thread-1" } });
+    setCredentialsMock.mockReset();
+    process.env.GMAIL_CLIENT_ID = "client-id";
+    process.env.GMAIL_CLIENT_SECRET = "client-secret";
+    process.env.GMAIL_REFRESH_TOKEN = "refresh-token";
+    process.env.GMAIL_SENDER = "info@theplayplus.com";
+  });
+
+  function decodeRaw(): string {
+    const call = sendMock.mock.calls[0][0];
+    return Buffer.from(call.requestBody.raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
+  }
+
+  it("sends multipart/alternative with the plain text first and the HTML base64-encoded", async () => {
+    const { sendReplyEmail } = await import("@/lib/gmail");
+    await sendReplyEmail({
+      to: "user@example.com",
+      subject: "s",
+      body: "평문 본문",
+      html: "<p>HTML 본문</p>",
+    });
+
+    const decoded = decodeRaw();
+    expect(decoded).toMatch(/Content-Type: multipart\/alternative; boundary="[^"]+"/);
+    expect(decoded).toContain("Content-Type: text/plain; charset=UTF-8");
+    expect(decoded).toContain("평문 본문");
+    expect(decoded).toContain("Content-Type: text/html; charset=UTF-8");
+    expect(decoded).toContain("Content-Transfer-Encoding: base64");
+    expect(decoded).toContain(Buffer.from("<p>HTML 본문</p>", "utf-8").toString("base64"));
+    expect(decoded.indexOf("text/plain")).toBeLessThan(decoded.indexOf("text/html"));
+  });
+
+  it("wraps the HTML in multipart/related when inline images are attached", async () => {
+    const { sendReplyEmail } = await import("@/lib/gmail");
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    await sendReplyEmail({
+      to: "user@example.com",
+      subject: "s",
+      body: "평문",
+      html: '<img src="cid:theplayplus-logo">',
+      inlineImages: [{ cid: "theplayplus-logo", contentType: "image/png", filename: "logo.png", data: png }],
+    });
+
+    const decoded = decodeRaw();
+    expect(decoded).toMatch(/Content-Type: multipart\/related; boundary="[^"]+"/);
+    expect(decoded).toContain("Content-Type: image/png; name=\"logo.png\"");
+    expect(decoded).toContain("Content-ID: <theplayplus-logo>");
+    expect(decoded).toContain("Content-Disposition: inline; filename=\"logo.png\"");
+    expect(decoded).toContain(png.toString("base64"));
+    expect(decoded.indexOf("multipart/alternative")).toBeLessThan(decoded.indexOf("multipart/related"));
+  });
+
+  it("still sends plain text only when no HTML is given", async () => {
+    const { sendReplyEmail } = await import("@/lib/gmail");
+    await sendReplyEmail({ to: "user@example.com", subject: "s", body: "평문" });
+    const decoded = decodeRaw();
+    expect(decoded).not.toContain("multipart");
+    expect(decoded).toContain("Content-Type: text/plain; charset=UTF-8");
+  });
+});

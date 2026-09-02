@@ -1,10 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { google, type gmail_v1 } from "googleapis";
 
+export interface InlineImage {
+  /** HTML에서 `cid:<cid>`로 참조한다. */
+  cid: string;
+  contentType: string;
+  filename: string;
+  data: Buffer;
+}
+
 export interface SendReplyEmailInput {
   to: string;
   subject: string;
+  /** 텍스트 본문. HTML을 못 보는 메일 앱과 회신 동기화가 이 부분을 읽는다. */
   body: string;
+  /** 있으면 multipart/alternative로 텍스트와 함께 보낸다. */
+  html?: string;
+  /** HTML이 참조하는 인라인 이미지(로고 등). html이 있을 때만 쓰인다. */
+  inlineImages?: InlineImage[];
   /** 이전에 오간 메일이 있으면 같은 Gmail 스레드에 묶는다. */
   threadId?: string | null;
   /** 지금까지 오간 메일의 RFC 2822 Message-ID. 오래된 순. */
@@ -56,11 +69,78 @@ export function buildRfcMessageId(sender: string): string {
   return `<${randomUUID()}@${domain}>`;
 }
 
+function base64Lines(data: Buffer): string {
+  // RFC 2045: base64 본문은 76자마다 줄을 바꾼다.
+  return data.toString("base64").replace(/(.{76})/g, "$1\r\n");
+}
+
+function buildBoundary(label: string): string {
+  return `${label}_${randomUUID().replace(/-/g, "")}`;
+}
+
+/**
+ * 본문 파트를 만든다. HTML이 없으면 text/plain 하나, 있으면
+ * multipart/alternative(text, html). 인라인 이미지가 있으면 html 쪽을
+ * multipart/related(html, images)로 한 번 더 감싼다.
+ */
+export function buildBodyParts(input: { body: string; html?: string; inlineImages?: InlineImage[] }): string[] {
+  const textPart = ["Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", input.body].join(
+    "\r\n"
+  );
+  if (!input.html) {
+    return [textPart];
+  }
+
+  const htmlPart = [
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    base64Lines(Buffer.from(input.html, "utf-8")),
+  ].join("\r\n");
+
+  const images = input.inlineImages ?? [];
+  let htmlSection = htmlPart;
+  if (images.length > 0) {
+    const related = buildBoundary("related");
+    const imageParts = images.map((image) =>
+      [
+        `Content-Type: ${image.contentType}; name="${image.filename}"`,
+        "Content-Transfer-Encoding: base64",
+        `Content-ID: <${image.cid}>`,
+        `Content-Disposition: inline; filename="${image.filename}"`,
+        "",
+        base64Lines(image.data),
+      ].join("\r\n")
+    );
+    htmlSection = [
+      `Content-Type: multipart/related; boundary="${related}"`,
+      "",
+      `--${related}`,
+      htmlPart,
+      ...imageParts.flatMap((part) => [`--${related}`, part]),
+      `--${related}--`,
+    ].join("\r\n");
+  }
+
+  const alternative = buildBoundary("alternative");
+  return [
+    `Content-Type: multipart/alternative; boundary="${alternative}"`,
+    "",
+    `--${alternative}`,
+    textPart,
+    `--${alternative}`,
+    htmlSection,
+    `--${alternative}--`,
+  ];
+}
+
 export function encodeRfc2822Message(input: {
   sender: string;
   to: string;
   subject: string;
   body: string;
+  html?: string;
+  inlineImages?: InlineImage[];
   messageId: string;
   references?: string[];
 }): string {
@@ -80,9 +160,12 @@ export function encodeRfc2822Message(input: {
     headers.push(`References: ${references.join(" ")}`);
   }
 
-  headers.push("MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8");
+  headers.push("MIME-Version: 1.0");
 
-  return toBase64Url([...headers, "", input.body].join("\r\n"));
+  // 파트의 첫 줄은 Content-Type 헤더라 그대로 헤더 블록에 이어 붙고,
+  // 빈 줄이 헤더와 본문을 가른다.
+  const [firstLine, ...rest] = buildBodyParts(input);
+  return toBase64Url([...headers, firstLine, ...(rest.length > 0 ? rest : [""])].join("\r\n"));
 }
 
 export async function sendReplyEmail(input: SendReplyEmailInput): Promise<SentEmail> {
@@ -93,6 +176,8 @@ export async function sendReplyEmail(input: SendReplyEmailInput): Promise<SentEm
     to: input.to,
     subject: input.subject,
     body: input.body,
+    html: input.html,
+    inlineImages: input.inlineImages,
     messageId: rfcMessageId,
     references: input.references,
   });

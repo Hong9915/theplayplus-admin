@@ -1,12 +1,24 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { sendReplyEmail } from "@/lib/gmail";
 import { getAdminSession } from "@/lib/require-admin-session";
 import { recordEvent } from "@/lib/events";
 import { createOutboundMessage, listRfcMessageIds } from "@/lib/messages";
+import { listCategoryLabels, type CategoryLabelMaps } from "@/lib/categories";
+import { COMPANY, renderReplyEmailHtml, renderReplyEmailText } from "@/lib/email-template";
+import { EMAIL_LOGO_CID, EMAIL_LOGO_CONTENT_TYPE, EMAIL_LOGO_FILENAME, getEmailLogo } from "@/lib/email-logo";
 
 const replySchema = z.object({ replyContent: z.string().trim().min(1).max(5000) });
+
+const EMPTY_LABELS: CategoryLabelMaps = { groupLabels: {}, typeLabels: {} };
+
+async function fetchGameName(supabase: SupabaseClient, gameId: string): Promise<string | null> {
+  const { data, error } = await supabase.from("games").select("name").eq("id", gameId).single();
+  if (error || !data) return null;
+  return data.name ?? null;
+}
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const actor = await getAdminSession();
@@ -23,7 +35,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const supabase = getSupabaseServerClient();
   const { data: inquiry, error: fetchError } = await supabase
     .from("inquiries")
-    .select("id, reply_email, title, inquiry_no, gmail_thread_id")
+    .select("id, game_id, group_key, type_key, game_account, reply_email, title, content, inquiry_no, gmail_thread_id")
     .eq("id", params.id)
     .single();
 
@@ -36,14 +48,38 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const subject = inquiry.inquiry_no ? `[${inquiry.inquiry_no}] Re: ${inquiry.title}` : `Re: ${inquiry.title}`;
 
   // 이전에 오간 메일이 있으면 그 Message-ID를 참조해 같은 스레드에 붙인다.
-  const references = await listRfcMessageIds(supabase, params.id).catch(() => [] as string[]);
+  // 게임 이름과 유형 라벨은 메일 꾸밈용이라 못 가져와도 발송은 진행한다.
+  const [references, gameName, labels] = await Promise.all([
+    listRfcMessageIds(supabase, params.id).catch(() => [] as string[]),
+    inquiry.game_id ? fetchGameName(supabase, inquiry.game_id).catch(() => null) : Promise.resolve(null),
+    inquiry.game_id ? listCategoryLabels(supabase, inquiry.game_id).catch(() => EMPTY_LABELS) : Promise.resolve(EMPTY_LABELS),
+  ]);
+
+  const emailInput = {
+    gameName: gameName ?? "THE PLAY+",
+    gameAccount: inquiry.game_account ?? null,
+    replyBody: parsed.data.replyContent,
+    inquiry: {
+      inquiryNo: inquiry.inquiry_no ?? null,
+      groupLabel: labels.groupLabels[inquiry.group_key] ?? null,
+      typeLabel: labels.typeLabels[inquiry.type_key] ?? null,
+      title: inquiry.title,
+      content: inquiry.content,
+    },
+    logoCid: EMAIL_LOGO_CID,
+    contactUrl: COMPANY.siteUrl,
+  };
 
   let sent;
   try {
     sent = await sendReplyEmail({
       to: inquiry.reply_email,
       subject,
-      body: parsed.data.replyContent,
+      body: renderReplyEmailText(emailInput),
+      html: renderReplyEmailHtml(emailInput),
+      inlineImages: [
+        { cid: EMAIL_LOGO_CID, contentType: EMAIL_LOGO_CONTENT_TYPE, filename: EMAIL_LOGO_FILENAME, data: getEmailLogo() },
+      ],
       threadId: inquiry.gmail_thread_id ?? null,
       references,
     });
