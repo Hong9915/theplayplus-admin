@@ -3,11 +3,18 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-export default function ReplyForm({ inquiryId }: { inquiryId: string }) {
+export default function ReplyForm({
+  inquiryId,
+  initialDraft,
+}: {
+  inquiryId: string;
+  initialDraft: string | null;
+}) {
   const router = useRouter();
-  const [replyContent, setReplyContent] = useState("");
+  const [replyContent, setReplyContent] = useState(initialDraft ?? "");
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -38,26 +45,63 @@ export default function ReplyForm({ inquiryId }: { inquiryId: string }) {
     router.refresh();
   }
 
+  async function handleSaveDraft() {
+    setSavingDraft(true);
+    setMessage(null);
+
+    let json: { success: boolean };
+    try {
+      const response = await fetch(`/api/inquiries/${inquiryId}/draft`, {
+        method: "PUT",
+        body: JSON.stringify({ draftReply: replyContent }),
+      });
+      json = await response.json();
+    } catch {
+      setSavingDraft(false);
+      setMessage("초안 저장에 실패했습니다.");
+      return;
+    }
+    setSavingDraft(false);
+
+    if (!json.success) {
+      setMessage("초안 저장에 실패했습니다.");
+      return;
+    }
+
+    setMessage("초안을 저장했습니다.");
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <label className="flex flex-col gap-1">
-        <span>답변 내용</span>
-        <textarea
-          value={replyContent}
-          onChange={(e) => setReplyContent(e.target.value)}
-          required
-          rows={6}
-          className="bg-panel border border-line rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
-        />
-      </label>
+      {/* 카드 제목이 이미 "답변"이라 눈에 보이는 라벨은 중복이다.
+          aria-label로 접근성만 남기고 시각적 중복을 없앤다. */}
+      <textarea
+        value={replyContent}
+        onChange={(e) => setReplyContent(e.target.value)}
+        required
+        rows={6}
+        aria-label="답변 내용"
+        placeholder="사용자에게 전달할 답변을 작성합니다."
+        className="bg-ground border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-colors"
+      />
       {message && <p className="text-sm">{message}</p>}
-      <button
-        type="submit"
-        disabled={submitting}
-        className="bg-accent text-white rounded px-4 py-2 hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50 transition-colors self-start"
-      >
-        답변 발송
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleSaveDraft}
+          disabled={savingDraft || submitting}
+          className="border border-line rounded-lg px-3 py-1.5 text-sm hover:bg-ground disabled:opacity-50 transition-colors"
+        >
+          초안 저장
+        </button>
+        <button
+          type="submit"
+          disabled={submitting || savingDraft}
+          className="bg-accent text-white rounded-lg px-4 py-1.5 text-sm hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50 transition-colors"
+        >
+          답변 발송
+        </button>
+      </div>
     </form>
   );
 }

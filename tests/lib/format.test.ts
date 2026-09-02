@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatElapsed, formatReceivedAt, metaEntries } from "@/lib/format";
+import { formatElapsed, formatReceivedAt, metaEntries, emailLocalPart } from "@/lib/format";
 
 const NOW = new Date("2026-07-23T12:00:00.000Z");
 
@@ -77,5 +77,19 @@ describe("metaEntries", () => {
       { key: "uid", label: "UID", value: "10024871" },
       { key: "extra", label: "extra", value: '{"a":1}' },
     ]);
+  });
+});
+
+describe("emailLocalPart", () => {
+  it("takes the part before the @", () => {
+    expect(emailLocalPart("info@theplayplus.com")).toBe("info");
+  });
+
+  it("returns the input unchanged when there is no @", () => {
+    expect(emailLocalPart("user-1")).toBe("user-1");
+  });
+
+  it("returns an empty string for empty input", () => {
+    expect(emailLocalPart("")).toBe("");
   });
 });

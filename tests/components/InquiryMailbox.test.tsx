@@ -24,6 +24,7 @@ function makeInquiry(overrides: Partial<InquiryRow>): InquiryRow {
     status: "new",
     priority: "normal",
     meta: {},
+    draftReply: null,
     inquiryNo: "R-20260101-0001",
     replyContent: null,
     repliedAt: null,
