@@ -38,9 +38,9 @@ describe("GameForm", () => {
     expect(onCreated).toHaveBeenCalledWith(createdGame);
   });
 
-  it("keeps the created game and warns when only the logo upload failed", async () => {
+  it("shows a rollback message when logo upload fails", async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ success: true, game: createdGame, warning: "logo_upload_failed" }),
+      json: () => Promise.resolve({ success: false, error: "logo_upload_failed" }),
     }) as never;
     const onCreated = vi.fn();
     render(<GameForm onCreated={onCreated} />);
@@ -48,40 +48,8 @@ describe("GameForm", () => {
     await userEvent.type(screen.getByLabelText("게임명"), "여신키우기");
     await userEvent.click(screen.getByRole("button", { name: "게임 추가" }));
 
-    expect(
-      await screen.findByText("게임은 추가되었지만 로고 업로드에 실패했습니다. 로고는 나중에 다시 등록해주세요.")
-    ).toBeInTheDocument();
-    // The game really exists, so the caller still has to refresh its list.
-    expect(onCreated).toHaveBeenCalledWith(createdGame, "logo_upload_failed");
-  });
-
-  it("shows the picked logo filename and lets it be removed again", async () => {
-    render(<GameForm onCreated={vi.fn()} />);
-
-    const input = screen.getByLabelText("로고 이미지 파일") as HTMLInputElement;
-    const file = new File(["fake image bytes"], "여신로고.png", { type: "image/png" });
-    await userEvent.upload(input, file);
-
-    expect(await screen.findByText("여신로고.png")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "로고 제거" }));
-
-    expect(screen.queryByText("여신로고.png")).not.toBeInTheDocument();
-    expect(input.files?.length ?? 0).toBe(0);
-  });
-
-  it("rejects a non-image file instead of sending it", async () => {
-    render(<GameForm onCreated={vi.fn()} />);
-
-    const input = screen.getByLabelText("로고 이미지 파일") as HTMLInputElement;
-    // `accept="image/*"` already filters the picker; applyAccept:false simulates
-    // the ways a user can still get a non-image in (drag & drop, "all files").
-    await userEvent.upload(input, new File(["not an image"], "notes.txt", { type: "text/plain" }), {
-      applyAccept: false,
-    });
-
-    expect(await screen.findByText("이미지 파일만 등록할 수 있습니다.")).toBeInTheDocument();
-    expect(screen.queryByText("notes.txt")).not.toBeInTheDocument();
+    expect(await screen.findByText("로고 업로드에 실패해 게임이 추가되지 않았습니다. 다시 시도해주세요.")).toBeInTheDocument();
+    expect(onCreated).not.toHaveBeenCalled();
   });
 
   it("shows a failure message and re-enables the button when the request throws", async () => {
