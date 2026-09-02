@@ -110,7 +110,12 @@ export default function GameRail({ games }: { games: GameRow[] }) {
               </button>
             </div>
             <GameForm
-              onCreated={(game) => {
+              onCreated={(game, warning) => {
+                if (warning) {
+                  // Keep the dialog open so the inline warning stays readable.
+                  router.refresh();
+                  return;
+                }
                 setShowAddModal(false);
                 router.push(`/games/${game.id}/inquiries`);
                 router.refresh();

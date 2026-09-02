@@ -121,13 +121,14 @@ describe("POST /api/games", () => {
     expect(response.status).toBe(500);
   });
 
-  it("deletes the game and returns logo_upload_failed when logo upload fails", async () => {
+  it("keeps the game and warns instead of rolling back when logo upload fails", async () => {
     const single = vi.fn().mockResolvedValue({ data: { id: "game-1", created_at: "2026-01-01T00:00:00.000Z" }, error: null });
     const select = vi.fn().mockReturnValue({ single });
     const insert = vi.fn().mockReturnValue({ select });
     const deleteEq = vi.fn().mockResolvedValue({ error: null });
     const deleteFn = vi.fn().mockReturnValue({ eq: deleteEq });
-    const from = vi.fn().mockReturnValue({ insert, delete: deleteFn });
+    const update = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) });
+    const from = vi.fn().mockReturnValue({ insert, update, delete: deleteFn });
     const upload = vi.fn().mockResolvedValue({ error: { message: "storage error" } });
     const storageFrom = vi.fn().mockReturnValue({ upload });
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReturnValue({ from, storage: { from: storageFrom } } as never);
@@ -139,10 +140,30 @@ describe("POST /api/games", () => {
     const response = await POST(request);
     const json = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(json).toEqual({ success: false, error: "logo_upload_failed" });
-    expect(deleteFn).toHaveBeenCalled();
-    expect(deleteEq).toHaveBeenCalledWith("id", "game-1");
-    expect(categoriesModule.createDefaultCategoriesForGame).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.warning).toBe("logo_upload_failed");
+    expect(json.game.logoPath).toBeNull();
+    // A failed logo upload is a best-effort side task; the game must survive it.
+    expect(deleteFn).not.toHaveBeenCalled();
+    expect(categoriesModule.createDefaultCategoriesForGame).toHaveBeenCalledWith(expect.anything(), "game-1");
+  });
+
+  it("uploads the logo under an ascii-safe key even for a korean filename", async () => {
+    const client = mockSupabaseSuccess();
+    const upload = vi.mocked(client.storage.from("game-logos").upload);
+
+    const fd = buildFormData();
+    fd.set("logo", new File(["fake image bytes"], "여신로고.png", { type: "image/png" }));
+
+    const request = new Request("http://localhost/api/games", { method: "POST", body: fd });
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    const [key] = upload.mock.calls[0];
+    expect(key).toMatch(/^game-1\/[A-Za-z0-9-]+-logo\.png$/);
+    expect(json.game.logoPath).toBe(key);
+    expect(json.warning).toBeUndefined();
   });
 });

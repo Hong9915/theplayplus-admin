@@ -16,6 +16,12 @@ export function getSupabaseServerClient(): SupabaseClient {
 
   cachedClient = createClient(url, serviceRoleKey, {
     auth: { persistSession: false },
+    global: {
+      // Next.js patches global fetch and caches GET responses in its Data
+      // Cache (persisted under .next/cache/fetch-cache), which serves stale
+      // games/inquiries. Admin data must always be read fresh.
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
   });
   return cachedClient;
 }

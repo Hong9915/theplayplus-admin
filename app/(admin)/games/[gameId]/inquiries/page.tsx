@@ -3,6 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase";
 import { listInquiriesByGame } from "@/lib/inquiries";
 import { listCategoryLabels, listGames } from "@/lib/categories";
 import InquiryMailbox from "@/components/inquiries/InquiryMailbox";
+import DeleteGameButton from "@/components/games/DeleteGameButton";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function GameInquiriesPage({ params }: { params: { gameId: 
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex items-baseline gap-3">
+      <header className="flex items-center gap-3">
         <h1 className="text-xl font-bold">{game.name}</h1>
         <span className="text-sm text-muted">문의함</span>
         <span
@@ -32,6 +33,7 @@ export default async function GameInquiriesPage({ params }: { params: { gameId: 
         >
           {game.status === "active" ? "서비스중" : "종료"}
         </span>
+        <DeleteGameButton gameId={game.id} gameName={game.name} inquiryCount={inquiries.length} />
       </header>
       <InquiryMailbox inquiries={inquiries} labels={labels} />
     </div>

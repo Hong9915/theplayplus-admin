@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { gameFormSchema } from "@/lib/game-schema";
 import { getSupabaseServerClient } from "@/lib/supabase";
+import { buildGameLogoPath } from "@/lib/storage";
 import { createDefaultCategoriesForGame } from "@/lib/categories";
 import { requireAdminSession } from "@/lib/require-admin-session";
 
@@ -40,16 +41,33 @@ export async function POST(request: Request) {
   }
 
   let logoPath: string | null = null;
+  let warning: string | undefined;
   const logo = formData.get("logo");
   if (logo instanceof File && logo.size > 0) {
-    const path = `${inserted.id}/${randomUUID()}-${logo.name}`;
-    const { error: uploadError } = await supabase.storage.from("game-logos").upload(path, logo);
+    // The raw filename can never go into the key: Supabase Storage rejects
+    // non-ASCII keys, which is exactly what a Korean logo filename produces.
+    const path = buildGameLogoPath(inserted.id, logo.name, randomUUID());
+    const { error: uploadError } = await supabase.storage
+      .from("game-logos")
+      .upload(path, logo, { contentType: logo.type || undefined });
+
     if (uploadError) {
-      await supabase.from("games").delete().eq("id", inserted.id);
-      return NextResponse.json({ success: false, error: "logo_upload_failed" }, { status: 500 });
+      // The logo is a best-effort extra; never roll back the game for it.
+      console.error("[api/games] logo upload failed", { path, message: uploadError.message });
+      warning = "logo_upload_failed";
+    } else {
+      const { error: logoUpdateError } = await supabase
+        .from("games")
+        .update({ logo_path: path })
+        .eq("id", inserted.id);
+
+      if (logoUpdateError) {
+        console.error("[api/games] logo path update failed", { path, message: logoUpdateError.message });
+        warning = "logo_upload_failed";
+      } else {
+        logoPath = path;
+      }
     }
-    logoPath = path;
-    await supabase.from("games").update({ logo_path: logoPath }).eq("id", inserted.id);
   }
 
   try {
@@ -70,6 +88,7 @@ export async function POST(request: Request) {
         ownerName: input.ownerName || null,
         createdAt: inserted.created_at,
       },
+      ...(warning ? { warning } : {}),
     },
     { status: 200 }
   );

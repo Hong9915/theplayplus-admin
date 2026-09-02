@@ -1,15 +1,72 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import type { GameRow } from "@/lib/categories";
 
-export default function GameForm({ onCreated }: { onCreated: (game: GameRow) => void }) {
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default function GameForm({
+  onCreated,
+}: {
+  onCreated: (game: GameRow, warning?: string) => void;
+}) {
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"active" | "ended">("active");
   const [ownerName, setOwnerName] = useState("");
   const [logo, setLogo] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!logo || typeof URL.createObjectURL !== "function") {
+      setLogoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(logo);
+    setLogoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [logo]);
+
+  function clearLogo() {
+    setLogo(null);
+    setLogoError(null);
+    if (logoInputRef.current) {
+      logoInputRef.current.value = "";
+    }
+  }
+
+  function handleLogoChange(event: ChangeEvent<HTMLInputElement>) {
+    const picked = event.target.files?.[0] ?? null;
+    if (!picked) {
+      clearLogo();
+      return;
+    }
+    if (!picked.type.startsWith("image/")) {
+      clearLogo();
+      setLogoError("이미지 파일만 등록할 수 있습니다.");
+      return;
+    }
+    if (picked.size > MAX_LOGO_BYTES) {
+      clearLogo();
+      setLogoError("로고 이미지는 2MB 이하만 등록할 수 있습니다.");
+      return;
+    }
+    setLogoError(null);
+    setLogo(picked);
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -28,7 +85,7 @@ export default function GameForm({ onCreated }: { onCreated: (game: GameRow) => 
       formData.set("logo", logo);
     }
 
-    let json: { success: boolean; error?: string; game?: GameRow };
+    let json: { success: boolean; error?: string; warning?: string; game?: GameRow };
     try {
       const response = await fetch("/api/games", { method: "POST", body: formData });
       json = await response.json();
@@ -40,18 +97,21 @@ export default function GameForm({ onCreated }: { onCreated: (game: GameRow) => 
     setSubmitting(false);
 
     if (!json.success || !json.game) {
-      if (json.error === "logo_upload_failed") {
-        setMessage("로고 업로드에 실패해 게임이 추가되지 않았습니다. 다시 시도해주세요.");
-      } else {
-        setMessage("게임 추가에 실패했습니다. 다시 시도해주세요.");
-      }
+      setMessage("게임 추가에 실패했습니다. 다시 시도해주세요.");
+      return;
+    }
+
+    setName("");
+    setOwnerName("");
+    clearLogo();
+
+    if (json.warning === "logo_upload_failed") {
+      setMessage("게임은 추가되었지만 로고 업로드에 실패했습니다. 로고는 나중에 다시 등록해주세요.");
+      onCreated(json.game, json.warning);
       return;
     }
 
     setMessage("게임이 추가되었습니다.");
-    setName("");
-    setOwnerName("");
-    setLogo(null);
     onCreated(json.game);
   }
 
@@ -85,10 +145,51 @@ export default function GameForm({ onCreated }: { onCreated: (game: GameRow) => 
           className="bg-panel border border-line rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
         />
       </label>
-      <label className="flex flex-col gap-1">
+
+      <div className="flex flex-col gap-1">
         <span>로고</span>
-        <input type="file" accept="image/*" onChange={(e) => setLogo(e.target.files?.[0] ?? null)} />
-      </label>
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/*"
+          aria-label="로고 이미지 파일"
+          onChange={handleLogoChange}
+          className="sr-only"
+        />
+
+        {logo ? (
+          <div className="flex items-center gap-3 border border-line rounded-lg px-3 py-2">
+            <span className="w-10 h-10 shrink-0 rounded-lg overflow-hidden bg-ground border border-line flex items-center justify-center">
+              {logoPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element -- local object URL, no remote loader needed
+                <img src={logoPreview} alt="" className="w-10 h-10 object-cover" />
+              ) : null}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm">{logo.name}</span>
+              <span className="block text-xs text-muted">{formatBytes(logo.size)}</span>
+            </span>
+            <button
+              type="button"
+              onClick={clearLogo}
+              className="shrink-0 text-sm text-muted hover:text-ink px-2 py-1 rounded hover:bg-ground transition-colors"
+            >
+              로고 제거
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => logoInputRef.current?.click()}
+            className="border border-dashed border-line rounded-lg px-3 py-4 text-sm text-muted hover:text-accent hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent/50 transition-colors"
+          >
+            이미지 선택 <span className="text-xs">(PNG · JPG, 최대 2MB)</span>
+          </button>
+        )}
+
+        {logoError && <p className="text-sm text-red-600">{logoError}</p>}
+      </div>
+
       {message && <p className="text-sm">{message}</p>}
       <button
         type="submit"
