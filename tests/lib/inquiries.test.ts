@@ -18,6 +18,7 @@ const sampleRow = {
   inquiry_no: "R-20260101-0001",
   priority: "high",
   meta: { uid: "10024871" },
+  draft_reply: "작성 중",
 };
 
 describe("listInquiriesByGame", () => {
@@ -105,6 +106,7 @@ describe("mapInquiryRow via getInquiryById", () => {
     expect(result?.inquiryNo).toBe("R-20260101-0001");
     expect(result?.priority).toBe("high");
     expect(result?.meta).toEqual({ uid: "10024871" });
+    expect(result?.draftReply).toBe("작성 중");
   });
 
   it("falls back when inquiry_no, priority, and meta are missing", async () => {

@@ -18,6 +18,7 @@ const inquiry: InquiryRow = {
   status: "new",
   priority: "normal",
   meta: {},
+  draftReply: null,
   replyContent: null,
   repliedAt: null,
   createdAt: "2026-01-01T00:00:00.000Z",

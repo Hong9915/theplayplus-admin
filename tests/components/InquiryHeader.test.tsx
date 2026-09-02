@@ -24,6 +24,7 @@ function makeInquiry(overrides: Partial<InquiryRow> = {}): InquiryRow {
     status: "new",
     priority: "normal",
     meta: {},
+    draftReply: null,
     replyContent: null,
     repliedAt: null,
     createdAt: new Date().toISOString(),

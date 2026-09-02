@@ -17,6 +17,7 @@ export interface InquiryRow {
   status: InquiryStatus;
   priority: InquiryPriority;
   meta: Record<string, unknown>;
+  draftReply: string | null;
   replyContent: string | null;
   repliedAt: string | null;
   createdAt: string;
@@ -42,6 +43,7 @@ function mapInquiryRow(row: {
   status: string;
   priority: string | null;
   meta: Record<string, unknown> | null;
+  draft_reply: string | null;
   reply_content: string | null;
   replied_at: string | null;
   created_at: string;
@@ -60,6 +62,7 @@ function mapInquiryRow(row: {
     status: row.status as InquiryStatus,
     priority: (row.priority ?? "normal") as InquiryPriority,
     meta: row.meta ?? {},
+    draftReply: row.draft_reply ?? null,
     replyContent: row.reply_content,
     repliedAt: row.replied_at,
     createdAt: row.created_at,

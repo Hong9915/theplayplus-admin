@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/inquiries/[id]/reply/route";
 import * as supabaseModule from "@/lib/supabase";
 import * as gmailModule from "@/lib/gmail";
+import * as eventsModule from "@/lib/events";
 import * as requireAdminSessionModule from "@/lib/require-admin-session";
 
 vi.mock("@/lib/supabase", () => ({
@@ -12,8 +13,11 @@ vi.mock("@/lib/gmail", () => ({
   sendReplyEmail: vi.fn(),
 }));
 
+vi.mock("@/lib/events", () => ({ recordEvent: vi.fn() }));
+
 vi.mock("@/lib/require-admin-session", () => ({
   requireAdminSession: vi.fn(),
+  getAdminSession: vi.fn(),
 }));
 
 function jsonRequest(body: unknown) {
@@ -27,11 +31,14 @@ describe("POST /api/inquiries/[id]/reply", () => {
   beforeEach(() => {
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReset();
     vi.mocked(gmailModule.sendReplyEmail).mockReset();
-    vi.mocked(requireAdminSessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
+    vi.mocked(eventsModule.recordEvent).mockReset().mockResolvedValue(undefined);
+    vi.mocked(requireAdminSessionModule.getAdminSession)
+      .mockReset()
+      .mockResolvedValue({ id: "user-1", email: "info@theplayplus.com" });
   });
 
   it("returns 401 when there is no admin session", async () => {
-    vi.mocked(requireAdminSessionModule.requireAdminSession).mockResolvedValue(false);
+    vi.mocked(requireAdminSessionModule.getAdminSession).mockResolvedValue(null);
 
     const response = await POST(jsonRequest({ replyContent: "답변 내용입니다" }), { params: { id: "inq-1" } });
     const json = await response.json();
@@ -73,8 +80,13 @@ describe("POST /api/inquiries/[id]/reply", () => {
       body: "답변 내용입니다",
     });
     expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "resolved", reply_content: "답변 내용입니다" })
+      expect.objectContaining({ status: "resolved", reply_content: "답변 내용입니다", draft_reply: null })
     );
+    expect(eventsModule.recordEvent).toHaveBeenCalledWith(expect.anything(), {
+      inquiryId: "inq-1",
+      actor: { id: "user-1", email: "info@theplayplus.com" },
+      kind: "reply_sent",
+    });
     expect(eqUpdate).toHaveBeenCalledWith("id", "inq-1");
     expect(json).toEqual({ success: true });
   });
@@ -111,5 +123,16 @@ describe("POST /api/inquiries/[id]/reply", () => {
     expect(gmailModule.sendReplyEmail).toHaveBeenCalledWith(
       expect.objectContaining({ subject: "Re: 제목" })
     );
+  });
+
+  it("still returns success when recording the event fails", async () => {
+    mockFetchInquiry({ id: "inq-1", reply_email: "user@example.com", title: "제목", inquiry_no: "R-1" });
+    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(undefined);
+    vi.mocked(eventsModule.recordEvent).mockRejectedValue(new Error("boom"));
+
+    const response = await POST(jsonRequest({ replyContent: "답변" }), { params: { id: "inq-1" } });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ success: true });
   });
 });
