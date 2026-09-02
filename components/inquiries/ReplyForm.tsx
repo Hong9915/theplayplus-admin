@@ -2,19 +2,41 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import type { TemplateRow } from "@/lib/templates";
+import TemplatePicker from "@/components/inquiries/TemplatePicker";
+import SuggestButton from "@/components/inquiries/SuggestButton";
 
 export default function ReplyForm({
   inquiryId,
   initialDraft,
+  templates,
+  typeKey,
 }: {
   inquiryId: string;
   initialDraft: string | null;
+  templates: TemplateRow[];
+  typeKey: string;
 }) {
   const router = useRouter();
   const [replyContent, setReplyContent] = useState(initialDraft ?? "");
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [pendingReplace, setPendingReplace] = useState<string | null>(null);
+
+  // 템플릿 삽입과 추천 적용은 작성 중인 글을 말없이 덮어쓰지 않는다.
+  // 비어 있으면 그냥 넣고, 내용이 있으면 한 번 경고한 뒤 두 번째에 대체한다.
+  // 브라우저 confirm()은 쓰지 않는다.
+  function applyText(next: string) {
+    if (replyContent.trim() === "" || pendingReplace === next) {
+      setReplyContent(next);
+      setPendingReplace(null);
+      setMessage(null);
+      return;
+    }
+    setPendingReplace(next);
+    setMessage("작성 중인 내용을 대체합니다. 한 번 더 선택하면 대체됩니다.");
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -85,6 +107,10 @@ export default function ReplyForm({
         className="bg-ground border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-colors"
       />
       {message && <p className="text-sm">{message}</p>}
+      <div className="flex flex-wrap items-start gap-2">
+        <TemplatePicker templates={templates} typeKey={typeKey} onPick={applyText} />
+        <SuggestButton inquiryId={inquiryId} onApply={applyText} />
+      </div>
       <div className="flex items-center gap-2">
         <button
           type="button"
