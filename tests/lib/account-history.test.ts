@@ -22,6 +22,7 @@ describe("getAccountHistory", () => {
         {
           id: "inq-2",
           title: "이전 문의",
+          content: "지난주에 결제한 다이아가 아직 안 들어왔습니다.",
           status: "resolved",
           group_key: "game_usage",
           type_key: "account_login",
@@ -38,6 +39,7 @@ describe("getAccountHistory", () => {
 
     const result = await getAccountHistory({ from } as never, "game-1", "player1", "inq-1");
 
+    expect(select).toHaveBeenCalledWith(expect.stringContaining("content"));
     expect(eqGame).toHaveBeenCalledWith("game_id", "game-1");
     expect(eqAccount).toHaveBeenCalledWith("game_account", "player1");
     expect(neq).toHaveBeenCalledWith("id", "inq-1");
@@ -45,6 +47,7 @@ describe("getAccountHistory", () => {
       {
         id: "inq-2",
         title: "이전 문의",
+        content: "지난주에 결제한 다이아가 아직 안 들어왔습니다.",
         status: "resolved",
         groupKey: "game_usage",
         typeKey: "account_login",

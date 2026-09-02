@@ -13,7 +13,7 @@ vi.mock("@/lib/inquiries", () => ({ getInquiryById: vi.fn() }));
 vi.mock("@/lib/categories", () => ({ listCategoryLabels: vi.fn(), listGames: vi.fn() }));
 vi.mock("@/lib/templates", () => ({ listTemplates: vi.fn() }));
 vi.mock("@/lib/replies", () => ({ listRecentRepliesByType: vi.fn() }));
-vi.mock("@/lib/suggest", () => ({ requestSuggestion: vi.fn() }));
+vi.mock("@/lib/suggest", () => ({ streamSuggestion: vi.fn() }));
 vi.mock("@/lib/require-admin-session", () => ({ requireAdminSession: vi.fn() }));
 
 const inquiry = {
@@ -40,6 +40,21 @@ function suggestRequest() {
   return new Request("http://localhost/api/inquiries/inq-1/suggest", { method: "POST" });
 }
 
+function events(...items: suggestModule.SuggestEvent[]) {
+  return (async function* () {
+    for (const item of items) yield item;
+  })();
+}
+
+/** NDJSON 응답 본문을 한 줄씩 파싱한다. */
+async function readLines(response: Response): Promise<unknown[]> {
+  const text = await response.text();
+  return text
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line));
+}
+
 describe("POST /api/inquiries/[id]/suggest", () => {
   beforeEach(() => {
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReset().mockReturnValue({} as never);
@@ -54,7 +69,9 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     ]);
     vi.mocked(templatesModule.listTemplates).mockReset().mockResolvedValue([]);
     vi.mocked(repliesModule.listRecentRepliesByType).mockReset().mockResolvedValue([]);
-    vi.mocked(suggestModule.requestSuggestion).mockReset().mockResolvedValue({ ok: true, text: "추천 본문" });
+    vi.mocked(suggestModule.streamSuggestion)
+      .mockReset()
+      .mockImplementation(() => events({ type: "text", text: "추천 " }, { type: "text", text: "본문" }));
   });
 
   it("returns 401 when there is no admin session", async () => {
@@ -63,7 +80,7 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
 
     expect(response.status).toBe(401);
-    expect(suggestModule.requestSuggestion).not.toHaveBeenCalled();
+    expect(suggestModule.streamSuggestion).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the inquiry does not exist", async () => {
@@ -72,13 +89,13 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     const response = await POST(suggestRequest(), { params: { id: "missing" } });
 
     expect(response.status).toBe(404);
-    expect(suggestModule.requestSuggestion).not.toHaveBeenCalled();
+    expect(suggestModule.streamSuggestion).not.toHaveBeenCalled();
   });
 
   it("passes Korean labels, the game name, and the inquiry body to the suggester", async () => {
     const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
 
-    expect(suggestModule.requestSuggestion).toHaveBeenCalledWith(
+    expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(
       expect.objectContaining({
         gameName: "여신키우기",
         groupLabel: "게임 이용 문의",
@@ -88,7 +105,12 @@ describe("POST /api/inquiries/[id]/suggest", () => {
         gameAccount: "player#1234",
       })
     );
-    await expect(response.json()).resolves.toEqual({ success: true, suggestion: "추천 본문" });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("application/x-ndjson");
+    await expect(readLines(response)).resolves.toEqual([
+      { type: "text", text: "추천 " },
+      { type: "text", text: "본문" },
+    ]);
   });
 
   it("only forwards templates for this type or shared ones", async () => {
@@ -100,7 +122,7 @@ describe("POST /api/inquiries/[id]/suggest", () => {
 
     await POST(suggestRequest(), { params: { id: "inq-1" } });
 
-    expect(suggestModule.requestSuggestion).toHaveBeenCalledWith(
+    expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(
       expect.objectContaining({
         templates: [
           { title: "환불", content: "환불 본문" },
@@ -110,20 +132,27 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     );
   });
 
-  it("surfaces not_configured distinctly so the UI can tell the admin what to fix", async () => {
-    vi.mocked(suggestModule.requestSuggestion).mockResolvedValue({ ok: false, reason: "not_configured" });
+  it("forwards error events as NDJSON so the UI can tell the admin what to fix", async () => {
+    vi.mocked(suggestModule.streamSuggestion).mockImplementation(() =>
+      events({ type: "error", reason: "not_configured" })
+    );
 
     const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
 
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({ success: false, error: "not_configured" });
+    expect(response.status).toBe(200);
+    await expect(readLines(response)).resolves.toEqual([{ type: "error", reason: "not_configured" }]);
   });
 
-  it("surfaces refused distinctly", async () => {
-    vi.mocked(suggestModule.requestSuggestion).mockResolvedValue({ ok: false, reason: "refused" });
+  it("forwards a mid-stream refusal after the text that came before it", async () => {
+    vi.mocked(suggestModule.streamSuggestion).mockImplementation(() =>
+      events({ type: "text", text: "일부" }, { type: "error", reason: "refused" })
+    );
 
     const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
 
-    await expect(response.json()).resolves.toEqual({ success: false, error: "refused" });
+    await expect(readLines(response)).resolves.toEqual([
+      { type: "text", text: "일부" },
+      { type: "error", reason: "refused" },
+    ]);
   });
 });

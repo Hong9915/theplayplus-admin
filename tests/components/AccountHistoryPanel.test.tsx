@@ -4,6 +4,16 @@ import { render, screen } from "@testing-library/react";
 import AccountHistoryPanel from "@/components/inquiries/AccountHistoryPanel";
 import type { AccountHistoryEntry } from "@/lib/account-history";
 
+const entry: AccountHistoryEntry = {
+  id: "inq-2",
+  title: "이전 문의",
+  content: "지난주에 결제한 다이아가 아직 안 들어왔습니다. 확인 부탁드립니다.",
+  status: "resolved",
+  groupKey: "game_usage",
+  typeKey: "account_login",
+  createdAt: "2025-06-01T00:00:00.000Z",
+};
+
 describe("AccountHistoryPanel", () => {
   it("shows a message when there is no game account on this inquiry", () => {
     render(<AccountHistoryPanel history={[]} gameAccount={null} />);
@@ -15,12 +25,21 @@ describe("AccountHistoryPanel", () => {
     expect(screen.getByText("이전 문의 이력이 없습니다.")).toBeInTheDocument();
   });
 
-  it("lists past inquiries for the account", () => {
-    const history: AccountHistoryEntry[] = [
-      { id: "inq-2", title: "이전 문의", status: "resolved", groupKey: "game_usage", typeKey: "account_login", createdAt: "2025-06-01T00:00:00.000Z" },
-    ];
-    render(<AccountHistoryPanel history={history} gameAccount="player1" />);
+  it("lists past inquiries with a body preview", () => {
+    render(<AccountHistoryPanel history={[entry]} gameAccount="player1" />);
     expect(screen.getByText("이전 문의")).toBeInTheDocument();
+    expect(screen.getByText(/지난주에 결제한 다이아가/)).toBeInTheDocument();
+  });
+
+  it("links each past inquiry to its detail page", () => {
+    render(<AccountHistoryPanel history={[entry]} gameAccount="player1" />);
+    const link = screen.getByRole("link", { name: /이전 문의/ });
+    expect(link).toHaveAttribute("href", "/inquiries/inq-2");
+  });
+
+  it("shows when each past inquiry was received", () => {
+    render(<AccountHistoryPanel history={[entry]} gameAccount="player1" />);
+    expect(screen.getByText(/2025\. 06\. 01\./)).toBeInTheDocument();
   });
 
   it("always shows the event-participation extension placeholder", () => {

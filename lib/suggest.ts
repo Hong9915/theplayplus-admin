@@ -12,9 +12,16 @@ export interface SuggestInput {
   pastReplies: string[];
 }
 
-export type SuggestResult =
-  | { ok: true; text: string }
-  | { ok: false; reason: "not_configured" | "refused" | "failed" };
+export type SuggestErrorReason = "not_configured" | "refused" | "failed";
+
+/**
+ * 스트리밍 이벤트. 텍스트 조각이 순서대로 오고, 문제가 생기면 error 이벤트가
+ * 마지막에 온다. error 앞에 이미 나간 텍스트는 그대로 유효하다(관리자가 살릴지
+ * 판단한다).
+ */
+export type SuggestEvent =
+  | { type: "text"; text: string }
+  | { type: "error"; reason: SuggestErrorReason };
 
 const SYSTEM_PROMPT = [
   "당신은 게임사 THE PLAY+의 고객지원 담당자입니다.",
@@ -70,17 +77,21 @@ export function buildSuggestPrompt(input: SuggestInput): { system: string; userM
   return { system: SYSTEM_PROMPT, userMessage: lines.join("\n") };
 }
 
-export async function requestSuggestion(input: SuggestInput): Promise<SuggestResult> {
+export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<SuggestEvent> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return { ok: false, reason: "not_configured" };
+    yield { type: "error", reason: "not_configured" };
+    return;
   }
 
   const { system, userMessage } = buildSuggestPrompt(input);
+  let emitted = false;
 
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
+    // 관리자가 버튼을 누르고 기다리는 화면이라 한 번에 받으면 몇 초간 아무것도
+    // 안 보인다. 조각이 오는 대로 흘려보낸다.
+    const stream = await ai.models.generateContentStream({
       // 모델 이름은 서버 쪽에서 바뀐다. 그때마다 코드를 고치고 배포할 이유가 없다.
       // gemini-2.5-flash-lite는 신규 사용자에게 더 이상 제공되지 않는다(404).
       model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
@@ -90,8 +101,7 @@ export async function requestSuggestion(input: SuggestInput): Promise<SuggestRes
         maxOutputTokens: 2048,
         // 템플릿 말투를 따라야 하므로 창의성보다 일관성 쪽으로 둔다.
         temperature: 0.4,
-        // 답변 한 통 쓰는 데 깊은 사고가 필요 없고, 관리자가 버튼을 누르고
-        // 기다리는 화면이라 지연이 그대로 보인다.
+        // 답변 한 통 쓰는 데 깊은 사고가 필요 없다.
         //
         // thinkingBudget: 0은 이 모델에서 400 INVALID_ARGUMENT다 — 사고를
         // 끄는 것이 아니라 thinkingLevel로 수준만 낮출 수 있다.
@@ -99,20 +109,27 @@ export async function requestSuggestion(input: SuggestInput): Promise<SuggestRes
       },
     });
 
-    // 안전 필터 차단은 예외가 아니라 정상 응답으로 돌아온다.
-    const finishReason = response.candidates?.[0]?.finishReason;
-    if (finishReason === "SAFETY" || finishReason === "RECITATION") {
-      return { ok: false, reason: "refused" };
+    for await (const chunk of stream) {
+      // 안전 필터 차단은 예외가 아니라 정상 응답으로 돌아온다. 스트리밍에서는
+      // 본문 일부가 나간 뒤 중간에 끊길 수도 있다.
+      const finishReason = chunk.candidates?.[0]?.finishReason;
+      if (finishReason === "SAFETY" || finishReason === "RECITATION") {
+        yield { type: "error", reason: "refused" };
+        return;
+      }
+
+      const text = chunk.text;
+      if (text) {
+        emitted = true;
+        yield { type: "text", text };
+      }
     }
 
-    const text = response.text?.trim();
-    if (!text) {
-      return { ok: false, reason: "refused" };
+    if (!emitted) {
+      yield { type: "error", reason: "refused" };
     }
-
-    return { ok: true, text };
   } catch (error) {
     console.warn("[suggest] Gemini request failed", error);
-    return { ok: false, reason: "failed" };
+    yield { type: "error", reason: "failed" };
   }
 }

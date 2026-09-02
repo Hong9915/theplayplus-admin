@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { buildSuggestPrompt, requestSuggestion, type SuggestInput } from "@/lib/suggest";
+import { buildSuggestPrompt, streamSuggestion, type SuggestEvent, type SuggestInput } from "@/lib/suggest";
 
-const generateContentMock = vi.fn();
+const generateContentStreamMock = vi.fn();
 vi.mock("@google/genai", () => ({
-  GoogleGenAI: vi.fn(() => ({ models: { generateContent: generateContentMock } })),
+  GoogleGenAI: vi.fn(() => ({ models: { generateContentStream: generateContentStreamMock } })),
   // 실제 모듈이 export하는 enum. 빠뜨리면 ThinkingLevel.MINIMAL이 undefined를
   // 참조해 호출이 통째로 throw되고, 그게 "failed"로 뭉개져 보인다.
   ThinkingLevel: { MINIMAL: "MINIMAL", LOW: "LOW", MEDIUM: "MEDIUM", HIGH: "HIGH" },
@@ -82,12 +82,27 @@ describe("buildSuggestPrompt", () => {
   });
 });
 
-describe("requestSuggestion", () => {
+/** SDK가 돌려주는 chunk 스트림을 흉내 낸다. */
+function chunks(items: Array<{ text?: string; finishReason?: string }>) {
+  return (async function* () {
+    for (const item of items) {
+      yield { text: item.text, candidates: [{ finishReason: item.finishReason ?? "STOP" }] };
+    }
+  })();
+}
+
+async function collect(input: SuggestInput): Promise<SuggestEvent[]> {
+  const events: SuggestEvent[] = [];
+  for await (const event of streamSuggestion(input)) events.push(event);
+  return events;
+}
+
+describe("streamSuggestion", () => {
   const originalKey = process.env.GEMINI_API_KEY;
   const originalModel = process.env.GEMINI_MODEL;
 
   beforeEach(() => {
-    generateContentMock.mockReset();
+    generateContentStreamMock.mockReset();
     process.env.GEMINI_API_KEY = "test-key";
     delete process.env.GEMINI_MODEL;
   });
@@ -102,76 +117,100 @@ describe("requestSuggestion", () => {
   it("reports not_configured without calling the SDK when the key is missing", async () => {
     delete process.env.GEMINI_API_KEY;
 
-    await expect(requestSuggestion(makeInput())).resolves.toEqual({
-      ok: false,
-      reason: "not_configured",
-    });
-    expect(generateContentMock).not.toHaveBeenCalled();
+    await expect(collect(makeInput())).resolves.toEqual([{ type: "error", reason: "not_configured" }]);
+    expect(generateContentStreamMock).not.toHaveBeenCalled();
   });
 
-  it("returns the trimmed suggestion text on success", async () => {
-    generateContentMock.mockResolvedValue({
-      text: "  안녕하세요, 확인 후 안내드리겠습니다.  ",
-      candidates: [{ finishReason: "STOP" }],
-    });
+  it("yields each text chunk as it arrives", async () => {
+    generateContentStreamMock.mockResolvedValue(
+      chunks([{ text: "안녕하세요, " }, { text: "확인 후 " }, { text: "안내드리겠습니다." }])
+    );
 
-    await expect(requestSuggestion(makeInput())).resolves.toEqual({
-      ok: true,
-      text: "안녕하세요, 확인 후 안내드리겠습니다.",
-    });
+    await expect(collect(makeInput())).resolves.toEqual([
+      { type: "text", text: "안녕하세요, " },
+      { type: "text", text: "확인 후 " },
+      { type: "text", text: "안내드리겠습니다." },
+    ]);
+  });
+
+  it("skips chunks that carry no text", async () => {
+    generateContentStreamMock.mockResolvedValue(chunks([{ text: "" }, { text: undefined }, { text: "본문" }]));
+
+    await expect(collect(makeInput())).resolves.toEqual([{ type: "text", text: "본문" }]);
   });
 
   it("defaults to gemini-3.5-flash-lite and honours GEMINI_MODEL", async () => {
-    generateContentMock.mockResolvedValue({ text: "본문", candidates: [{ finishReason: "STOP" }] });
+    generateContentStreamMock.mockImplementation(async () => chunks([{ text: "본문" }]));
 
-    await requestSuggestion(makeInput());
-    expect(generateContentMock).toHaveBeenCalledWith(
+    await collect(makeInput());
+    expect(generateContentStreamMock).toHaveBeenCalledWith(
       expect.objectContaining({ model: "gemini-3.5-flash-lite" })
     );
 
     process.env.GEMINI_MODEL = "gemini-3-something";
-    await requestSuggestion(makeInput());
-    expect(generateContentMock).toHaveBeenLastCalledWith(
+    await collect(makeInput());
+    expect(generateContentStreamMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ model: "gemini-3-something" })
     );
   });
 
   it("keeps thinking minimal and passes the system instruction", async () => {
-    generateContentMock.mockResolvedValue({ text: "본문", candidates: [{ finishReason: "STOP" }] });
+    generateContentStreamMock.mockResolvedValue(chunks([{ text: "본문" }]));
 
-    await requestSuggestion(makeInput());
+    await collect(makeInput());
 
-    const call = generateContentMock.mock.calls[0][0];
+    const call = generateContentStreamMock.mock.calls[0][0];
     // thinkingBudget: 0은 gemini-3.5-flash-lite에서 400 INVALID_ARGUMENT다.
     // 이 모델은 thinkingLevel로만 사고량을 조절한다.
     expect(call.config.thinkingConfig).toEqual({ thinkingLevel: "MINIMAL" });
     expect(call.config.systemInstruction).toContain("지어내지");
   });
 
-  it("reports refused when the safety filter stops generation", async () => {
-    generateContentMock.mockResolvedValue({ text: "", candidates: [{ finishReason: "SAFETY" }] });
+  it("reports refused when the safety filter stops generation mid-stream", async () => {
+    generateContentStreamMock.mockResolvedValue(
+      chunks([{ text: "일부 " }, { text: "", finishReason: "SAFETY" }])
+    );
 
-    await expect(requestSuggestion(makeInput())).resolves.toEqual({ ok: false, reason: "refused" });
+    await expect(collect(makeInput())).resolves.toEqual([
+      { type: "text", text: "일부 " },
+      { type: "error", reason: "refused" },
+    ]);
   });
 
   it("reports refused on RECITATION", async () => {
-    generateContentMock.mockResolvedValue({ text: "일부", candidates: [{ finishReason: "RECITATION" }] });
+    generateContentStreamMock.mockResolvedValue(chunks([{ text: "일부", finishReason: "RECITATION" }]));
 
-    await expect(requestSuggestion(makeInput())).resolves.toEqual({ ok: false, reason: "refused" });
+    await expect(collect(makeInput())).resolves.toEqual([{ type: "error", reason: "refused" }]);
   });
 
-  it("reports refused when the response carries no text", async () => {
-    generateContentMock.mockResolvedValue({ text: undefined, candidates: [{ finishReason: "STOP" }] });
+  it("reports refused when the stream ends without any text", async () => {
+    generateContentStreamMock.mockResolvedValue(chunks([{ text: undefined }]));
 
-    await expect(requestSuggestion(makeInput())).resolves.toEqual({ ok: false, reason: "refused" });
+    await expect(collect(makeInput())).resolves.toEqual([{ type: "error", reason: "refused" }]);
   });
 
-  it("reports failed when the SDK throws", async () => {
+  it("reports failed when the SDK throws before streaming", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    generateContentMock.mockRejectedValue(new Error("network down"));
+    generateContentStreamMock.mockRejectedValue(new Error("network down"));
 
-    await expect(requestSuggestion(makeInput())).resolves.toEqual({ ok: false, reason: "failed" });
+    await expect(collect(makeInput())).resolves.toEqual([{ type: "error", reason: "failed" }]);
     expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("reports failed when the stream breaks after some text", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    generateContentStreamMock.mockResolvedValue(
+      (async function* () {
+        yield { text: "앞부분", candidates: [{ finishReason: "STOP" }] };
+        throw new Error("connection reset");
+      })()
+    );
+
+    await expect(collect(makeInput())).resolves.toEqual([
+      { type: "text", text: "앞부분" },
+      { type: "error", reason: "failed" },
+    ]);
     warnSpy.mockRestore();
   });
 });

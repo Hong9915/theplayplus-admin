@@ -5,7 +5,7 @@ import { getInquiryById } from "@/lib/inquiries";
 import { listCategoryLabels, listGames } from "@/lib/categories";
 import { listTemplates } from "@/lib/templates";
 import { listRecentRepliesByType } from "@/lib/replies";
-import { requestSuggestion } from "@/lib/suggest";
+import { streamSuggestion, type SuggestEvent } from "@/lib/suggest";
 
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   if (!(await requireAdminSession())) {
@@ -32,7 +32,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
     (template) => template.typeKey === null || template.typeKey === inquiry.typeKey
   );
 
-  const result = await requestSuggestion({
+  const events = streamSuggestion({
     gameName: game?.name ?? "",
     groupLabel: labels.groupLabels[inquiry.groupKey] ?? inquiry.groupKey,
     typeLabel: labels.typeLabels[inquiry.typeKey] ?? inquiry.typeKey,
@@ -44,12 +44,33 @@ export async function POST(_request: Request, { params }: { params: { id: string
     pastReplies,
   });
 
-  if (!result.ok) {
-    // not_configured / refused / failed를 구분해 내려야 화면이 관리자에게
-    // 무엇을 고쳐야 할지 알려줄 수 있다.
-    return NextResponse.json({ success: false, error: result.reason }, { status: 500 });
-  }
-
   // 추천은 이력에 남기지 않는다 — 초안 생성일 뿐이고 여러 번 눌린다.
-  return NextResponse.json({ success: true, suggestion: result.text });
+  //
+  // 한 줄에 이벤트 하나(NDJSON). 텍스트 조각은 오는 대로 내려보내고, 실패 원인
+  // (not_configured / refused / failed)도 같은 스트림의 error 이벤트로 내려야
+  // 화면이 관리자에게 무엇을 고쳐야 할지 알려줄 수 있다. 본문이 이미 일부 나간
+  // 뒤에는 상태 코드를 바꿀 수 없기 때문이다.
+  return new Response(toNdjsonStream(events), {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+    },
+  });
+}
+
+function toNdjsonStream(events: AsyncGenerator<SuggestEvent>): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { value, done } = await events.next();
+      if (done) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(encoder.encode(JSON.stringify(value) + "\n"));
+    },
+    async cancel() {
+      await events.return(undefined);
+    },
+  });
 }
