@@ -70,3 +70,9 @@ export function metaEntries(meta: unknown): MetaEntry[] {
   }
   return entries;
 }
+
+/** 이력·메모의 행위자 표시용. info@theplayplus.com → info */
+export function emailLocalPart(email: string): string {
+  const at = email.indexOf("@");
+  return at === -1 ? email : email.slice(0, at);
+}
