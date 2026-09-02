@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
-import { getInquiryById, listAttachmentSignedUrls } from "@/lib/inquiries";
+import { getInquiryById, listAttachmentSignedUrls, listInquiryIds } from "@/lib/inquiries";
+import { parseInquiryListQuery } from "@/lib/inquiry-filters";
 import { getAccountHistory } from "@/lib/account-history";
 import { listCategoryLabels } from "@/lib/categories";
 import { listNotes } from "@/lib/notes";
@@ -18,18 +18,30 @@ import StatusSelect from "@/components/inquiries/StatusSelect";
 import PrioritySelect from "@/components/inquiries/PrioritySelect";
 import ReplyForm from "@/components/inquiries/ReplyForm";
 import AccountHistoryPanel from "@/components/inquiries/AccountHistoryPanel";
+import InquiryNav from "@/components/inquiries/InquiryNav";
+import ResolveButton from "@/components/inquiries/ResolveButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function InquiryDetailPage({ params }: { params: { id: string } }) {
+export default async function InquiryDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { list?: string | string[] };
+}) {
   const supabase = getSupabaseServerClient();
   const inquiry = await getInquiryById(supabase, params.id);
+
+  // 목록에서 들고 온 필터·정렬. 없으면 기본 목록 기준으로 이전/다음을 계산한다.
+  const listParam = Array.isArray(searchParams.list) ? searchParams.list[0] : searchParams.list;
+  const listQuery = parseInquiryListQuery(listParam ?? "");
 
   if (!inquiry) {
     notFound();
   }
 
-  const [attachments, history, labels, notes, events, templates, messages] = await Promise.all([
+  const [attachments, history, labels, notes, events, templates, messages, siblingIds] = await Promise.all([
     listAttachmentSignedUrls(supabase, inquiry.id),
     getAccountHistory(supabase, inquiry.gameId, inquiry.gameAccount, inquiry.id),
     listCategoryLabels(supabase, inquiry.gameId),
@@ -37,18 +49,18 @@ export default async function InquiryDetailPage({ params }: { params: { id: stri
     listEvents(supabase, inquiry.id),
     listTemplates(supabase, inquiry.gameId),
     listMessages(supabase, inquiry.id),
+    listInquiryIds(supabase, inquiry.gameId, listQuery),
   ]);
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        href={`/games/${inquiry.gameId}/inquiries`}
-        className="text-sm text-muted hover:text-ink transition-colors"
-      >
-        ← 목록
-      </Link>
+      <InquiryNav gameId={inquiry.gameId} inquiryId={inquiry.id} query={listQuery} ids={siblingIds} />
 
-      <InquiryHeader inquiry={inquiry} labels={labels} />
+      <InquiryHeader
+        inquiry={inquiry}
+        labels={labels}
+        actions={<ResolveButton inquiryId={inquiry.id} currentStatus={inquiry.status} />}
+      />
 
       <div className="grid grid-cols-[2fr_1fr] gap-6 items-start">
         <div className="flex flex-col gap-4">
@@ -76,7 +88,7 @@ export default async function InquiryDetailPage({ params }: { params: { id: stri
           </section>
           <InquiryMetaCard inquiry={inquiry} />
           <InquiryEventLog events={events} createdAt={inquiry.createdAt} />
-          <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} />
+          <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} currentTypeKey={inquiry.typeKey} />
         </div>
       </div>
     </div>

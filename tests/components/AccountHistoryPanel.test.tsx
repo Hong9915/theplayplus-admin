@@ -42,6 +42,31 @@ describe("AccountHistoryPanel", () => {
     expect(screen.getByText(/2025\. 06\. 01\./)).toBeInTheDocument();
   });
 
+  it("summarises count, unresolved, and same-type inquiries", () => {
+    const history: AccountHistoryEntry[] = [
+      entry,
+      { ...entry, id: "inq-3", status: "new", typeKey: "payment_refund" },
+      { ...entry, id: "inq-4", status: "in_progress", typeKey: "account_login" },
+    ];
+    render(<AccountHistoryPanel history={history} gameAccount="player1" currentTypeKey="account_login" />);
+    const summary = screen.getByTestId("account-history-summary");
+    expect(summary).toHaveTextContent("이전 문의 3건");
+    expect(summary).toHaveTextContent("미처리 2건");
+    expect(summary).toHaveTextContent("같은 유형 2건");
+  });
+
+  it("omits the same-type figure when no current type is given", () => {
+    render(<AccountHistoryPanel history={[entry]} gameAccount="player1" />);
+    const summary = screen.getByTestId("account-history-summary");
+    expect(summary).toHaveTextContent("이전 문의 1건");
+    expect(summary).not.toHaveTextContent("같은 유형");
+  });
+
+  it("shows no summary when there is no history", () => {
+    render(<AccountHistoryPanel history={[]} gameAccount="player1" currentTypeKey="x" />);
+    expect(screen.queryByTestId("account-history-summary")).not.toBeInTheDocument();
+  });
+
   it("always shows the event-participation extension placeholder", () => {
     render(<AccountHistoryPanel history={[]} gameAccount="player1" />);
     expect(screen.getByText("이벤트 참여 이력 (준비 중)")).toBeInTheDocument();

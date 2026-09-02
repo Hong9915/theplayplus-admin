@@ -57,4 +57,9 @@ describe("InquiryHeader", () => {
     render(<InquiryHeader inquiry={makeInquiry()} labels={labels} />);
     expect(screen.getByText(/경과 0분/)).toBeInTheDocument();
   });
+
+  it("renders the actions slot next to the title", () => {
+    render(<InquiryHeader inquiry={makeInquiry()} labels={labels} actions={<button type="button">완료로 표시</button>} />);
+    expect(screen.getByRole("button", { name: "완료로 표시" })).toBeInTheDocument();
+  });
 });

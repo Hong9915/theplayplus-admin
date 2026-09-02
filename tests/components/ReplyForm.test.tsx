@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ReplyForm from "@/components/inquiries/ReplyForm";
 
@@ -124,5 +124,78 @@ describe("ReplyForm", () => {
     await userEvent.selectOptions(screen.getByLabelText("템플릿 선택"), "tpl-1");
 
     expect(screen.getByLabelText("답변 내용")).toHaveValue("환불 절차입니다.");
+  });
+
+  it("submits with Cmd+Enter from the textarea", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: true }) }) as never;
+    render(<ReplyForm inquiryId="inq-1" initialDraft={null} templates={[]} typeKey="payment_refund" />);
+
+    const textarea = screen.getByLabelText("답변 내용");
+    await userEvent.type(textarea, "단축키로 보냅니다");
+    await userEvent.keyboard("{Meta>}{Enter}{/Meta}");
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/inquiries/inq-1/reply",
+        expect.objectContaining({ method: "POST", body: JSON.stringify({ replyContent: "단축키로 보냅니다" }) })
+      )
+    );
+  });
+
+  it("does not submit on a plain Enter", async () => {
+    global.fetch = vi.fn() as never;
+    render(<ReplyForm inquiryId="inq-1" initialDraft={null} templates={[]} typeKey="payment_refund" />);
+
+    await userEvent.type(screen.getByLabelText("답변 내용"), "첫 줄{Enter}둘째 줄");
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("답변 내용")).toHaveValue("첫 줄\n둘째 줄");
+  });
+
+  describe("autosave", () => {
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    it("saves the draft quietly after typing pauses", async () => {
+      global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: true }) }) as never;
+      render(
+        <ReplyForm inquiryId="inq-1" initialDraft={null} templates={[]} typeKey="payment_refund" autosaveDelayMs={50} />
+      );
+
+      await userEvent.type(screen.getByLabelText("답변 내용"), "자동 저장");
+      expect(global.fetch).not.toHaveBeenCalled();
+
+      await waitFor(() =>
+        expect(global.fetch).toHaveBeenCalledWith(
+          "/api/inquiries/inq-1/draft",
+          expect.objectContaining({ method: "PUT", body: JSON.stringify({ draftReply: "자동 저장" }) })
+        )
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(await screen.findByText(/초안 자동 저장됨/)).toBeInTheDocument();
+    });
+
+    it("does not save an untouched prefilled draft", async () => {
+      global.fetch = vi.fn() as never;
+      render(
+        <ReplyForm inquiryId="inq-1" initialDraft="이미 저장된 초안" templates={[]} typeKey="payment_refund" autosaveDelayMs={20} />
+      );
+
+      await act(() => sleep(80));
+
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it("does not resave the same text twice", async () => {
+      global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: true }) }) as never;
+      render(
+        <ReplyForm inquiryId="inq-1" initialDraft={null} templates={[]} typeKey="payment_refund" autosaveDelayMs={30} />
+      );
+
+      await userEvent.type(screen.getByLabelText("답변 내용"), "한 번만");
+      await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+      await act(() => sleep(120));
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -3,13 +3,26 @@ import type { AccountHistoryEntry } from "@/lib/account-history";
 import { formatReceivedAt } from "@/lib/format";
 import StatusBadge from "@/components/ui/StatusBadge";
 
+export function summarizeHistory(history: AccountHistoryEntry[], currentTypeKey: string | null) {
+  return {
+    total: history.length,
+    unresolved: history.filter((entry) => entry.status !== "resolved").length,
+    sameType: currentTypeKey ? history.filter((entry) => entry.typeKey === currentTypeKey).length : 0,
+  };
+}
+
 export default function AccountHistoryPanel({
   history,
   gameAccount,
+  currentTypeKey = null,
 }: {
   history: AccountHistoryEntry[];
   gameAccount: string | null;
+  /** 지금 보고 있는 문의의 유형. 같은 유형이 반복되는지 세는 데 쓴다. */
+  currentTypeKey?: string | null;
 }) {
+  const summary = summarizeHistory(history, currentTypeKey);
+
   return (
     <aside className="border border-line rounded-xl p-4 bg-panel flex flex-col gap-4">
       <div>
@@ -19,6 +32,19 @@ export default function AccountHistoryPanel({
         ) : history.length === 0 ? (
           <p className="text-sm text-muted">이전 문의 이력이 없습니다.</p>
         ) : (
+          <>
+            {/* 카드 목록만 있으면 "몇 건인지, 아직 안 끝난 게 있는지"를 세어 봐야 한다. */}
+            <p className="mb-2 text-xs text-muted flex flex-wrap gap-x-1.5" data-testid="account-history-summary">
+              <span>이전 문의 {summary.total}건</span>
+              <span aria-hidden>·</span>
+              <span className={summary.unresolved > 0 ? "text-accent font-medium" : ""}>미처리 {summary.unresolved}건</span>
+              {currentTypeKey && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className={summary.sameType > 0 ? "text-amber-600 font-medium" : ""}>같은 유형 {summary.sameType}건</span>
+                </>
+              )}
+            </p>
           <ul className="flex flex-col gap-2">
             {history.map((entry) => (
               <li key={entry.id}>
@@ -42,6 +68,7 @@ export default function AccountHistoryPanel({
               </li>
             ))}
           </ul>
+          </>
         )}
       </div>
       <div>
