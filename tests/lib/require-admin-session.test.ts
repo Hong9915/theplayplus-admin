@@ -33,3 +33,32 @@ describe("requireAdminSession", () => {
     await expect(requireAdminSession()).resolves.toBe(false);
   });
 });
+
+describe("getAdminSession", () => {
+  beforeEach(() => {
+    createServerClientMock.mockClear();
+    getUserMock.mockReset();
+    cookiesGetMock.mockReset();
+  });
+
+  it("returns the id and email of the authenticated user", async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: "user-1", email: "info@theplayplus.com" } } });
+    const { getAdminSession } = await import("@/lib/require-admin-session");
+
+    await expect(getAdminSession()).resolves.toEqual({ id: "user-1", email: "info@theplayplus.com" });
+  });
+
+  it("returns null when there is no user", async () => {
+    getUserMock.mockResolvedValue({ data: { user: null } });
+    const { getAdminSession } = await import("@/lib/require-admin-session");
+
+    await expect(getAdminSession()).resolves.toBeNull();
+  });
+
+  it("falls back to the user id when the account has no email", async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: "user-1" } } });
+    const { getAdminSession } = await import("@/lib/require-admin-session");
+
+    await expect(getAdminSession()).resolves.toEqual({ id: "user-1", email: "user-1" });
+  });
+});
