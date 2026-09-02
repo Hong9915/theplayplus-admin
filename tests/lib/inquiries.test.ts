@@ -15,6 +15,9 @@ const sampleRow = {
   reply_content: null,
   replied_at: null,
   created_at: "2026-01-01T00:00:00.000Z",
+  inquiry_no: "R-20260101-0001",
+  priority: "high",
+  meta: { uid: "10024871" },
 };
 
 describe("listInquiriesByGame", () => {
@@ -86,5 +89,29 @@ describe("listAttachmentSignedUrls", () => {
     const result = await listAttachmentSignedUrls({ from, storage: { from: storageFrom } } as never, "inq-1");
     expect(createSignedUrl).toHaveBeenCalledWith("inq-1/screenshot.png", 3600);
     expect(result).toEqual([{ id: "att-1", fileName: "screenshot.png", signedUrl: "https://signed.example/x" }]);
+  });
+});
+
+describe("mapInquiryRow via getInquiryById", () => {
+  function mockSingle(row: unknown) {
+    const single = vi.fn().mockResolvedValue({ data: row, error: null });
+    const eq = vi.fn(() => ({ single }));
+    const select = vi.fn(() => ({ eq }));
+    return { from: vi.fn(() => ({ select })) };
+  }
+
+  it("maps inquiry_no, priority, and meta", async () => {
+    const result = await getInquiryById(mockSingle(sampleRow) as never, "inq-1");
+    expect(result?.inquiryNo).toBe("R-20260101-0001");
+    expect(result?.priority).toBe("high");
+    expect(result?.meta).toEqual({ uid: "10024871" });
+  });
+
+  it("falls back when inquiry_no, priority, and meta are missing", async () => {
+    const bare = { ...sampleRow, inquiry_no: null, priority: null, meta: null };
+    const result = await getInquiryById(mockSingle(bare) as never, "inq-1");
+    expect(result?.inquiryNo).toBeNull();
+    expect(result?.priority).toBe("normal");
+    expect(result?.meta).toEqual({});
   });
 });

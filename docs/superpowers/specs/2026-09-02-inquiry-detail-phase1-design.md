@@ -84,6 +84,7 @@ create trigger inquiries_assign_no
   for each row execute function assign_inquiry_no();
 ```
 
+- **RLS와 `security definer`**: `inquiry_number_seq`는 RLS를 켜고 정책을 하나도 두지 않아 anon/authenticated를 전면 차단한다. 대신 트리거 함수는 반드시 `security definer`여야 한다 — 기본값인 `security invoker`면 접수 폼의 anon insert가 트리거 안에서 이 RLS에 막혀 **문의 접수 자체가 실패한다**. 함수는 `set search_path = ''`로 두고 테이블을 스키마까지 명시한다.
 - **시간대**: 날짜는 반드시 `Asia/Seoul` 기준이다. `created_at`은 `timestamptz`(UTC 저장)이므로 변환 없이 자르면 한국 시간 오전 9시 이전 접수 건이 전날로 밀린다.
 - **일련번호 자리수**: 4자리 고정. 하루 10,000건을 넘으면 `lpad`가 자릿수를 늘려 `R-20260723-10001`이 되며, 포맷은 깨지지만 유일성과 정렬 순서는 유지된다. 현재 문의량에서는 발생하지 않는다.
 - 트리거는 `inquiry_no`가 이미 채워진 행은 건드리지 않는다. 소급 부여를 같은 마이그레이션에서 안전하게 돌리기 위해서다.
@@ -183,12 +184,15 @@ TDD로 진행한다. 테스트를 먼저 쓰고 구현한다.
 - `tests/api/inquiry-reply.test.ts` — 메일 제목이 `[R-...] Re: ...`인지, `inquiry_no`가 없으면 `Re: ...`로 떨어지는지
 - `tests/lib/inquiries.test.ts` — `mapInquiryRow`가 `inquiry_no` · `priority` · `meta`를 매핑하는지
 
-**SQL 트리거는 Vitest로 덮지 않는다.** 마이그레이션 적용 후 수동으로 확인한다:
+**SQL 트리거는 Vitest로 덮지 않는다.** 대신 로컬 Postgres 16 인스턴스에 0001 상당의 스키마(anon 역할, RLS, anon insert 정책 포함)를 세워 마이그레이션을 실제로 적용해 검증한다:
 
-1. 문의 2건을 연속 삽입 → `R-<오늘>-0001`, `R-<오늘>-0002`가 붙는가
-2. `created_at`을 한국 시간 오전 8시로 지정해 삽입 → 전날이 아닌 당일 날짜가 붙는가
-3. 소급 부여 후 새 문의를 넣으면 기존 최대 번호 다음으로 이어지는가
-4. 마이그레이션을 두 번 돌려도 오류 없이 끝나는가
+1. 문의를 연속 삽입 → 번호가 1씩 이어지는가
+2. `created_at`이 한국 시간 오전 8시(UTC 전날) → 전날이 아닌 당일 날짜가 붙는가
+3. 소급 부여 후 새 문의가 기존 최대 번호 다음으로 이어지는가
+4. 마이그레이션을 여러 번 돌려도 오류 없이 끝나고 기존 번호가 바뀌지 않는가
+5. anon 권한 insert가 RLS에 막히지 않는가 (`security definer` 경로)
+6. anon이 `inquiry_number_seq`를 읽거나 변조할 수 없는가
+7. 동시 삽입에서 번호가 중복되거나 빠지지 않는가
 
 ## 가정
 

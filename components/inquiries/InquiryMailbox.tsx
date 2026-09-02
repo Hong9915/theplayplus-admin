@@ -6,29 +6,13 @@ import { useRouter } from "next/navigation";
 import type { InquiryRow, InquiryStatus } from "@/lib/inquiries";
 import type { CategoryLabelMaps } from "@/lib/categories";
 import StatusBadge from "@/components/ui/StatusBadge";
+import { formatElapsed, formatReceivedAt } from "@/lib/format";
 
 const STATUS_OPTIONS: Array<{ value: InquiryStatus; label: string }> = [
   { value: "new", label: "접수" },
   { value: "in_progress", label: "처리중" },
   { value: "resolved", label: "완료" },
 ];
-
-function formatReceivedAt(iso: string): string {
-  const date = new Date(iso);
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  const hours = date.getHours();
-  const meridiem = hours < 12 ? "오전" : "오후";
-  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-  const min = String(date.getMinutes()).padStart(2, "0");
-  return `${yyyy}. ${mm}. ${dd}. ${meridiem} ${hour12}:${min}`;
-}
-
-function elapsedDays(iso: string): number {
-  const ms = Date.now() - new Date(iso).getTime();
-  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
-}
 
 export default function InquiryMailbox({
   inquiries,
@@ -49,7 +33,10 @@ export default function InquiryMailbox({
       if (groupFilter !== "all" && inquiry.groupKey !== groupFilter) return false;
       if (typeFilter !== "all" && inquiry.typeKey !== typeFilter) return false;
       if (statusFilter !== "all" && inquiry.status !== statusFilter) return false;
-      if (keyword && !inquiry.title.toLowerCase().includes(keyword)) return false;
+      if (keyword) {
+        const haystack = `${inquiry.title} ${inquiry.inquiryNo ?? ""}`.toLowerCase();
+        if (!haystack.includes(keyword)) return false;
+      }
       return true;
     });
   }, [inquiries, groupFilter, typeFilter, statusFilter, search]);
@@ -87,9 +74,9 @@ export default function InquiryMailbox({
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="제목 검색"
+          placeholder="제목 · 접수번호 검색"
           className={`${selectClass} w-44`}
-          aria-label="제목 검색"
+          aria-label="검색"
         />
         <span className="ml-auto text-sm text-muted">{filtered.length}건</span>
       </div>
@@ -115,7 +102,8 @@ export default function InquiryMailbox({
             </thead>
             <tbody>
               {filtered.map((inquiry) => {
-                const days = elapsedDays(inquiry.createdAt);
+                const elapsed = formatElapsed(inquiry.createdAt);
+                const stale = inquiry.status !== "resolved" && elapsed.endsWith("일");
                 return (
                   <tr
                     key={inquiry.id}
@@ -124,7 +112,7 @@ export default function InquiryMailbox({
                       inquiry.status === "new" ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"
                     }`}
                   >
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted uppercase">{inquiry.id.slice(0, 8)}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-muted">{inquiry.inquiryNo ?? "—"}</td>
                     <td className="px-4 py-2.5 text-muted">{labels.groupLabels[inquiry.groupKey] ?? inquiry.groupKey}</td>
                     <td className="px-4 py-2.5 text-muted">{labels.typeLabels[inquiry.typeKey] ?? inquiry.typeKey}</td>
                     <td className="px-4 py-2.5">
@@ -142,10 +130,10 @@ export default function InquiryMailbox({
                     </td>
                     <td
                       className={`px-4 py-2.5 text-right font-mono text-xs ${
-                        inquiry.status !== "resolved" && days >= 3 ? "text-accent font-semibold" : "text-muted"
+                        stale ? "text-accent font-semibold" : "text-muted"
                       }`}
                     >
-                      {days}일
+                      {elapsed}
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-muted">{formatReceivedAt(inquiry.createdAt)}</td>
                   </tr>

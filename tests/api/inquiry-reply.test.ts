@@ -41,7 +41,10 @@ describe("POST /api/inquiries/[id]/reply", () => {
     expect(gmailModule.sendReplyEmail).not.toHaveBeenCalled();
   });
 
-  function mockFetchInquiry(inquiry: { id: string; reply_email: string; title: string } | null, error: { message: string } | null = null) {
+  function mockFetchInquiry(
+    inquiry: { id: string; reply_email: string; title: string; inquiry_no?: string | null } | null,
+    error: { message: string } | null = null
+  ) {
     const single = vi.fn().mockResolvedValue({ data: inquiry, error });
     const eqSelect = vi.fn(() => ({ single }));
     const select = vi.fn(() => ({ eq: eqSelect }));
@@ -53,7 +56,12 @@ describe("POST /api/inquiries/[id]/reply", () => {
   }
 
   it("sends the email and marks the inquiry resolved on success", async () => {
-    const { update, eqUpdate } = mockFetchInquiry({ id: "inq-1", reply_email: "user@example.com", title: "제목" });
+    const { update, eqUpdate } = mockFetchInquiry({
+      id: "inq-1",
+      reply_email: "user@example.com",
+      title: "제목",
+      inquiry_no: "R-20260723-0005",
+    });
     vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(undefined);
 
     const response = await POST(jsonRequest({ replyContent: "답변 내용입니다" }), { params: { id: "inq-1" } });
@@ -61,7 +69,7 @@ describe("POST /api/inquiries/[id]/reply", () => {
 
     expect(gmailModule.sendReplyEmail).toHaveBeenCalledWith({
       to: "user@example.com",
-      subject: "Re: 제목",
+      subject: "[R-20260723-0005] Re: 제목",
       body: "답변 내용입니다",
     });
     expect(update).toHaveBeenCalledWith(
@@ -92,5 +100,16 @@ describe("POST /api/inquiries/[id]/reply", () => {
 
     expect(response.status).toBe(500);
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a bare subject when the inquiry has no number", async () => {
+    mockFetchInquiry({ id: "inq-1", reply_email: "user@example.com", title: "제목", inquiry_no: null });
+    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(undefined);
+
+    await POST(jsonRequest({ replyContent: "답변" }), { params: { id: "inq-1" } });
+
+    expect(gmailModule.sendReplyEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: "Re: 제목" })
+    );
   });
 });

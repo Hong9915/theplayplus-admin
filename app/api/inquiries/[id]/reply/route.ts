@@ -20,7 +20,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const supabase = getSupabaseServerClient();
   const { data: inquiry, error: fetchError } = await supabase
     .from("inquiries")
-    .select("id, reply_email, title")
+    .select("id, reply_email, title, inquiry_no")
     .eq("id", params.id)
     .single();
 
@@ -28,10 +28,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({ success: false, error: "not_found" }, { status: 404 });
   }
 
+  // 접수번호를 제목에 넣어 사용자가 메일로 다시 문의해도 건을 특정할 수 있게 한다.
+  const subject = inquiry.inquiry_no ? `[${inquiry.inquiry_no}] Re: ${inquiry.title}` : `Re: ${inquiry.title}`;
+
   try {
     await sendReplyEmail({
       to: inquiry.reply_email,
-      subject: `Re: ${inquiry.title}`,
+      subject,
       body: parsed.data.replyContent,
     });
   } catch {
