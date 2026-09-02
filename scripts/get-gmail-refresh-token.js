@@ -48,7 +48,12 @@ async function main() {
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: ["https://www.googleapis.com/auth/gmail.send"],
+    scope: [
+      "https://www.googleapis.com/auth/gmail.send",
+      // 사용자 회신을 스레드에서 읽어오는 데 필요하다. 예전 토큰은 send만 있어
+      // 회신 확인이 실패하니, 스코프를 바꾸면 토큰을 다시 발급해야 한다.
+      "https://www.googleapis.com/auth/gmail.readonly",
+    ],
   });
 
   console.log("\n아래 URL을 브라우저에서 열고 info@theplayplus.com 계정으로 로그인/동의하세요:\n");

@@ -20,6 +20,7 @@ export interface InquiryRow {
   draftReply: string | null;
   replyContent: string | null;
   repliedAt: string | null;
+  gmailThreadId: string | null;
   createdAt: string;
 }
 
@@ -46,6 +47,7 @@ function mapInquiryRow(row: {
   draft_reply: string | null;
   reply_content: string | null;
   replied_at: string | null;
+  gmail_thread_id?: string | null;
   created_at: string;
 }): InquiryRow {
   return {
@@ -65,6 +67,7 @@ function mapInquiryRow(row: {
     draftReply: row.draft_reply ?? null,
     replyContent: row.reply_content,
     repliedAt: row.replied_at,
+    gmailThreadId: row.gmail_thread_id ?? null,
     createdAt: row.created_at,
   };
 }

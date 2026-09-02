@@ -28,6 +28,7 @@ function makeInquiry(overrides: Partial<InquiryRow>): InquiryRow {
     inquiryNo: "R-20260101-0001",
     replyContent: null,
     repliedAt: null,
+    gmailThreadId: null,
     createdAt: new Date().toISOString(),
     ...overrides,
   };

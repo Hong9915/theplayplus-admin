@@ -1,5 +1,4 @@
 import type { InquiryRow, AttachmentWithUrl } from "@/lib/inquiries";
-import { formatReceivedAt } from "@/lib/format";
 
 const CARD = "bg-panel border border-line rounded-2xl p-4";
 
@@ -36,17 +35,6 @@ export default function InquiryDetail({
         </section>
       )}
 
-      {inquiry.replyContent && (
-        <section className={CARD}>
-          <h2 className="font-semibold mb-3">
-            보낸 답변
-            {inquiry.repliedAt && (
-              <span className="ml-2 text-sm font-normal text-muted">{formatReceivedAt(inquiry.repliedAt)}</span>
-            )}
-          </h2>
-          <p className="whitespace-pre-wrap">{inquiry.replyContent}</p>
-        </section>
-      )}
     </div>
   );
 }

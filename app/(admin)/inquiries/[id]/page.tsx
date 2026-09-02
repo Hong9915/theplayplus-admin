@@ -7,8 +7,10 @@ import { listCategoryLabels } from "@/lib/categories";
 import { listNotes } from "@/lib/notes";
 import { listEvents } from "@/lib/events";
 import { listTemplates } from "@/lib/templates";
+import { listMessages } from "@/lib/messages";
 import InquiryHeader from "@/components/inquiries/InquiryHeader";
 import InquiryDetail from "@/components/inquiries/InquiryDetail";
+import InquiryThread from "@/components/inquiries/InquiryThread";
 import InquiryMetaCard from "@/components/inquiries/InquiryMetaCard";
 import InquiryNotes from "@/components/inquiries/InquiryNotes";
 import InquiryEventLog from "@/components/inquiries/InquiryEventLog";
@@ -27,13 +29,14 @@ export default async function InquiryDetailPage({ params }: { params: { id: stri
     notFound();
   }
 
-  const [attachments, history, labels, notes, events, templates] = await Promise.all([
+  const [attachments, history, labels, notes, events, templates, messages] = await Promise.all([
     listAttachmentSignedUrls(supabase, inquiry.id),
     getAccountHistory(supabase, inquiry.gameId, inquiry.gameAccount, inquiry.id),
     listCategoryLabels(supabase, inquiry.gameId),
     listNotes(supabase, inquiry.id),
     listEvents(supabase, inquiry.id),
     listTemplates(supabase, inquiry.gameId),
+    listMessages(supabase, inquiry.id),
   ]);
 
   return (
@@ -50,6 +53,7 @@ export default async function InquiryDetailPage({ params }: { params: { id: stri
       <div className="grid grid-cols-[2fr_1fr] gap-6 items-start">
         <div className="flex flex-col gap-4">
           <InquiryDetail inquiry={inquiry} attachments={attachments} />
+          <InquiryThread inquiryId={inquiry.id} messages={messages} hasGmailThread={inquiry.gmailThreadId !== null} />
           <InquiryNotes inquiryId={inquiry.id} notes={notes} />
           <section className="bg-panel border border-line rounded-2xl p-4">
             <h2 className="font-semibold mb-3">답변</h2>

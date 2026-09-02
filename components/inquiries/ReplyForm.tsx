@@ -20,6 +20,7 @@ export default function ReplyForm({
   const router = useRouter();
   const [replyContent, setReplyContent] = useState(initialDraft ?? "");
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"success" | "warning" | "error">("success");
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [pendingReplace, setPendingReplace] = useState<string | null>(null);

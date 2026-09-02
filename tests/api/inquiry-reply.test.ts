@@ -3,6 +3,7 @@ import { POST } from "@/app/api/inquiries/[id]/reply/route";
 import * as supabaseModule from "@/lib/supabase";
 import * as gmailModule from "@/lib/gmail";
 import * as eventsModule from "@/lib/events";
+import * as messagesModule from "@/lib/messages";
 import * as requireAdminSessionModule from "@/lib/require-admin-session";
 
 vi.mock("@/lib/supabase", () => ({
@@ -14,11 +15,14 @@ vi.mock("@/lib/gmail", () => ({
 }));
 
 vi.mock("@/lib/events", () => ({ recordEvent: vi.fn() }));
+vi.mock("@/lib/messages", () => ({ createOutboundMessage: vi.fn(), listRfcMessageIds: vi.fn() }));
 
 vi.mock("@/lib/require-admin-session", () => ({
   requireAdminSession: vi.fn(),
   getAdminSession: vi.fn(),
 }));
+
+const SENT = { gmailMessageId: "gm-1", gmailThreadId: "thread-1", rfcMessageId: "<abc@theplayplus.com>" };
 
 function jsonRequest(body: unknown) {
   return new Request("http://localhost/api/inquiries/inq-1/reply", {
@@ -32,6 +36,8 @@ describe("POST /api/inquiries/[id]/reply", () => {
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReset();
     vi.mocked(gmailModule.sendReplyEmail).mockReset();
     vi.mocked(eventsModule.recordEvent).mockReset().mockResolvedValue(undefined);
+    vi.mocked(messagesModule.createOutboundMessage).mockReset().mockResolvedValue(true);
+    vi.mocked(messagesModule.listRfcMessageIds).mockReset().mockResolvedValue([]);
     vi.mocked(requireAdminSessionModule.getAdminSession)
       .mockReset()
       .mockResolvedValue({ id: "user-1", email: "info@theplayplus.com" });
@@ -49,7 +55,13 @@ describe("POST /api/inquiries/[id]/reply", () => {
   });
 
   function mockFetchInquiry(
-    inquiry: { id: string; reply_email: string; title: string; inquiry_no?: string | null } | null,
+    inquiry: {
+      id: string;
+      reply_email: string;
+      title: string;
+      inquiry_no?: string | null;
+      gmail_thread_id?: string | null;
+    } | null,
     error: { message: string } | null = null
   ) {
     const single = vi.fn().mockResolvedValue({ data: inquiry, error });
@@ -69,7 +81,7 @@ describe("POST /api/inquiries/[id]/reply", () => {
       title: "제목",
       inquiry_no: "R-20260723-0005",
     });
-    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(undefined);
+    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(SENT);
 
     const response = await POST(jsonRequest({ replyContent: "답변 내용입니다" }), { params: { id: "inq-1" } });
     const json = await response.json();
@@ -78,9 +90,26 @@ describe("POST /api/inquiries/[id]/reply", () => {
       to: "user@example.com",
       subject: "[R-20260723-0005] Re: 제목",
       body: "답변 내용입니다",
+      threadId: null,
+      references: [],
     });
     expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "in_progress", reply_content: "답변 내용입니다", draft_reply: null })
+      expect.objectContaining({
+        status: "in_progress",
+        reply_content: "답변 내용입니다",
+        draft_reply: null,
+        gmail_thread_id: "thread-1",
+      })
+    );
+    expect(messagesModule.createOutboundMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        inquiryId: "inq-1",
+        author: { id: "user-1", email: "info@theplayplus.com" },
+        body: "답변 내용입니다",
+        gmailMessageId: "gm-1",
+        rfcMessageId: "<abc@theplayplus.com>",
+      })
     );
     expect(eventsModule.recordEvent).toHaveBeenCalledWith(expect.anything(), {
       inquiryId: "inq-1",
@@ -116,7 +145,7 @@ describe("POST /api/inquiries/[id]/reply", () => {
 
   it("falls back to a bare subject when the inquiry has no number", async () => {
     mockFetchInquiry({ id: "inq-1", reply_email: "user@example.com", title: "제목", inquiry_no: null });
-    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(undefined);
+    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(SENT);
 
     await POST(jsonRequest({ replyContent: "답변" }), { params: { id: "inq-1" } });
 
@@ -125,9 +154,41 @@ describe("POST /api/inquiries/[id]/reply", () => {
     );
   });
 
+  it("threads a follow-up reply onto the existing Gmail conversation", async () => {
+    mockFetchInquiry({
+      id: "inq-1",
+      reply_email: "user@example.com",
+      title: "제목",
+      inquiry_no: "R-1",
+      gmail_thread_id: "thread-1",
+    });
+    vi.mocked(messagesModule.listRfcMessageIds).mockResolvedValue(["<first@theplayplus.com>", "<reply@mail.example>"]);
+    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(SENT);
+
+    await POST(jsonRequest({ replyContent: "두 번째 답변" }), { params: { id: "inq-1" } });
+
+    expect(gmailModule.sendReplyEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: "thread-1",
+        references: ["<first@theplayplus.com>", "<reply@mail.example>"],
+      })
+    );
+  });
+
+  it("warns instead of failing when the message record cannot be saved", async () => {
+    mockFetchInquiry({ id: "inq-1", reply_email: "user@example.com", title: "제목", inquiry_no: "R-1" });
+    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(SENT);
+    vi.mocked(messagesModule.createOutboundMessage).mockResolvedValue(false);
+
+    const response = await POST(jsonRequest({ replyContent: "답변" }), { params: { id: "inq-1" } });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ success: true, warning: "message_save_failed" });
+  });
+
   it("still returns success when recording the event fails", async () => {
     mockFetchInquiry({ id: "inq-1", reply_email: "user@example.com", title: "제목", inquiry_no: "R-1" });
-    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(undefined);
+    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(SENT);
     vi.mocked(eventsModule.recordEvent).mockRejectedValue(new Error("boom"));
 
     const response = await POST(jsonRequest({ replyContent: "답변" }), { params: { id: "inq-1" } });
