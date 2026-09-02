@@ -6,6 +6,7 @@ import { getAccountHistory } from "@/lib/account-history";
 import { listCategoryLabels } from "@/lib/categories";
 import { listNotes } from "@/lib/notes";
 import { listEvents } from "@/lib/events";
+import { listTemplates } from "@/lib/templates";
 import InquiryHeader from "@/components/inquiries/InquiryHeader";
 import InquiryDetail from "@/components/inquiries/InquiryDetail";
 import InquiryMetaCard from "@/components/inquiries/InquiryMetaCard";
@@ -26,12 +27,13 @@ export default async function InquiryDetailPage({ params }: { params: { id: stri
     notFound();
   }
 
-  const [attachments, history, labels, notes, events] = await Promise.all([
+  const [attachments, history, labels, notes, events, templates] = await Promise.all([
     listAttachmentSignedUrls(supabase, inquiry.id),
     getAccountHistory(supabase, inquiry.gameId, inquiry.gameAccount, inquiry.id),
     listCategoryLabels(supabase, inquiry.gameId),
     listNotes(supabase, inquiry.id),
     listEvents(supabase, inquiry.id),
+    listTemplates(supabase, inquiry.gameId),
   ]);
 
   return (
@@ -51,7 +53,12 @@ export default async function InquiryDetailPage({ params }: { params: { id: stri
           <InquiryNotes inquiryId={inquiry.id} notes={notes} />
           <section className="bg-panel border border-line rounded-2xl p-4">
             <h2 className="font-semibold mb-3">답변</h2>
-            <ReplyForm inquiryId={inquiry.id} initialDraft={inquiry.draftReply} />
+            <ReplyForm
+              inquiryId={inquiry.id}
+              initialDraft={inquiry.draftReply}
+              templates={templates}
+              typeKey={inquiry.typeKey}
+            />
           </section>
         </div>
 
