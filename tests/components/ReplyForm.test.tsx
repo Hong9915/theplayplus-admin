@@ -57,6 +57,13 @@ describe("ReplyForm", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
+  it("gives the textarea room for a full reply", () => {
+    render(<ReplyForm inquiryId="inq-1" initialDraft={null} templates={[]} typeKey="general" />);
+    const textarea = screen.getByLabelText("답변 내용");
+    expect(textarea).toHaveAttribute("rows", "12");
+    expect(textarea.className).toContain("resize-y");
+  });
+
   it("prefills the textarea with an existing draft", () => {
     render(<ReplyForm inquiryId="inq-1" initialDraft="작성하던 답변" templates={[]} typeKey="payment_refund" />);
     expect(screen.getByLabelText("답변 내용")).toHaveValue("작성하던 답변");
