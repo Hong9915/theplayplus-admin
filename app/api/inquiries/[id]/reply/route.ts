@@ -46,7 +46,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const { error: updateError } = await supabase
     .from("inquiries")
     .update({
-      status: "resolved",
+      // 답변을 보냈다고 끝난 건 아니다. 사용자 회신이나 후속 확인이 남을 수
+      // 있으니 처리중으로 두고, 완료는 관리자가 직접 바꾼다.
+      status: "in_progress",
       reply_content: parsed.data.replyContent,
       replied_at: new Date().toISOString(),
       // 발송했으니 초안은 비운다.

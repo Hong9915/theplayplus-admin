@@ -62,7 +62,7 @@ describe("POST /api/inquiries/[id]/reply", () => {
     return { update, eqUpdate };
   }
 
-  it("sends the email and marks the inquiry resolved on success", async () => {
+  it("sends the email and marks the inquiry in_progress on success", async () => {
     const { update, eqUpdate } = mockFetchInquiry({
       id: "inq-1",
       reply_email: "user@example.com",
@@ -80,7 +80,7 @@ describe("POST /api/inquiries/[id]/reply", () => {
       body: "답변 내용입니다",
     });
     expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "resolved", reply_content: "답변 내용입니다", draft_reply: null })
+      expect.objectContaining({ status: "in_progress", reply_content: "답변 내용입니다", draft_reply: null })
     );
     expect(eventsModule.recordEvent).toHaveBeenCalledWith(expect.anything(), {
       inquiryId: "inq-1",

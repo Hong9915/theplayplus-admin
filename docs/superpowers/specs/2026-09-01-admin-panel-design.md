@@ -21,7 +21,7 @@
 - 게임 추가/목록 (이름, 상태, 로고, 게임별 문의 카테고리)
 - 게임 선택 → 게임별 문의 목록 (상태 필터)
 - 문의 상세 조회 + 상태 변경(new/in_progress/resolved)
-- Gmail API를 통한 답변 이메일 발송 (`info@theplayplus.com` 계정으로 발송, 발송 성공 시 상태 자동 완료 처리)
+- Gmail API를 통한 답변 이메일 발송 (`info@theplayplus.com` 계정으로 발송, 발송 성공 시 상태 자동 처리중 전환, 완료는 수동)
 - 계정 이력 패널: 같은 게임 내 동일 `game_account`의 과거 문의 목록
 - `theplayplus-contact`의 문의 카테고리 설정을 하드코딩 파일에서 DB(`games`/`inquiry_groups`/`inquiry_types`)로 이전 (이 저장소가 스키마의 소유자, `theplayplus-contact`는 읽기만 함)
 
@@ -55,7 +55,7 @@ app/
         status/
           route.ts               -- PATCH: 상태 변경
         reply/
-          route.ts               -- POST: 답변 발송 (Gmail API) + 상태 자동 완료
+          route.ts               -- POST: 답변 발송 (Gmail API) + 상태 자동 처리중
 components/
   games/
     GameForm.tsx                -- 게임 추가 폼 (이름/상태/로고/카테고리 초기값)
