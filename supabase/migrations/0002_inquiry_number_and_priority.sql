@@ -13,9 +13,24 @@ create table if not exists inquiry_number_seq (
   last_seq  int  not null default 0
 );
 
+-- inquiry_number_seq는 채번용 내부 테이블이라 클라이언트가 읽거나 쓸 이유가
+-- 없다. RLS를 켜고 정책을 하나도 두지 않아 anon/authenticated를 전면 차단한다.
+-- 관리자 앱은 service-role 클라이언트라 RLS를 우회하고, 트리거는 아래처럼
+-- security definer로 돌아 우회한다.
+alter table inquiry_number_seq enable row level security;
+
 -- 날짜는 Asia/Seoul 기준. created_at은 timestamptz(UTC 저장)이므로 변환
 -- 없이 자르면 한국 시간 오전 9시 이전 접수 건이 전날로 밀린다.
-create or replace function assign_inquiry_no() returns trigger as $$
+--
+-- security definer가 필수다: theplayplus-contact의 접수 폼은 anon 권한으로
+-- inquiries에 insert하고, 기본값인 security invoker면 이 트리거도 anon으로
+-- 실행되어 위에서 켠 RLS에 막힌다. 그러면 문의 접수 자체가 실패한다.
+-- search_path를 비우고 스키마를 명시해 검색 경로 하이재킹을 막는다.
+create or replace function assign_inquiry_no() returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
 declare
   d date;
   n int;
@@ -26,14 +41,14 @@ begin
 
   d := (coalesce(new.created_at, now()) at time zone 'Asia/Seoul')::date;
 
-  insert into inquiry_number_seq (seq_date, last_seq)
+  insert into public.inquiry_number_seq as s (seq_date, last_seq)
   values (d, 1)
-  on conflict (seq_date) do update set last_seq = inquiry_number_seq.last_seq + 1
-  returning last_seq into n;
+  on conflict (seq_date) do update set last_seq = s.last_seq + 1
+  returning s.last_seq into n;
 
   new.inquiry_no := 'R-' || to_char(d, 'YYYYMMDD') || '-' || lpad(n::text, 4, '0');
   return new;
-end $$ language plpgsql;
+end $$;
 
 drop trigger if exists inquiries_assign_no on inquiries;
 create trigger inquiries_assign_no
