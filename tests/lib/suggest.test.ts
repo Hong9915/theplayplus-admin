@@ -4,6 +4,9 @@ import { buildSuggestPrompt, requestSuggestion, type SuggestInput } from "@/lib/
 const generateContentMock = vi.fn();
 vi.mock("@google/genai", () => ({
   GoogleGenAI: vi.fn(() => ({ models: { generateContent: generateContentMock } })),
+  // 실제 모듈이 export하는 enum. 빠뜨리면 ThinkingLevel.MINIMAL이 undefined를
+  // 참조해 호출이 통째로 throw되고, 그게 "failed"로 뭉개져 보인다.
+  ThinkingLevel: { MINIMAL: "MINIMAL", LOW: "LOW", MEDIUM: "MEDIUM", HIGH: "HIGH" },
 }));
 
 function makeInput(overrides: Partial<SuggestInput> = {}): SuggestInput {
@@ -28,6 +31,8 @@ describe("buildSuggestPrompt", () => {
     expect(system).toContain("지어내지");
     expect(system).toContain("확인 후 안내드리겠습니다");
     expect(system).toContain("서명");
+    // 템플릿 제목을 본문에 복사하는 실제 사례가 있었다.
+    expect(system).toContain("제목");
   });
 
   it("includes the game, category, title, and body", () => {
@@ -58,6 +63,8 @@ describe("buildSuggestPrompt", () => {
     expect(userMessage).toContain("참고 템플릿");
     expect(userMessage).toContain("환불 안내");
     expect(userMessage).toContain("환불 절차는 다음과 같습니다.");
+    // 제목을 대괄호로 감싸면 모델이 본문 머리말로 오해해 그대로 복사한다.
+    expect(userMessage).not.toContain("[환불 안내]");
   });
 
   it("omits the template section entirely when there are none", () => {
@@ -114,12 +121,12 @@ describe("requestSuggestion", () => {
     });
   });
 
-  it("defaults to gemini-2.5-flash-lite and honours GEMINI_MODEL", async () => {
+  it("defaults to gemini-3.5-flash-lite and honours GEMINI_MODEL", async () => {
     generateContentMock.mockResolvedValue({ text: "본문", candidates: [{ finishReason: "STOP" }] });
 
     await requestSuggestion(makeInput());
     expect(generateContentMock).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "gemini-2.5-flash-lite" })
+      expect.objectContaining({ model: "gemini-3.5-flash-lite" })
     );
 
     process.env.GEMINI_MODEL = "gemini-3-something";
@@ -129,13 +136,15 @@ describe("requestSuggestion", () => {
     );
   });
 
-  it("disables thinking and passes the system instruction", async () => {
+  it("keeps thinking minimal and passes the system instruction", async () => {
     generateContentMock.mockResolvedValue({ text: "본문", candidates: [{ finishReason: "STOP" }] });
 
     await requestSuggestion(makeInput());
 
     const call = generateContentMock.mock.calls[0][0];
-    expect(call.config.thinkingConfig).toEqual({ thinkingBudget: 0 });
+    // thinkingBudget: 0은 gemini-3.5-flash-lite에서 400 INVALID_ARGUMENT다.
+    // 이 모델은 thinkingLevel로만 사고량을 조절한다.
+    expect(call.config.thinkingConfig).toEqual({ thinkingLevel: "MINIMAL" });
     expect(call.config.systemInstruction).toContain("지어내지");
   });
 

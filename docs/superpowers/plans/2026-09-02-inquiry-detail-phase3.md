@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 관리자 UI는 **한국어 전용**.
-- 모델은 `process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite"`. 모델 ID를 코드에 하드코딩하지 마라.
+- 모델은 `process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"`. 모델 ID를 코드에 하드코딩하지 마라.
 - **테스트는 절대 실제 Gemini API를 호출하지 않는다.** `@google/genai`를 `vi.mock`으로 대체한다.
 - 추천 실패가 답변 작성을 막아서는 안 된다. 화면은 에러 문구만 띄우고 아무것도 잠그지 않는다.
 - 안전 필터 차단은 예외가 아니라 정상 응답으로 온다 — `finishReason`이 `SAFETY`/`RECITATION`이거나 `text`가 비면 `refused`.
@@ -82,7 +82,7 @@ alter table reply_templates enable row level security;
 
 ```
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
 - [ ] **Step 3: 로컬 Postgres에서 재실행 확인** — 2단계 Task 1과 같은 절차. `games` 테이블만 있으면 된다. 두 회차 모두 exit 0이어야 한다.
@@ -323,7 +323,7 @@ export async function requestSuggestion(input: SuggestInput): Promise<SuggestRes
   try {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite",
+      model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
       contents: userMessage,
       config: {
         systemInstruction: system,
@@ -331,7 +331,7 @@ export async function requestSuggestion(input: SuggestInput): Promise<SuggestRes
         temperature: 0.4,
         // 답변 한 통 쓰는 데 사고가 필요 없고, 관리자가 기다리는 화면이라
         // 지연이 그대로 보인다.
-        thinkingConfig: { thinkingBudget: 0 },
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
       },
     });
 
@@ -784,5 +784,5 @@ export default function SuggestButton({
 - **깨끗한 체크아웃에서도 테스트가 통과하는지** (`git worktree`로 확인) — 2단계에서 미커밋 작업이 섞여 들어간 사고가 있었다
 - `supabase/migrations/0004_reply_templates.sql`은 사람이 적용해야 한다
 - `.env`에 `GEMINI_API_KEY`가 없으면 추천 버튼만 실패한다
-- **모델 ID `gemini-2.5-flash-lite`는 실제 호출로 검증되지 않았다** — 키가 없어 확인할 수 없었고, 틀리면 첫 호출에서 드러나며 `GEMINI_MODEL`로 교체 가능
+- 모델 ID는 실제 호출로 검증 완료 (`gemini-3.5-flash-lite`)
 - 템플릿 관리 페이지 진입 링크는 범위 밖이다 (미커밋 작업 충돌 회피)

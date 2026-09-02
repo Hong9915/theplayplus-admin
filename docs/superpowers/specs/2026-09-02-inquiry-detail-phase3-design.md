@@ -45,28 +45,28 @@
 
 ## 설계 결정
 
-### 1. 모델은 Gemini 2.5 Flash-Lite
+### 1. 모델은 Gemini 3.5 Flash-Lite
 
-`gemini-2.5-flash-lite`를 쓴다. 답변 초안 작성은 정형화된 글쓰기 작업이고, 관리자가 결과를 읽고 고친 뒤 발송하므로 모델이 실수해도 사람이 걸러낸다. 최상위 모델을 쓸 이유가 없다.
+`gemini-3.5-flash-lite`를 쓴다. (`gemini-2.5-flash-lite`로 시작했으나 신규 사용자에게 더 이상 제공되지 않아 404가 났다 — 아래 참고.) 답변 초안 작성은 정형화된 글쓰기 작업이고, 관리자가 결과를 읽고 고친 뒤 발송하므로 모델이 실수해도 사람이 걸러낸다. 최상위 모델을 쓸 이유가 없다.
 
 Google Gen AI SDK(`@google/genai`)를 쓴다. `@google/generative-ai`는 구버전이므로 쓰지 않는다.
 
 ```ts
 const ai = new GoogleGenAI({ apiKey });
 const response = await ai.models.generateContent({
-  model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite",
+  model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
   contents: userMessage,
   config: {
     systemInstruction: system,
     maxOutputTokens: 2048,
     temperature: 0.4,
-    thinkingConfig: { thinkingBudget: 0 },
+    thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
   },
 });
 ```
 
 - **모델 ID를 환경변수로 덮어쓸 수 있게 둔다.** 모델 이름은 서버 쪽에서 바뀌고, 그때마다 코드를 고치고 배포할 이유가 없다.
-- `thinkingBudget: 0`으로 사고를 명시적으로 끈다. 답변 한 통 쓰는 데 필요 없고, 관리자가 버튼을 누르고 기다리는 화면이라 지연이 그대로 보인다.
+- `thinkingLevel: MINIMAL`로 사고량을 낮춘다. **`thinkingBudget: 0`은 이 모델에서 400 INVALID_ARGUMENT다** — 사고를 끌 수는 없고 수준만 낮출 수 있다.
 - `temperature: 0.4` — 템플릿 말투를 따라야 하므로 창의성보다 일관성 쪽으로 둔다.
 - 스트리밍은 쓰지 않는다. 미리보기 UI라 부분 출력을 보여줄 이유가 없다.
 
@@ -90,7 +90,7 @@ const response = await ai.models.generateContent({
 
 - 한국어로, 고객에게 보내는 메일 본문만 출력 (머리말·설명·따옴표 없이)
 - **모르는 것을 지어내지 말 것.** 보상 지급, 환불 승인, 일정 확정처럼 확인이 필요한 약속은 하지 말고 "확인 후 안내드리겠습니다" 식으로 남길 것
-- 템플릿이 있으면 그 말투와 구조를 따를 것
+- 템플릿이 있으면 그 말투와 구조를 따르되, **템플릿 제목을 본문에 옮겨 적지 말 것** (실제로 첫 줄에 `[환불 안내]`가 나왔다)
 - 서명은 붙이지 말 것 (발송 시스템이 처리)
 
 ### 3. 추천 실패는 답변 작성을 막지 않는다
@@ -137,7 +137,7 @@ RLS를 켜고 정책은 두지 않는다. 2단계의 `inquiry_notes` / `inquiry_
 npm install @google/genai
 ```
 
-`.env.example`에 `GEMINI_API_KEY=`와 `GEMINI_MODEL=gemini-2.5-flash-lite` 추가. 후자는 선택이며 비어 있으면 기본값을 쓴다.
+`.env.example`에 `GEMINI_API_KEY=`와 `GEMINI_MODEL=gemini-3.5-flash-lite` 추가. 후자는 선택이며 비어 있으면 기본값을 쓴다.
 
 ### `lib/templates.ts` (신규)
 
@@ -236,6 +236,6 @@ TDD로 진행한다.
 ## 가정
 
 - `GEMINI_API_KEY`는 사람이 `.env`에 넣는다. 없으면 추천 버튼만 실패하고 나머지는 정상 동작한다.
-- 모델 ID `gemini-2.5-flash-lite`는 사용자가 지정한 값이다. 이 저장소에는 아직 키가 없어 실제 호출로 검증하지 못했다 — 모델 이름이 틀리면 첫 호출에서 드러나고, `GEMINI_MODEL` 환경변수로 코드 수정 없이 교체할 수 있다.
+- 모델 ID는 실제 호출로 검증했다. 처음 지정한 `gemini-2.5-flash-lite`는 신규 사용자에게 제공되지 않아 404가 났고, Google이 안내한 `gemini-3.5-flash-lite`로 교체했다. `GEMINI_MODEL` 환경변수로 코드 수정 없이 다시 바꿀 수 있다.
 - 템플릿은 게임당 수십 개 수준. 페이지네이션하지 않는다.
 - 마이그레이션은 사람이 Supabase에 직접 적용한다.
