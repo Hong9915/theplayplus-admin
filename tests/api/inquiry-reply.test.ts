@@ -81,10 +81,14 @@ describe("POST /api/inquiries/[id]/reply", () => {
     const gameSingle = vi.fn().mockResolvedValue({ data: game, error: game ? null : { message: "none" } });
     const gameSelect = vi.fn(() => ({ eq: vi.fn(() => ({ single: gameSingle })) }));
     const groupsSelect = vi.fn(() => ({
-      eq: vi.fn().mockResolvedValue({ data: [{ id: "grp-1", key: "g", label_ko: "게임 이용 문의" }], error: null }),
+      eq: vi.fn(() => ({
+        order: vi.fn().mockResolvedValue({ data: [{ id: "grp-1", key: "g", label_ko: "게임 이용 문의" }], error: null }),
+      })),
     }));
     const typesSelect = vi.fn(() => ({
-      in: vi.fn().mockResolvedValue({ data: [{ key: "t", label_ko: "결제/환불" }], error: null }),
+      in: vi.fn(() => ({
+        order: vi.fn().mockResolvedValue({ data: [{ key: "t", label_ko: "결제/환불", group_id: "grp-1" }], error: null }),
+      })),
     }));
 
     const from = vi.fn((table: string) => {

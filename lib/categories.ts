@@ -198,19 +198,23 @@ function mapGameRow(row: {
 export interface CategoryLabelMaps {
   groupLabels: Record<string, string>;
   typeLabels: Record<string, string>;
+  /** 그룹 sort_order → 유형 sort_order 순의 유형 key. 문의함 보기 열이 이 순서로 나열한다. */
+  typeOrder: string[];
 }
 
 export async function listCategoryLabels(supabase: SupabaseClient, gameId: string): Promise<CategoryLabelMaps> {
   const groupLabels: Record<string, string> = {};
   const typeLabels: Record<string, string> = {};
+  const typeOrder: string[] = [];
 
   const { data: groups, error: groupsError } = await supabase
     .from("inquiry_groups")
     .select("id, key, label_ko")
-    .eq("game_id", gameId);
+    .eq("game_id", gameId)
+    .order("sort_order", { ascending: true });
 
   if (groupsError || !groups || groups.length === 0) {
-    return { groupLabels, typeLabels };
+    return { groupLabels, typeLabels, typeOrder };
   }
 
   for (const group of groups) {
@@ -219,19 +223,25 @@ export async function listCategoryLabels(supabase: SupabaseClient, gameId: strin
 
   const { data: types, error: typesError } = await supabase
     .from("inquiry_types")
-    .select("key, label_ko")
+    .select("key, label_ko, group_id")
     .in(
       "group_id",
       groups.map((group) => group.id)
-    );
+    )
+    .order("sort_order", { ascending: true });
 
   if (!typesError && types) {
     for (const type of types) {
       typeLabels[type.key] = type.label_ko;
     }
+    for (const group of groups) {
+      for (const type of types) {
+        if (type.group_id === group.id) typeOrder.push(type.key);
+      }
+    }
   }
 
-  return { groupLabels, typeLabels };
+  return { groupLabels, typeLabels, typeOrder };
 }
 
 export async function listGames(supabase: SupabaseClient): Promise<GameRow[]> {

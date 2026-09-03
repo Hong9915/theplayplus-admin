@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   // 라벨 조회는 부가 정보다. 실패하면 키를 그대로 보여주고 알림은 계속 보낸다.
   const [gameResult, labels] = await Promise.all([
     supabase.from("games").select("name").eq("id", record.game_id).single(),
-    listCategoryLabels(supabase, record.game_id).catch((): CategoryLabelMaps => ({ groupLabels: {}, typeLabels: {} })),
+    listCategoryLabels(supabase, record.game_id).catch((): CategoryLabelMaps => ({ groupLabels: {}, typeLabels: {}, typeOrder: [] })),
   ]);
 
   const message = buildInquirySlackMessage({

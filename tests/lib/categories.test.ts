@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { DEFAULT_CATEGORY_TEMPLATE, createDefaultCategoriesForGame, listGames } from "@/lib/categories";
+import { DEFAULT_CATEGORY_TEMPLATE, createDefaultCategoriesForGame, listCategoryLabels, listGames } from "@/lib/categories";
 
 describe("DEFAULT_CATEGORY_TEMPLATE", () => {
   it("defines three groups in order with the expected type counts", () => {
@@ -115,5 +115,56 @@ describe("listGames", () => {
     const from = vi.fn(() => ({ select }));
 
     await expect(listGames({ from } as never)).rejects.toThrow(/db error/);
+  });
+});
+
+describe("listCategoryLabels", () => {
+  function chain(result: { data: unknown; error: null }) {
+    const builder: Record<string, unknown> = {};
+    for (const name of ["eq", "in", "order"]) {
+      builder[name] = vi.fn(() => builder);
+    }
+    builder.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
+    return builder;
+  }
+
+  it("returns labels plus type keys ordered by group then type sort_order", async () => {
+    const groups = chain({
+      data: [
+        { id: "g-a", key: "game_usage", label_ko: "게임 이용 문의" },
+        { id: "g-b", key: "business", label_ko: "사업 제휴 문의" },
+      ],
+      error: null,
+    });
+    const types = chain({
+      data: [
+        { key: "publishing", label_ko: "퍼블리싱", group_id: "g-b" },
+        { key: "account_login", label_ko: "계정/로그인", group_id: "g-a" },
+        { key: "bug_report", label_ko: "버그", group_id: "g-a" },
+      ],
+      error: null,
+    });
+    const from = vi.fn((table: string) => ({
+      select: vi.fn(() => (table === "inquiry_groups" ? groups : types)),
+    }));
+
+    const labels = await listCategoryLabels({ from } as never, "game-1");
+
+    expect(labels.groupLabels).toEqual({ game_usage: "게임 이용 문의", business: "사업 제휴 문의" });
+    expect(labels.typeLabels.bug_report).toBe("버그");
+    // DB가 sort_order로 정렬해 준 순서를 그룹 순서로 다시 묶는다.
+    expect(labels.typeOrder).toEqual(["account_login", "bug_report", "publishing"]);
+    expect(groups.order).toHaveBeenCalledWith("sort_order", { ascending: true });
+    expect(types.order).toHaveBeenCalledWith("sort_order", { ascending: true });
+  });
+
+  it("returns empty maps and order when there are no groups", async () => {
+    const groups = chain({ data: [], error: null });
+    const from = vi.fn(() => ({ select: vi.fn(() => groups) }));
+    await expect(listCategoryLabels({ from } as never, "game-1")).resolves.toEqual({
+      groupLabels: {},
+      typeLabels: {},
+      typeOrder: [],
+    });
   });
 });

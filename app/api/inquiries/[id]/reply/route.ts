@@ -12,7 +12,7 @@ import { EMAIL_LOGO_CID, EMAIL_LOGO_CONTENT_TYPE, EMAIL_LOGO_FILENAME, getEmailL
 
 const replySchema = z.object({ replyContent: z.string().trim().min(1).max(5000) });
 
-const EMPTY_LABELS: CategoryLabelMaps = { groupLabels: {}, typeLabels: {} };
+const EMPTY_LABELS: CategoryLabelMaps = { groupLabels: {}, typeLabels: {}, typeOrder: [] };
 
 async function fetchGameName(supabase: SupabaseClient, gameId: string): Promise<string | null> {
   const { data, error } = await supabase.from("games").select("name").eq("id", gameId).single();

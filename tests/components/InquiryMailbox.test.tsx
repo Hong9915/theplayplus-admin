@@ -45,6 +45,7 @@ function makePage(rows: InquiryRow[], total = rows.length, page = 1, pageSize = 
 const labels = {
   groupLabels: { game_usage: "게임 이용 문의", business: "사업 제휴 문의" },
   typeLabels: { bug_report: "버그·오류 신고", publishing: "퍼블리싱/유통 제휴" },
+  typeOrder: [],
 };
 
 function renderMailbox(page: InquiryPage, query: InquiryListQuery = DEFAULT_QUERY) {
@@ -83,7 +84,7 @@ describe("InquiryMailbox", () => {
       <InquiryMailbox
         page={makePage([makeInquiry({ groupKey: "unknown_group", typeKey: "unknown_type" })])}
         query={DEFAULT_QUERY}
-        labels={{ groupLabels: {}, typeLabels: {} }}
+        labels={{ groupLabels: {}, typeLabels: {}, typeOrder: [] }}
       />
     );
     expect(screen.getByText("unknown_group")).toBeInTheDocument();

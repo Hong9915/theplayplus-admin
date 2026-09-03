@@ -64,6 +64,7 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     vi.mocked(categoriesModule.listCategoryLabels).mockReset().mockResolvedValue({
       groupLabels: { game_usage: "게임 이용 문의" },
       typeLabels: { payment_refund: "결제/환불" },
+      typeOrder: ["payment_refund"],
     });
     vi.mocked(categoriesModule.listGames).mockReset().mockResolvedValue([
       { id: "game-1", name: "여신키우기", status: "active", logoPath: null, ownerName: null, createdAt: "" },

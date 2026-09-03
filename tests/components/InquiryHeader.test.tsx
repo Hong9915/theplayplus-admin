@@ -7,6 +7,7 @@ import type { InquiryRow } from "@/lib/inquiries";
 const labels = {
   groupLabels: { game_usage: "게임 이용 문의" },
   typeLabels: { bug_report: "버그·오류 신고" },
+  typeOrder: [],
 };
 
 function makeInquiry(overrides: Partial<InquiryRow> = {}): InquiryRow {
@@ -48,7 +49,7 @@ describe("InquiryHeader", () => {
   });
 
   it("falls back to raw keys when a label is missing", () => {
-    render(<InquiryHeader inquiry={makeInquiry()} labels={{ groupLabels: {}, typeLabels: {} }} />);
+    render(<InquiryHeader inquiry={makeInquiry()} labels={{ groupLabels: {}, typeLabels: {}, typeOrder: [] }} />);
     expect(screen.getByText("game_usage")).toBeInTheDocument();
     expect(screen.getByText("bug_report")).toBeInTheDocument();
   });

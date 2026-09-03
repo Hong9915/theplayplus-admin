@@ -58,6 +58,7 @@ describe("POST /api/notify/inquiry", () => {
     vi.mocked(categoriesModule.listCategoryLabels).mockResolvedValue({
       groupLabels: { payment: "결제" },
       typeLabels: { payment_error: "결제 오류" },
+      typeOrder: ["payment_error"],
     });
     vi.mocked(slackModule.sendSlackMessage).mockResolvedValue();
   });
@@ -104,7 +105,7 @@ describe("POST /api/notify/inquiry", () => {
 
   it("falls back to raw keys and a placeholder game name when lookups fail", async () => {
     mockSupabase(null);
-    vi.mocked(categoriesModule.listCategoryLabels).mockResolvedValue({ groupLabels: {}, typeLabels: {} });
+    vi.mocked(categoriesModule.listCategoryLabels).mockResolvedValue({ groupLabels: {}, typeLabels: {}, typeOrder: [] });
 
     await POST(makeRequest(insertPayload));
 
