@@ -43,17 +43,26 @@ describe("InquiryDetail", () => {
     expect(screen.queryByText("첨부파일")).not.toBeInTheDocument();
   });
 
-  it("renders a link per attachment", () => {
+  it("renders each attachment as an inline image", () => {
     render(
       <InquiryDetail
         inquiry={inquiry}
         attachments={[{ id: "att-1", fileName: "screenshot.png", signedUrl: "https://signed.example/x" }]}
       />
     );
-    expect(screen.getByRole("link", { name: "screenshot.png" })).toHaveAttribute(
-      "href",
-      "https://signed.example/x"
+    expect(screen.getByRole("img", { name: "screenshot.png" })).toHaveAttribute("src", "https://signed.example/x");
+  });
+
+  it("wraps each inline image in a link that opens the original in a new tab", () => {
+    render(
+      <InquiryDetail
+        inquiry={inquiry}
+        attachments={[{ id: "att-1", fileName: "screenshot.png", signedUrl: "https://signed.example/x" }]}
+      />
     );
+    const link = screen.getByRole("link", { name: "screenshot.png" });
+    expect(link).toHaveAttribute("href", "https://signed.example/x");
+    expect(link).toHaveAttribute("target", "_blank");
   });
 
   it("shows a fallback when an attachment URL could not be signed", () => {

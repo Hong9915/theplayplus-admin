@@ -19,13 +19,28 @@ export default function InquiryDetail({
       {attachments.length > 0 && (
         <section className={CARD}>
           <h2 className="font-semibold mb-3">첨부파일</h2>
-          <ul className="flex flex-col gap-1 text-sm">
+          <ul className="flex flex-wrap gap-3 text-sm">
             {attachments.map((attachment) => (
-              <li key={attachment.id}>
+              <li key={attachment.id} className="flex flex-col gap-1 max-w-xs">
                 {attachment.signedUrl ? (
-                  <a href={attachment.signedUrl} target="_blank" rel="noreferrer" className="text-accent underline">
-                    {attachment.fileName}
-                  </a>
+                  <>
+                    <a
+                      href={attachment.signedUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="원본 크기로 열기"
+                      className="block border border-line rounded-lg overflow-hidden bg-black/5"
+                    >
+                      {/* 첨부 버킷은 이미지 MIME만 허용하므로 항상 <img>로 렌더링한다. */}
+                      <img
+                        src={attachment.signedUrl}
+                        alt={attachment.fileName}
+                        loading="lazy"
+                        className="max-h-64 w-auto object-contain"
+                      />
+                    </a>
+                    <span className="text-muted text-xs truncate">{attachment.fileName}</span>
+                  </>
                 ) : (
                   <span className="text-muted">{attachment.fileName} (링크 생성 실패)</span>
                 )}
