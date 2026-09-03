@@ -5,13 +5,13 @@ THE PLAY+ 고객지원 관리자 페이지. `theplayplus-contact`(문의 접수 
 ## 핵심 기능
 
 1. **게임 관리** — 게임 추가(이름/상태 필수, 로고 선택, 게임별 문의 카테고리 커스터마이징), 게임 목록에서 선택
-2. **게임별 문의 목록** — 필터(종류/유형/상태)·정렬(최신/오래된/우선순위)·검색(제목/접수번호/계정/본문)·페이지(50건)를 모두 URL 쿼리로 관리하고 DB에서 처리. 체크박스로 여러 건 상태 일괄 변경. 게임 레일에 접수(new) 건수 배지
-3. **문의 답변 발송** — 문의 상세에서 답변을 작성해 Gmail API로 `info@theplayplus.com` 계정으로 바로 발송. 메일은 THE PLAY+ 브랜드 HTML 템플릿(`lib/email-template.ts`, 로고는 `lib/email-logo.ts`에 base64 인라인 첨부)과 텍스트 본문을 함께 담은 multipart로 나간다. 발송 성공 시 상태가 자동으로 `처리중`으로 바뀌고 답변이 `inquiry_messages`에 쌓임 (`완료`는 헤더의 "완료로 표시" 버튼이나 상태 셀렉트로 직접 변경). 후속 답변은 같은 Gmail 스레드로 묶이며, "회신 확인" 버튼으로 사용자 회신을 스레드에서 가져와 대화 카드에 표시 (`gmail.readonly` 스코프 필요). Cmd/Ctrl+Enter 발송, 초안 자동 저장
-4. **계정 이력 패널** — 문의 상세에서 같은 게임 내 동일 `game_account`의 과거 문의를 요약(건수/미처리/같은 유형)과 함께 보여주고 각 항목은 상세로 링크 (이벤트 참여 이력은 현재 데이터 소스가 없어 확장 지점만 마련)
-5. **상세 이동** — 목록에서 들고 온 필터·정렬 안에서 이전/다음 문의로 이동, "← 목록"은 필터를 유지
+2. **인박스 화면** — `/games/{gameId}/inquiries[/{inquiryId}]` 한 페이지가 4단(게임 레일 · 문의함 보기 · 문의 목록 · 대화+답변 · 상세 패널)을 서버 렌더한다. 필터(상태/유형/우선순위/3일 이상 미처리)·정렬·검색·페이지는 URL 쿼리로 관리하고 DB에서 처리하며, 문의를 골라도 같은 쿼리가 URL에 남는다. 보기 건수는 `inquiry_facet_counts` RPC(마이그레이션 0008) 한 번으로 가져오고 실패하면 건수 없이 그린다. 체크박스로 여러 건 상태 일괄 변경. 게임 레일에 접수(new) 건수 배지. 예전 `/inquiries/{id}` 링크는 새 URL로 리다이렉트된다.
+3. **문의 답변 발송** — 대화 열에서 답변을 작성해 Gmail API로 `info@theplayplus.com` 계정으로 바로 발송. 메일은 THE PLAY+ 브랜드 HTML 템플릿(`lib/email-template.ts`, 로고는 `lib/email-logo.ts`에 base64 인라인 첨부)과 텍스트 본문을 함께 담은 multipart로 나간다. 발송 성공 시 상태가 자동으로 `처리중`으로 바뀌고 답변이 `inquiry_messages`에 쌓임 (`완료`는 헤더의 "완료로 표시" 버튼이나 상태 셀렉트로 직접 변경). 후속 답변은 같은 Gmail 스레드로 묶이며, "회신 확인" 버튼으로 사용자 회신을 스레드에서 가져와 타임라인에 표시 (`gmail.readonly` 스코프 필요). Cmd/Ctrl+Enter 발송, 초안 자동 저장
+4. **계정 이력 패널** — 상세 패널의 계정 이력 탭에서 같은 게임 내 동일 `game_account`의 과거 문의를 요약(건수/미처리/같은 유형)과 함께 보여주고 각 항목은 상세로 링크 (이벤트 참여 이력은 현재 데이터 소스가 없어 확장 지점만 마련)
+5. **대화·이동** — 대화 열은 문의 본문(첨부 포함)·보낸 답변·사용자 회신·내부 메모를 시간순 한 줄기로 보여주고(`lib/timeline.ts`), 작성란은 답변/내부 메모 탭. 헤더의 이전/다음은 목록과 같은 조건·정렬 안에서 움직인다.
 6. **새 문의 Slack 알림** — Supabase Database Webhook(`inquiries` INSERT)이 `/api/notify/inquiry`를 호출하면 게임명·유형·제목·상세 링크를 Slack Incoming Webhook으로 보낸다(`lib/slack.ts`). 호출자는 `x-webhook-secret` 헤더가 `INQUIRY_WEBHOOK_SECRET`과 일치해야 하고, `SLACK_WEBHOOK_URL`이 비어 있으면 조용히 건너뛴다. 지금은 모든 신규 문의를 보내며, 특정 유형만 보내려면 이 라우트에서 거르면 된다.
 
-상세 설계는 `docs/superpowers/specs/2026-09-01-admin-panel-design.md` 참고.
+상세 설계는 `docs/superpowers/specs/2026-09-01-admin-panel-design.md`, 인박스 화면은 `docs/superpowers/specs/2026-09-03-inbox-layout-design.md` 참고.
 
 ## 기술 스택
 

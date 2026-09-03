@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_QUERY,
-  inquiryDetailHref,
   inquiryHref,
   inboxHref,
   inquiryListHref,
@@ -66,12 +65,6 @@ describe("hrefs", () => {
     expect(inquiryListHref("g1", { ...DEFAULT_QUERY, status: "new" })).toBe("/games/g1/inquiries?status=new");
   });
 
-  it("carries the list state into the detail href", () => {
-    expect(inquiryDetailHref("i1", DEFAULT_QUERY)).toBe("/inquiries/i1");
-    expect(inquiryDetailHref("i1", { ...DEFAULT_QUERY, status: "new", page: 2 })).toBe(
-      "/inquiries/i1?list=status%3Dnew%26page%3D2"
-    );
-  });
 });
 
 describe("priority and stale", () => {

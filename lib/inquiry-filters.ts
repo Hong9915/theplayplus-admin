@@ -96,12 +96,6 @@ export function inquiryListHref(gameId: string, query: InquiryListQuery): string
   return search ? `/games/${gameId}/inquiries?${search}` : `/games/${gameId}/inquiries`;
 }
 
-/** 상세로 들어갈 때 목록 상태를 같이 들고 간다. 이전/다음 이동과 "← 목록"이 이걸 쓴다. */
-export function inquiryDetailHref(inquiryId: string, query: InquiryListQuery): string {
-  const search = toInquiryListSearch(query);
-  return search ? `/inquiries/${inquiryId}?list=${encodeURIComponent(search)}` : `/inquiries/${inquiryId}`;
-}
-
 /** 인박스에서 문의 하나를 연 URL. 목록 상태는 같은 URL의 쿼리로 남는다. */
 export function inquiryHref(gameId: string, inquiryId: string, query: InquiryListQuery): string {
   const search = toInquiryListSearch(query);
