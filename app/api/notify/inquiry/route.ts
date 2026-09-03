@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     typeLabel: labels.typeLabels[record.type_key] ?? record.type_key,
     title: record.title,
     gameAccount: record.game_account ?? null,
-    detailUrl: `${new URL(request.url).origin}/inquiries/${record.id}`,
+    detailUrl: `${new URL(request.url).origin}/games/${record.game_id}/inquiries/${record.id}`,
   });
 
   try {

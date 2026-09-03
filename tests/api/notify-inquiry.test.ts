@@ -99,7 +99,7 @@ describe("POST /api/notify/inquiry", () => {
     const [url, message] = vi.mocked(slackModule.sendSlackMessage).mock.calls[0];
     expect(url).toBe("https://hooks.slack.com/services/x");
     expect(message.text).toBe("[여신의 검] 새 문의 · 결제 > 결제 오류 · 결제 오류입니다");
-    expect(JSON.stringify(message.blocks)).toContain("https://admin.theplayplus.com/inquiries/inq-1");
+    expect(JSON.stringify(message.blocks)).toContain("https://admin.theplayplus.com/games/game-1/inquiries/inq-1");
     expect(JSON.stringify(message.blocks)).toContain("20260903-0001");
   });
 
