@@ -1,11 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
-import { listTemplates, createTemplate, deleteTemplate } from "@/lib/templates";
+import {
+  listTemplates,
+  createTemplate,
+  deleteTemplate,
+  findAutoReplyTemplate,
+  setTemplateAutoSend,
+} from "@/lib/templates";
 
 const sampleRow = {
   id: "tpl-1",
   type_key: "payment_refund",
   title: "환불 안내",
   content: "환불 절차를 안내드립니다.",
+  auto_send: false,
 };
 
 function mockList(data: unknown, error: { message: string } | null = null) {
@@ -28,7 +35,7 @@ describe("listTemplates", () => {
     expect(orderSort).toHaveBeenCalledWith("sort_order", { ascending: true });
     expect(orderCreated).toHaveBeenCalledWith("created_at", { ascending: true });
     expect(result).toEqual([
-      { id: "tpl-1", typeKey: "payment_refund", title: "환불 안내", content: "환불 절차를 안내드립니다." },
+      { id: "tpl-1", typeKey: "payment_refund", title: "환불 안내", content: "환불 절차를 안내드립니다.", autoSend: false },
     ]);
   });
 
@@ -91,6 +98,99 @@ describe("createTemplate", () => {
       content: "y",
     });
     expect(ok).toBe(false);
+  });
+});
+
+/** 필터 메서드가 자기 자신을 돌려주고 await 하면 결과가 나오는 빌더. */
+function chain(result: { data?: unknown; error?: { message: string } | null }) {
+  const builder: Record<string, unknown> = {};
+  for (const name of ["select", "update", "eq", "is"]) {
+    builder[name] = vi.fn(() => builder);
+  }
+  builder.single = vi.fn(() => Promise.resolve(result));
+  builder.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
+  return builder as Record<string, ReturnType<typeof vi.fn>> & { then: unknown };
+}
+
+describe("findAutoReplyTemplate", () => {
+  const typed = { ...sampleRow, id: "tpl-typed", type_key: "refund", auto_send: true };
+  const shared = { ...sampleRow, id: "tpl-shared", type_key: null, auto_send: true };
+
+  it("prefers the template for the inquiry's type over the shared one", async () => {
+    const builder = chain({ data: [shared, typed], error: null });
+    const from = vi.fn(() => builder);
+
+    const result = await findAutoReplyTemplate({ from } as never, "game-1", "refund");
+
+    expect(from).toHaveBeenCalledWith("reply_templates");
+    expect(builder.eq).toHaveBeenCalledWith("game_id", "game-1");
+    expect(builder.eq).toHaveBeenCalledWith("auto_send", true);
+    expect(result?.id).toBe("tpl-typed");
+  });
+
+  it("falls back to the shared template when the type has none", async () => {
+    const builder = chain({ data: [shared, typed], error: null });
+    const result = await findAutoReplyTemplate({ from: () => builder } as never, "game-1", "bug_report");
+    expect(result?.id).toBe("tpl-shared");
+  });
+
+  it("returns null when nothing is enabled or the query fails", async () => {
+    await expect(findAutoReplyTemplate({ from: () => chain({ data: [], error: null }) } as never, "g", "t")).resolves.toBeNull();
+    await expect(
+      findAutoReplyTemplate({ from: () => chain({ data: null, error: { message: "db" } }) } as never, "g", "t")
+    ).resolves.toBeNull();
+  });
+});
+
+describe("setTemplateAutoSend", () => {
+  function mockTemplate(template: { game_id: string; type_key: string | null } | null) {
+    const lookup = chain({ data: template, error: template ? null : { message: "not found" } });
+    const clear = chain({ error: null });
+    const set = chain({ error: null });
+    // 호출 순서: 템플릿 조회 → (켤 때) 같은 유형 끄기 → 이 템플릿 갱신
+    let call = 0;
+    const from = vi.fn(() => {
+      call += 1;
+      if (call === 1) return lookup;
+      if (call === 2) return clear;
+      return set;
+    });
+    return { from, lookup, clear, set };
+  }
+
+  it("turns off the other auto template of the same type before enabling this one", async () => {
+    const { from, clear, set } = mockTemplate({ game_id: "game-1", type_key: "refund" });
+
+    const ok = await setTemplateAutoSend({ from } as never, "tpl-2", true);
+
+    expect(ok).toBe(true);
+    expect(clear.update).toHaveBeenCalledWith({ auto_send: false });
+    expect(clear.eq).toHaveBeenCalledWith("game_id", "game-1");
+    expect(clear.eq).toHaveBeenCalledWith("type_key", "refund");
+    expect(set.update).toHaveBeenCalledWith({ auto_send: true });
+    expect(set.eq).toHaveBeenCalledWith("id", "tpl-2");
+  });
+
+  it("matches a shared template's siblings with an is-null filter", async () => {
+    const { from, clear } = mockTemplate({ game_id: "game-1", type_key: null });
+    await setTemplateAutoSend({ from } as never, "tpl-2", true);
+    expect(clear.is).toHaveBeenCalledWith("type_key", null);
+  });
+
+  it("only updates the row when turning auto send off", async () => {
+    const { from, clear, set } = mockTemplate({ game_id: "game-1", type_key: "refund" });
+
+    const ok = await setTemplateAutoSend({ from } as never, "tpl-2", false);
+
+    expect(ok).toBe(true);
+    expect(clear.update).toHaveBeenCalledWith({ auto_send: false });
+    expect(clear.eq).toHaveBeenCalledWith("id", "tpl-2");
+    expect(set.update).not.toHaveBeenCalled();
+  });
+
+  it("reports failure when the template does not exist", async () => {
+    const { from } = mockTemplate(null);
+    await expect(setTemplateAutoSend({ from } as never, "missing", true)).resolves.toBe(false);
   });
 });
 

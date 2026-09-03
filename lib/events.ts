@@ -1,7 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdminSession } from "@/lib/require-admin-session";
 
-export type EventKind = "status_changed" | "priority_changed" | "reply_sent" | "note_added";
+export type EventKind = "status_changed" | "priority_changed" | "reply_sent" | "auto_reply_sent" | "note_added";
+
+/**
+ * 자동 답변의 행위자. inquiry_events.actor_email이 not null이라 시스템 행위도
+ * 이메일 형태가 필요하다. 실제 관리자 주소와 겹치지 않는 고정값을 쓴다.
+ */
+export const AUTO_REPLY_ACTOR: AdminSession = { id: "auto-reply", email: "auto-reply@theplayplus.com" };
 
 export interface EventRow {
   id: string;
@@ -49,6 +55,8 @@ export function describeEvent(event: Pick<EventRow, "kind" | "fromValue" | "toVa
       return `우선순위 ${label(PRIORITY_LABELS, event.fromValue)} → ${label(PRIORITY_LABELS, event.toValue)}`;
     case "reply_sent":
       return "답변 발송";
+    case "auto_reply_sent":
+      return "자동 답변 발송";
     case "note_added":
       return "메모 추가";
   }

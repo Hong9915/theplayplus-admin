@@ -5,9 +5,9 @@ import userEvent from "@testing-library/user-event";
 import TemplatePicker from "@/components/inquiries/TemplatePicker";
 
 const templates = [
-  { id: "tpl-1", typeKey: "payment_refund", title: "환불 안내", content: "환불 절차입니다." },
-  { id: "tpl-2", typeKey: null, title: "공용 인사", content: "문의 주셔서 감사합니다." },
-  { id: "tpl-3", typeKey: "bug_report", title: "버그 접수", content: "버그 확인 중입니다." },
+  { id: "tpl-1", typeKey: "payment_refund", title: "환불 안내", content: "환불 절차입니다.", autoSend: false },
+  { id: "tpl-2", typeKey: null, title: "공용 인사", content: "문의 주셔서 감사합니다.", autoSend: false },
+  { id: "tpl-3", typeKey: "bug_report", title: "버그 접수", content: "버그 확인 중입니다.", autoSend: false },
 ];
 
 describe("TemplatePicker", () => {
@@ -31,7 +31,7 @@ describe("TemplatePicker", () => {
   it("renders nothing when no template applies to this type", () => {
     const { container } = render(
       <TemplatePicker
-        templates={[{ id: "tpl-3", typeKey: "bug_report", title: "버그 접수", content: "본문" }]}
+        templates={[{ id: "tpl-3", typeKey: "bug_report", title: "버그 접수", content: "본문", autoSend: false }]}
         typeKey="payment_refund"
         onPick={vi.fn()}
       />

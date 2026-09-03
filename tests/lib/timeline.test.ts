@@ -30,8 +30,8 @@ const inquiry: InquiryRow = {
 };
 
 const messages: MessageRow[] = [
-  { id: "m-in", direction: "inbound", authorEmail: "luna@example.com", body: "감사합니다", gmailMessageId: "g2", rfcMessageId: null, sentAt: "2026-09-03T04:48:00.000Z" },
-  { id: "m-out", direction: "outbound", authorEmail: "info@theplayplus.com", body: "환불 처리했습니다", gmailMessageId: "g1", rfcMessageId: "<a>", sentAt: "2026-09-03T02:05:00.000Z" },
+  { id: "m-in", direction: "inbound", authorEmail: "luna@example.com", body: "감사합니다", gmailMessageId: "g2", rfcMessageId: null, sentAt: "2026-09-03T04:48:00.000Z", autoSent: false },
+  { id: "m-out", direction: "outbound", authorEmail: "info@theplayplus.com", body: "환불 처리했습니다", gmailMessageId: "g1", rfcMessageId: "<a>", sentAt: "2026-09-03T02:05:00.000Z", autoSent: false },
 ];
 
 const notes: NoteRow[] = [
@@ -55,6 +55,13 @@ describe("buildTimeline", () => {
     expect(entries[1]).toMatchObject({ kind: "note", id: "n-1", author: "hong@theplayplus.com", body: "중복 승인 확인" });
     expect(entries[2]).toMatchObject({ kind: "outbound", id: "m-out", author: "info@theplayplus.com" });
     expect(entries[3]).toMatchObject({ kind: "inbound", id: "m-in", author: "luna@example.com" });
+  });
+
+  it("flags outbound entries that were sent automatically", () => {
+    const auto: MessageRow = { ...messages[1], id: "m-auto", authorEmail: null, autoSent: true };
+    const entries = buildTimeline(inquiry, [], [auto, messages[1]], []);
+    expect(entries[1]).toMatchObject({ kind: "outbound", id: "m-auto", auto: true, author: null });
+    expect(entries[2]).toMatchObject({ kind: "outbound", id: "m-out", auto: false });
   });
 
   it("keeps the inquiry first even when a message predates createdAt", () => {

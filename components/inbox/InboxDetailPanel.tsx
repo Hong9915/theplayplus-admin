@@ -16,6 +16,7 @@ const DOT: Record<EventRow["kind"], string> = {
   status_changed: "bg-ink",
   priority_changed: "bg-amber-600",
   reply_sent: "bg-ink",
+  auto_reply_sent: "bg-ink",
   note_added: "bg-amber-600",
 };
 
