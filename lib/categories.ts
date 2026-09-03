@@ -18,7 +18,11 @@ export interface DefaultCategoryType {
   requiresCompanyName: boolean;
   allowAttachments: boolean;
   sortOrder: number;
+  /** 접수 시 트리거(마이그레이션 0009)가 이 값을 문의 우선순위로 넣는다. */
+  defaultPriority: InquiryTypePriority;
 }
+
+export type InquiryTypePriority = "urgent" | "high" | "normal" | "low";
 
 export interface DefaultCategoryGroup {
   key: string;
@@ -45,6 +49,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
         requiresGameAccount: true,
         requiresCompanyName: false,
         allowAttachments: false,
+        defaultPriority: "normal",
         sortOrder: 0,
       },
       {
@@ -55,6 +60,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
         requiresGameAccount: true,
         requiresCompanyName: false,
         allowAttachments: false,
+        defaultPriority: "urgent",
         sortOrder: 1,
       },
       {
@@ -65,6 +71,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
         requiresGameAccount: true,
         requiresCompanyName: false,
         allowAttachments: true,
+        defaultPriority: "normal",
         sortOrder: 2,
       },
       {
@@ -75,6 +82,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
         requiresGameAccount: true,
         requiresCompanyName: false,
         allowAttachments: false,
+        defaultPriority: "normal",
         sortOrder: 3,
       },
     ],
@@ -94,6 +102,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
         requiresGameAccount: false,
         requiresCompanyName: true,
         allowAttachments: false,
+        defaultPriority: "normal",
         sortOrder: 0,
       },
       {
@@ -104,6 +113,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
         requiresGameAccount: false,
         requiresCompanyName: true,
         allowAttachments: false,
+        defaultPriority: "normal",
         sortOrder: 1,
       },
     ],
@@ -123,6 +133,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
         requiresGameAccount: false,
         requiresCompanyName: false,
         allowAttachments: false,
+        defaultPriority: "normal",
         sortOrder: 0,
       },
       {
@@ -133,6 +144,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
         requiresGameAccount: false,
         requiresCompanyName: false,
         allowAttachments: false,
+        defaultPriority: "normal",
         sortOrder: 1,
       },
     ],
@@ -168,6 +180,7 @@ export async function createDefaultCategoriesForGame(supabase: SupabaseClient, g
       requires_company_name: type.requiresCompanyName,
       allow_attachments: type.allowAttachments,
       sort_order: type.sortOrder,
+      default_priority: type.defaultPriority,
     }));
 
     const { error: typesError } = await supabase.from("inquiry_types").insert(typeRows);

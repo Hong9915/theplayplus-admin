@@ -76,6 +76,39 @@ describe("createDefaultCategoriesForGame", () => {
   });
 });
 
+describe("default priority per type", () => {
+  it("marks payment/refund as urgent and every other template type as normal", () => {
+    const priorities = Object.fromEntries(
+      DEFAULT_CATEGORY_TEMPLATE.flatMap((g) => g.types.map((t) => [t.key, t.defaultPriority]))
+    );
+    expect(priorities.payment_refund).toBe("urgent");
+    for (const [key, priority] of Object.entries(priorities)) {
+      if (key !== "payment_refund") expect(priority).toBe("normal");
+    }
+  });
+
+  it("writes default_priority on inserted inquiry_types rows", async () => {
+    const groupsSingle = vi.fn(() => Promise.resolve({ data: { id: "group-1" }, error: null }));
+    const groupsInsert = vi.fn(() => ({ select: () => ({ single: groupsSingle }) }));
+    const typesInsert = vi.fn((_rows: unknown[]) => Promise.resolve({ error: null }));
+    const from = vi.fn((table: string) => {
+      if (table === "inquiry_groups") return { insert: groupsInsert };
+      if (table === "inquiry_types") return { insert: typesInsert };
+      throw new Error(`unexpected table: ${table}`);
+    });
+
+    await createDefaultCategoriesForGame({ from } as never, "game-abc");
+
+    const firstGroupTypes = typesInsert.mock.calls[0][0] as Array<Record<string, unknown>>;
+    expect(firstGroupTypes.find((row) => row.key === "payment_refund")).toEqual(
+      expect.objectContaining({ default_priority: "urgent" })
+    );
+    expect(firstGroupTypes.find((row) => row.key === "bug_report")).toEqual(
+      expect.objectContaining({ default_priority: "normal" })
+    );
+  });
+});
+
 describe("listGames", () => {
   it("maps snake_case rows to GameRow", async () => {
     const order = vi.fn(() =>
