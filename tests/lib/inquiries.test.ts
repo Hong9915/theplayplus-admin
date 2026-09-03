@@ -325,6 +325,25 @@ describe("mapInquiryRow via getInquiryById", () => {
     expect(result?.draftReply).toBe("작성 중");
   });
 
+  it("maps the per-type detail columns the contact form fills in", async () => {
+    const result = await getInquiryById(
+      mockSingle({ ...sampleRow, locale: "zh", payment_no: "imp_123", occurred_at: "2026-09-03T14:05", device_info: "iPhone 15 / iOS 17.5" }) as never,
+      "inq-1"
+    );
+    expect(result?.locale).toBe("zh");
+    expect(result?.paymentNo).toBe("imp_123");
+    expect(result?.occurredAt).toBe("2026-09-03T14:05");
+    expect(result?.deviceInfo).toBe("iPhone 15 / iOS 17.5");
+  });
+
+  it("leaves the detail columns null when the row predates them", async () => {
+    const result = await getInquiryById(mockSingle(sampleRow) as never, "inq-1");
+    expect(result?.locale).toBeNull();
+    expect(result?.paymentNo).toBeNull();
+    expect(result?.occurredAt).toBeNull();
+    expect(result?.deviceInfo).toBeNull();
+  });
+
   it("falls back when inquiry_no, priority, and meta are missing", async () => {
     const bare = { ...sampleRow, inquiry_no: null, priority: null, meta: null };
     const result = await getInquiryById(mockSingle(bare) as never, "inq-1");

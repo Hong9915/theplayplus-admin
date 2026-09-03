@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatElapsed, formatReceivedAt, metaEntries, emailLocalPart, inquiryMetaRows } from "@/lib/format";
+import { formatElapsed, formatReceivedAt, formatOccurredAt, metaEntries, emailLocalPart, inquiryMetaRows } from "@/lib/format";
 import type { InquiryRow } from "@/lib/inquiries";
 
 const NOW = new Date("2026-07-23T12:00:00.000Z");
@@ -114,6 +114,10 @@ describe("inquiryMetaRows", () => {
     replyContent: null,
     repliedAt: null,
     gmailThreadId: null,
+    locale: null,
+    paymentNo: null,
+    occurredAt: null,
+    deviceInfo: null,
     createdAt: "2026-07-23T13:55:00.000Z",
   };
 
@@ -126,5 +130,41 @@ describe("inquiryMetaRows", () => {
   it("skips empty fixed rows", () => {
     const rows = inquiryMetaRows({ ...base, gameAccount: "  ", meta: {} });
     expect(rows.map((r) => r.label)).toEqual(["회신 이메일", "접수 시각"]);
+  });
+
+  it("shows the per-type detail fields the contact form collects", () => {
+    const rows = inquiryMetaRows({
+      ...base,
+      meta: {},
+      locale: "zh",
+      paymentNo: "imp_20260903_001",
+      occurredAt: "2026-09-03T14:05",
+      deviceInfo: "Galaxy S24 / Android 14",
+    });
+    expect(rows.map((r) => [r.label, r.value])).toEqual([
+      ["게임 계정", "player1"],
+      ["회신 이메일", "user@example.com"],
+      ["언어", "중국어"],
+      ["접수 시각", formatReceivedAt("2026-07-23T13:55:00.000Z")],
+      ["발생 일시", "2026. 09. 03. 오후 2:05"],
+      ["결제번호", "imp_20260903_001"],
+      ["기기/사양", "Galaxy S24 / Android 14"],
+    ]);
+  });
+
+  it("falls back to the raw locale code for an unknown language", () => {
+    const rows = inquiryMetaRows({ ...base, meta: {}, locale: "ja" });
+    expect(rows.find((r) => r.label === "언어")?.value).toBe("ja");
+  });
+});
+
+describe("formatOccurredAt", () => {
+  it("formats the datetime-local string the form stores", () => {
+    expect(formatOccurredAt("2026-09-03T14:05")).toBe("2026. 09. 03. 오후 2:05");
+    expect(formatOccurredAt("2026-09-03T00:30")).toBe("2026. 09. 03. 오전 12:30");
+  });
+
+  it("returns the raw value when it is not in that shape", () => {
+    expect(formatOccurredAt("어제 저녁쯤")).toBe("어제 저녁쯤");
   });
 });

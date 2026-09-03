@@ -22,6 +22,13 @@ export interface InquiryRow {
   replyContent: string | null;
   repliedAt: string | null;
   gmailThreadId: string | null;
+  /** 접수 폼 언어 (ko / zh / en). 예전 행은 null. */
+  locale: string | null;
+  /** 유형별 추가 항목. 접수 폼이 유형 플래그(collects_*)에 따라 채운다. */
+  paymentNo: string | null;
+  /** datetime-local 문자열 (YYYY-MM-DDTHH:mm). */
+  occurredAt: string | null;
+  deviceInfo: string | null;
   createdAt: string;
 }
 
@@ -49,6 +56,10 @@ function mapInquiryRow(row: {
   reply_content: string | null;
   replied_at: string | null;
   gmail_thread_id?: string | null;
+  locale?: string | null;
+  payment_no?: string | null;
+  occurred_at?: string | null;
+  device_info?: string | null;
   created_at: string;
 }): InquiryRow {
   return {
@@ -69,6 +80,10 @@ function mapInquiryRow(row: {
     replyContent: row.reply_content,
     repliedAt: row.replied_at,
     gmailThreadId: row.gmail_thread_id ?? null,
+    locale: row.locale ?? null,
+    paymentNo: row.payment_no ?? null,
+    occurredAt: row.occurred_at ?? null,
+    deviceInfo: row.device_info ?? null,
     createdAt: row.created_at,
   };
 }

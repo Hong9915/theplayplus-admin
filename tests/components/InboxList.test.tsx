@@ -30,6 +30,10 @@ function makeInquiry(overrides: Partial<InquiryRow>): InquiryRow {
     replyContent: null,
     repliedAt: null,
     gmailThreadId: null,
+    locale: null,
+    paymentNo: null,
+    occurredAt: null,
+    deviceInfo: null,
     createdAt: new Date().toISOString(),
     ...overrides,
   };

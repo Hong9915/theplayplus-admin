@@ -22,6 +22,10 @@ const inquiry: InquiryRow = {
   replyContent: null,
   repliedAt: null,
   gmailThreadId: "t1",
+  locale: null,
+  paymentNo: null,
+  occurredAt: null,
+  deviceInfo: null,
   createdAt: "2026-09-03T01:12:00.000Z",
 };
 
