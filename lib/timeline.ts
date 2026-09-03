@@ -1,11 +1,22 @@
 import type { AttachmentWithUrl, InquiryRow, InquiryStatus } from "@/lib/inquiries";
 import type { MessageRow } from "@/lib/messages";
 import type { NoteRow } from "@/lib/notes";
+import { inquiryDetailRows, type MetaEntry } from "@/lib/format";
 
 /** 타임라인을 만드는 데 필요한 문의 정보. 현재 문의(InquiryRow)와 계정 이력 항목 모두 여기에 맞춘다. */
 export type ThreadInquiry = Pick<
   InquiryRow,
-  "id" | "inquiryNo" | "title" | "content" | "typeKey" | "status" | "gameAccount" | "createdAt"
+  | "id"
+  | "inquiryNo"
+  | "title"
+  | "content"
+  | "typeKey"
+  | "status"
+  | "gameAccount"
+  | "createdAt"
+  | "occurredAt"
+  | "paymentNo"
+  | "deviceInfo"
 >;
 
 /** 문의 하나와 거기에 딸린 첨부·메시지·메모. */
@@ -27,7 +38,16 @@ export type TimelineEntry =
       status: InquiryStatus;
       current: boolean;
     }
-  | { kind: "inquiry"; id: string; at: string; author: string | null; body: string; attachments: AttachmentWithUrl[] }
+  | {
+      kind: "inquiry";
+      id: string;
+      at: string;
+      author: string | null;
+      body: string;
+      /** 유형별 추가 항목(발생 일시·결제번호·기기/사양). 말풍선 안에 본문 아래로 그린다. */
+      details: MetaEntry[];
+      attachments: AttachmentWithUrl[];
+    }
   | { kind: "outbound"; id: string; at: string; author: string | null; body: string }
   | { kind: "inbound"; id: string; at: string; author: string | null; body: string }
   | { kind: "note"; id: string; at: string; author: string; body: string };
@@ -49,6 +69,7 @@ export function buildTimeline(
     at: inquiry.createdAt,
     author: inquiry.gameAccount,
     body: inquiry.content,
+    details: inquiryDetailRows(inquiry),
     attachments,
   };
 

@@ -13,6 +13,10 @@ const entries: TimelineEntry[] = [
     at: "2026-09-03T01:12:00.000Z",
     author: "luna_park",
     body: "두 번 결제됐어요",
+    details: [
+      { key: "발생 일시", label: "발생 일시", value: "2026. 09. 02. 오후 9:00" },
+      { key: "결제번호", label: "결제번호", value: "imp_20260902_77" },
+    ],
     attachments: [
       { id: "a1", fileName: "명세서.png", signedUrl: "https://signed.example/a1" },
       { id: "a2", fileName: "깨짐.png", signedUrl: null },
@@ -49,6 +53,22 @@ describe("InboxTimeline", () => {
     const img = screen.getByRole("img", { name: "명세서.png" });
     expect(img).toHaveAttribute("src", "https://signed.example/a1");
     expect(screen.getByText("깨짐.png (링크 생성 실패)")).toBeInTheDocument();
+  });
+
+  it("shows the type-specific details inside the inquiry bubble", () => {
+    render(<InboxTimeline entries={entries} labels={labels} />);
+    const details = screen.getByTestId("inquiry-details");
+    expect(details).toHaveTextContent("발생 일시");
+    expect(details).toHaveTextContent("2026. 09. 02. 오후 9:00");
+    expect(details).toHaveTextContent("결제번호");
+    expect(details).toHaveTextContent("imp_20260902_77");
+  });
+
+  it("omits the detail block when there is nothing to show", () => {
+    const inquiry = entries[0];
+    if (inquiry.kind !== "inquiry") throw new Error("fixture");
+    render(<InboxTimeline entries={[{ ...inquiry, details: [] }]} labels={labels} />);
+    expect(screen.queryByTestId("inquiry-details")).not.toBeInTheDocument();
   });
 
   it("falls back to 사용자 when the inquiry has no account", () => {

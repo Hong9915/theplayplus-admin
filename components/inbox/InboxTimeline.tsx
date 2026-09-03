@@ -118,11 +118,21 @@ export default function InboxTimeline({ entries, labels }: { entries: TimelineEn
                 <span className="text-muted font-mono">{formatReceivedAt(entry.at)}</span>
               </div>
               <div
-                className={`rounded-xl border px-3.5 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                className={`rounded-xl border px-3.5 py-3 text-sm leading-relaxed ${
                   note ? "bg-amber-50 border-amber-200 text-amber-900" : "bg-panel border-line"
                 }`}
               >
-                {entry.body}
+                <p className="whitespace-pre-wrap break-words">{entry.body}</p>
+                {entry.kind === "inquiry" && entry.details.length > 0 && (
+                  <dl className="mt-2.5 pt-2.5 border-t border-line flex flex-col gap-1 text-xs" data-testid="inquiry-details">
+                    {entry.details.map((row) => (
+                      <div key={row.key} className="flex gap-2">
+                        <dt className="text-muted shrink-0 w-16">{row.label}</dt>
+                        <dd className="break-all">{row.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
               </div>
               {entry.kind === "inquiry" && <Attachments attachments={entry.attachments} />}
             </div>

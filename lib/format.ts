@@ -102,26 +102,37 @@ export function emailLocalPart(email: string): string {
   return at === -1 ? email : email.slice(0, at);
 }
 
+function presentRows(rows: Array<{ label: string; value: string | null }>): MetaEntry[] {
+  return rows
+    .filter((row) => row.value && row.value.trim() !== "")
+    .map((row) => ({ key: row.label, label: row.label, value: row.value as string }));
+}
+
 /**
- * 상세 패널 "접수 정보"의 행. 값이 빈 고정 항목은 건너뛰고 meta는 metaEntries 순서를 따른다.
- * 결제번호·발생 일시·기기/사양은 접수 폼이 유형 플래그에 따라 채우는 컬럼이라
- * 유형마다 있는 것만 나온다.
+ * 유형별 추가 항목(발생 일시·결제번호·기기/사양). 접수 폼이 유형 플래그에 따라
+ * 채우는 컬럼이라 유형마다 있는 것만 나온다. 대화 말풍선과 접수 정보가 같이 쓴다.
  */
-export function inquiryMetaRows(inquiry: InquiryRow): MetaEntry[] {
-  const fixed: Array<{ label: string; value: string | null }> = [
-    { label: "게임 계정", value: inquiry.gameAccount },
-    { label: "회사명", value: inquiry.companyName },
-    { label: "회신 이메일", value: inquiry.replyEmail },
-    { label: "언어", value: inquiry.locale ? LOCALE_LABELS[inquiry.locale] ?? inquiry.locale : null },
-    { label: "접수 시각", value: formatReceivedAt(inquiry.createdAt) },
+export function inquiryDetailRows(
+  inquiry: Pick<InquiryRow, "occurredAt" | "paymentNo" | "deviceInfo">
+): MetaEntry[] {
+  return presentRows([
     { label: "발생 일시", value: inquiry.occurredAt ? formatOccurredAt(inquiry.occurredAt) : null },
     { label: "결제번호", value: inquiry.paymentNo },
     { label: "기기/사양", value: inquiry.deviceInfo },
-  ];
+  ]);
+}
+
+/** 상세 패널 "접수 정보"의 행. 값이 빈 고정 항목은 건너뛰고 meta는 metaEntries 순서를 따른다. */
+export function inquiryMetaRows(inquiry: InquiryRow): MetaEntry[] {
   return [
-    ...fixed
-      .filter((row) => row.value && row.value.trim() !== "")
-      .map((row) => ({ key: row.label, label: row.label, value: row.value as string })),
+    ...presentRows([
+      { label: "게임 계정", value: inquiry.gameAccount },
+      { label: "회사명", value: inquiry.companyName },
+      { label: "회신 이메일", value: inquiry.replyEmail },
+      { label: "언어", value: inquiry.locale ? LOCALE_LABELS[inquiry.locale] ?? inquiry.locale : null },
+      { label: "접수 시각", value: formatReceivedAt(inquiry.createdAt) },
+    ]),
+    ...inquiryDetailRows(inquiry),
     ...metaEntries(inquiry.meta),
   ];
 }

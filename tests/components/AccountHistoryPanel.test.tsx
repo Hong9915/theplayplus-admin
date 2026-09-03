@@ -11,6 +11,9 @@ const entry: AccountHistoryEntry = {
   status: "resolved",
   groupKey: "game_usage",
   typeKey: "account_login",
+  occurredAt: null,
+  paymentNo: null,
+  deviceInfo: null,
   createdAt: "2025-06-01T00:00:00.000Z",
 };
 

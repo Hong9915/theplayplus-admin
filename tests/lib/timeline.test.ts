@@ -50,11 +50,22 @@ describe("buildTimeline", () => {
       at: "2026-09-03T01:12:00.000Z",
       author: "luna_park",
       body: "두 번 결제됐어요",
+      details: [],
       attachments,
     });
     expect(entries[1]).toMatchObject({ kind: "note", id: "n-1", author: "hong@theplayplus.com", body: "중복 승인 확인" });
     expect(entries[2]).toMatchObject({ kind: "outbound", id: "m-out", author: "info@theplayplus.com" });
     expect(entries[3]).toMatchObject({ kind: "inbound", id: "m-in", author: "luna@example.com" });
+  });
+
+  it("carries the type-specific detail rows on the inquiry entry", () => {
+    const [head] = buildTimeline({ ...inquiry, occurredAt: "2026-09-02T21:00", paymentNo: "imp_9" }, [], [], []);
+    expect(head.kind).toBe("inquiry");
+    if (head.kind !== "inquiry") throw new Error("fixture");
+    expect(head.details.map((d) => [d.label, d.value])).toEqual([
+      ["발생 일시", "2026. 09. 02. 오후 9:00"],
+      ["결제번호", "imp_9"],
+    ]);
   });
 
   it("keeps the inquiry first even when a message predates createdAt", () => {
@@ -80,6 +91,9 @@ describe("buildAccountTimeline", () => {
       typeKey: "account_login",
       status: "resolved" as const,
       gameAccount: "luna_park",
+      occurredAt: null,
+      paymentNo: null,
+      deviceInfo: null,
       createdAt: "2026-07-21T00:00:00.000Z",
     },
     attachments: [],

@@ -35,7 +35,7 @@ const inquiry: InquiryRow = {
 };
 
 const labels = { groupLabels: { game_usage: "게임 이용 문의" }, typeLabels: { payment_refund: "결제/환불" }, typeOrder: ["payment_refund"] };
-const entries: TimelineEntry[] = [{ kind: "inquiry", id: "inq-1", at: inquiry.createdAt, author: "luna_park", body: "본문", attachments: [] }];
+const entries: TimelineEntry[] = [{ kind: "inquiry", id: "inq-1", at: inquiry.createdAt, author: "luna_park", body: "본문", details: [], attachments: [] }];
 
 function renderIt(overrides: Partial<InquiryRow> = {}) {
   return render(

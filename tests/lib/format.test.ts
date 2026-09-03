@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatElapsed, formatReceivedAt, formatOccurredAt, metaEntries, emailLocalPart, inquiryMetaRows } from "@/lib/format";
+import { formatElapsed, formatReceivedAt, formatOccurredAt, metaEntries, emailLocalPart, inquiryDetailRows, inquiryMetaRows } from "@/lib/format";
 import type { InquiryRow } from "@/lib/inquiries";
 
 const NOW = new Date("2026-07-23T12:00:00.000Z");
@@ -155,6 +155,15 @@ describe("inquiryMetaRows", () => {
   it("falls back to the raw locale code for an unknown language", () => {
     const rows = inquiryMetaRows({ ...base, meta: {}, locale: "ja" });
     expect(rows.find((r) => r.label === "언어")?.value).toBe("ja");
+  });
+});
+
+describe("inquiryDetailRows", () => {
+  it("returns only the type-specific fields that are present", () => {
+    expect(inquiryDetailRows({ occurredAt: "2026-09-03T14:05", paymentNo: null, deviceInfo: " " })).toEqual([
+      { key: "발생 일시", label: "발생 일시", value: "2026. 09. 03. 오후 2:05" },
+    ]);
+    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, deviceInfo: null })).toEqual([]);
   });
 });
 
