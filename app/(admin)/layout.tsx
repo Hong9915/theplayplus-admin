@@ -13,7 +13,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   return (
     <div className="min-h-screen flex">
       <GameRail games={games} newCounts={newCounts} />
-      <main className="flex-1 min-w-0 px-8 py-6">{children}</main>
+      <main className="flex-1 min-w-0 h-screen overflow-hidden flex">{children}</main>
     </div>
   );
 }

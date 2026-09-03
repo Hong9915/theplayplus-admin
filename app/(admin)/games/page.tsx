@@ -13,7 +13,7 @@ export default async function GamesPage() {
   }
 
   return (
-    <div className="h-full min-h-[70vh] flex items-center justify-center">
+    <div className="flex-1 overflow-y-auto px-8 py-6 flex items-center justify-center">
       <div className="text-center max-w-sm">
         <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-panel border border-dashed border-line flex items-center justify-center text-2xl text-muted">
           +

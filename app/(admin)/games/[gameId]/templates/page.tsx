@@ -22,7 +22,7 @@ export default async function TemplatesPage({ params }: { params: { gameId: stri
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-4">
       <Link
         href={`/games/${params.gameId}/inquiries`}
         className="text-sm text-muted hover:text-ink transition-colors"
