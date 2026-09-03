@@ -9,6 +9,7 @@ THE PLAY+ 고객지원 관리자 페이지. `theplayplus-contact`(문의 접수 
 3. **문의 답변 발송** — 문의 상세에서 답변을 작성해 Gmail API로 `info@theplayplus.com` 계정으로 바로 발송. 메일은 THE PLAY+ 브랜드 HTML 템플릿(`lib/email-template.ts`, 로고는 `lib/email-logo.ts`에 base64 인라인 첨부)과 텍스트 본문을 함께 담은 multipart로 나간다. 발송 성공 시 상태가 자동으로 `처리중`으로 바뀌고 답변이 `inquiry_messages`에 쌓임 (`완료`는 헤더의 "완료로 표시" 버튼이나 상태 셀렉트로 직접 변경). 후속 답변은 같은 Gmail 스레드로 묶이며, "회신 확인" 버튼으로 사용자 회신을 스레드에서 가져와 대화 카드에 표시 (`gmail.readonly` 스코프 필요). Cmd/Ctrl+Enter 발송, 초안 자동 저장
 4. **계정 이력 패널** — 문의 상세에서 같은 게임 내 동일 `game_account`의 과거 문의를 요약(건수/미처리/같은 유형)과 함께 보여주고 각 항목은 상세로 링크 (이벤트 참여 이력은 현재 데이터 소스가 없어 확장 지점만 마련)
 5. **상세 이동** — 목록에서 들고 온 필터·정렬 안에서 이전/다음 문의로 이동, "← 목록"은 필터를 유지
+6. **새 문의 Slack 알림** — Supabase Database Webhook(`inquiries` INSERT)이 `/api/notify/inquiry`를 호출하면 게임명·유형·제목·상세 링크를 Slack Incoming Webhook으로 보낸다(`lib/slack.ts`). 호출자는 `x-webhook-secret` 헤더가 `INQUIRY_WEBHOOK_SECRET`과 일치해야 하고, `SLACK_WEBHOOK_URL`이 비어 있으면 조용히 건너뛴다. 지금은 모든 신규 문의를 보내며, 특정 유형만 보내려면 이 라우트에서 거르면 된다.
 
 상세 설계는 `docs/superpowers/specs/2026-09-01-admin-panel-design.md` 참고.
 
@@ -19,6 +20,13 @@ THE PLAY+ 고객지원 관리자 페이지. `theplayplus-contact`(문의 접수 
 - Supabase Auth (이메일+비밀번호, 여러 관리자 계정 가능, 역할 구분 없음)
 - Gmail API (`googleapis`) — 답변 이메일 발송
 - Vitest + React Testing Library
+
+## Slack 알림 설정 절차
+
+1. Slack 워크스페이스에서 앱 생성 → Incoming Webhooks 활성화 → 알림 받을 채널을 골라 Webhook URL 발급
+2. 관리자 앱 환경변수에 `SLACK_WEBHOOK_URL`(발급한 URL)과 `INQUIRY_WEBHOOK_SECRET`(임의의 긴 문자열) 설정 후 재배포
+3. Supabase 대시보드 → Database → Webhooks → Create: 테이블 `inquiries`, 이벤트 `Insert`, 타입 HTTP Request(POST), URL `https://<관리자 도메인>/api/notify/inquiry`, HTTP Headers에 `x-webhook-secret: <2번의 비밀값>` 추가
+4. 접수 폼에서 테스트 문의를 넣어 Slack 채널에 메시지가 오는지 확인 (로컬 개발 서버는 외부에서 못 부르므로 배포 환경에서 확인)
 
 ## 컨벤션
 
