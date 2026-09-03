@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   DEFAULT_QUERY,
   inquiryDetailHref,
+  inquiryHref,
+  inboxHref,
   inquiryListHref,
+  legacyInquiryRedirectHref,
   parseInquiryListQuery,
   toInquiryListSearch,
 } from "@/lib/inquiry-filters";
@@ -19,6 +22,8 @@ describe("parseInquiryListQuery", () => {
       group: "game_usage",
       type: "bug_report",
       status: "new",
+      priority: null,
+      stale: false,
       q: "결제",
       sort: "oldest",
       page: 3,
@@ -66,5 +71,51 @@ describe("hrefs", () => {
     expect(inquiryDetailHref("i1", { ...DEFAULT_QUERY, status: "new", page: 2 })).toBe(
       "/inquiries/i1?list=status%3Dnew%26page%3D2"
     );
+  });
+});
+
+describe("priority and stale", () => {
+  it("parses a valid priority and drops an invalid one", () => {
+    expect(parseInquiryListQuery("priority=urgent").priority).toBe("urgent");
+    expect(parseInquiryListQuery("priority=whatever").priority).toBeNull();
+  });
+
+  it("parses stale=1 only", () => {
+    expect(parseInquiryListQuery("stale=1").stale).toBe(true);
+    expect(parseInquiryListQuery("stale=true").stale).toBe(false);
+    expect(parseInquiryListQuery("").stale).toBe(false);
+  });
+
+  it("serializes priority and stale and round-trips", () => {
+    const query = { ...DEFAULT_QUERY, priority: "high" as const, stale: true };
+    expect(toInquiryListSearch(query)).toBe("priority=high&stale=1");
+    expect(parseInquiryListQuery(toInquiryListSearch(query))).toEqual(query);
+  });
+
+  it("keeps the existing serialization order for the old fields", () => {
+    const query = { ...DEFAULT_QUERY, status: "resolved" as const, sort: "priority" as const, page: 2, q: "a b" };
+    expect(toInquiryListSearch(query)).toBe("status=resolved&q=a+b&sort=priority&page=2");
+  });
+});
+
+describe("inbox hrefs", () => {
+  it("builds the inquiry href with the list query on the same URL", () => {
+    expect(inquiryHref("g1", "i1", DEFAULT_QUERY)).toBe("/games/g1/inquiries/i1");
+    expect(inquiryHref("g1", "i1", { ...DEFAULT_QUERY, status: "new", page: 2 })).toBe(
+      "/games/g1/inquiries/i1?status=new&page=2"
+    );
+  });
+
+  it("inboxHref keeps the selected inquiry when there is one", () => {
+    expect(inboxHref("g1", null, { ...DEFAULT_QUERY, q: "x" })).toBe("/games/g1/inquiries?q=x");
+    expect(inboxHref("g1", "i1", { ...DEFAULT_QUERY, q: "x" })).toBe("/games/g1/inquiries/i1?q=x");
+  });
+
+  it("legacy redirect decodes the old list param into the new URL", () => {
+    expect(legacyInquiryRedirectHref("g1", "i1", undefined)).toBe("/games/g1/inquiries/i1");
+    expect(legacyInquiryRedirectHref("g1", "i1", "status=new&sort=oldest")).toBe(
+      "/games/g1/inquiries/i1?status=new&sort=oldest"
+    );
+    expect(legacyInquiryRedirectHref("g1", "i1", "status=bogus")).toBe("/games/g1/inquiries/i1");
   });
 });
