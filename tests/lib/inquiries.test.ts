@@ -3,6 +3,7 @@ import {
   countInquiriesByGame,
   countNewInquiriesByGame,
   getInquiryById,
+  getInquiryFacetCounts,
   listAttachmentSignedUrls,
   listInquiryIds,
   queryInquiries,
@@ -37,7 +38,7 @@ const sampleRow = {
 function mockBuilder(result: { data?: unknown; error?: { message: string } | null; count?: number | null }) {
   const builder: Record<string, unknown> = {};
   const calls: Record<string, unknown[][]> = {};
-  for (const name of ["eq", "or", "order", "range", "limit", "in"]) {
+  for (const name of ["eq", "neq", "lt", "or", "order", "range", "limit", "in"]) {
     calls[name] = [];
     builder[name] = vi.fn((...args: unknown[]) => {
       calls[name].push(args);
@@ -113,6 +114,32 @@ describe("queryInquiries", () => {
     const { from } = mockBuilder({ error: { message: "db down" } });
     await expect(queryInquiries({ from } as never, "game-1", DEFAULT_QUERY)).rejects.toThrow(/db down/);
   });
+
+  it("filters by priority", async () => {
+    const { from, calls } = mockBuilder({ data: [], count: 0 });
+    await queryInquiries({ from } as never, "game-1", { ...DEFAULT_QUERY, priority: "urgent" });
+    expect(calls.eq).toEqual([
+      ["game_id", "game-1"],
+      ["priority", "urgent"],
+    ]);
+  });
+
+  it("stale means unresolved and older than 72 hours from the injected now", async () => {
+    const { from, calls } = mockBuilder({ data: [], count: 0 });
+    const now = new Date("2026-09-04T12:00:00.000Z");
+
+    await queryInquiries({ from } as never, "game-1", { ...DEFAULT_QUERY, stale: true }, { now });
+
+    expect(calls.neq).toEqual([["status", "resolved"]]);
+    expect(calls.lt).toEqual([["created_at", "2026-09-01T12:00:00.000Z"]]);
+  });
+
+  it("does not add stale conditions by default", async () => {
+    const { from, calls } = mockBuilder({ data: [], count: 0 });
+    await queryInquiries({ from } as never, "game-1", DEFAULT_QUERY);
+    expect(calls.neq).toEqual([]);
+    expect(calls.lt).toEqual([]);
+  });
 });
 
 describe("sanitizeSearch", () => {
@@ -141,6 +168,64 @@ describe("listInquiryIds", () => {
   it("returns an empty list on error", async () => {
     const { from } = mockBuilder({ error: { message: "x" } });
     await expect(listInquiryIds({ from } as never, "game-1", DEFAULT_QUERY)).resolves.toEqual([]);
+  });
+
+  it("accepts a custom limit and applies stale with the injected now", async () => {
+    const { from, calls } = mockBuilder({ data: [] });
+    await listInquiryIds({ from } as never, "game-1", { ...DEFAULT_QUERY, stale: true }, {
+      limit: 10,
+      now: new Date("2026-09-04T12:00:00.000Z"),
+    });
+    expect(calls.limit).toEqual([[10]]);
+    expect(calls.lt).toEqual([["created_at", "2026-09-01T12:00:00.000Z"]]);
+  });
+});
+
+describe("getInquiryFacetCounts", () => {
+  it("calls the RPC and folds rows into a counts object", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        { facet: "status", key: "new", count: 4 },
+        { facet: "status", key: "in_progress", count: 7 },
+        { facet: "type", key: "bug_report", count: 5 },
+        { facet: "type", key: "payment_refund", count: 8 },
+        { facet: "priority", key: "urgent", count: 1 },
+        { facet: "priority", key: "high", count: 3 },
+        { facet: "stale", key: "1", count: 2 },
+        { facet: "total", key: "all", count: 23 },
+      ],
+      error: null,
+    });
+
+    const counts = await getInquiryFacetCounts({ rpc } as never, "game-1");
+
+    expect(rpc).toHaveBeenCalledWith("inquiry_facet_counts", { p_game_id: "game-1" });
+    expect(counts).toEqual({
+      total: 23,
+      status: { new: 4, in_progress: 7, resolved: 0 },
+      type: { bug_report: 5, payment_refund: 8 },
+      priority: { urgent: 1, high: 3, normal: 0, low: 0 },
+      stale: 2,
+    });
+  });
+
+  it("ignores unknown facets and keys and coerces bigint strings", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        { facet: "status", key: "weird", count: "9" },
+        { facet: "mystery", key: "x", count: 1 },
+        { facet: "total", key: "all", count: "12" },
+      ],
+      error: null,
+    });
+    const counts = await getInquiryFacetCounts({ rpc } as never, "game-1");
+    expect(counts?.total).toBe(12);
+    expect(counts?.status).toEqual({ new: 0, in_progress: 0, resolved: 0 });
+  });
+
+  it("returns null when the RPC fails", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: "boom" } });
+    await expect(getInquiryFacetCounts({ rpc } as never, "game-1")).resolves.toBeNull();
   });
 });
 

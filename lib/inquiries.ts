@@ -90,19 +90,29 @@ export function sanitizeSearch(q: string): string {
 
 // supabase-js 빌더의 정확한 제네릭을 여기서 다 적으면 읽기 어렵다.
 // 필요한 메서드만 가진 최소 형태로 다룬다.
+export const STALE_AFTER_MS = 72 * 60 * 60 * 1000;
+
 interface FilterBuilder {
   eq(column: string, value: string): FilterBuilder;
+  neq(column: string, value: string): FilterBuilder;
+  lt(column: string, value: string): FilterBuilder;
   or(filters: string): FilterBuilder;
   order(column: string, options: { ascending: boolean }): FilterBuilder;
   range(from: number, to: number): FilterBuilder;
   limit(count: number): FilterBuilder;
 }
 
-function applyFilters<T extends FilterBuilder>(builder: T, gameId: string, query: InquiryListQuery): T {
+function applyFilters<T extends FilterBuilder>(builder: T, gameId: string, query: InquiryListQuery, now: Date): T {
   let next = builder.eq("game_id", gameId) as T;
   if (query.group) next = next.eq("group_key", query.group) as T;
   if (query.type) next = next.eq("type_key", query.type) as T;
   if (query.status) next = next.eq("status", query.status) as T;
+  if (query.priority) next = next.eq("priority", query.priority) as T;
+  if (query.stale) {
+    // "3일 이상 미처리": 완료가 아니면서 접수 후 72시간이 지난 건.
+    const cutoff = new Date(now.getTime() - STALE_AFTER_MS).toISOString();
+    next = next.neq("status", "resolved").lt("created_at", cutoff) as T;
+  }
 
   const q = sanitizeSearch(query.q);
   if (q) {
@@ -130,11 +140,13 @@ function applyOrder<T extends FilterBuilder>(builder: T, query: InquiryListQuery
 export async function queryInquiries(
   supabase: SupabaseClient,
   gameId: string,
-  query: InquiryListQuery
+  query: InquiryListQuery,
+  options: { now?: Date } = {}
 ): Promise<InquiryPage> {
+  const now = options.now ?? new Date();
   const from = (query.page - 1) * PAGE_SIZE;
   const builder = applyOrder(
-    applyFilters(supabase.from("inquiries").select("*", { count: "exact" }) as unknown as FilterBuilder, gameId, query),
+    applyFilters(supabase.from("inquiries").select("*", { count: "exact" }) as unknown as FilterBuilder, gameId, query, now),
     query
   ).range(from, from + PAGE_SIZE - 1);
 
@@ -158,10 +170,12 @@ export async function listInquiryIds(
   supabase: SupabaseClient,
   gameId: string,
   query: InquiryListQuery,
-  limit = 1000
+  options: { limit?: number; now?: Date } = {}
 ): Promise<string[]> {
+  const limit = options.limit ?? 1000;
+  const now = options.now ?? new Date();
   const builder = applyOrder(
-    applyFilters(supabase.from("inquiries").select("id") as unknown as FilterBuilder, gameId, query),
+    applyFilters(supabase.from("inquiries").select("id") as unknown as FilterBuilder, gameId, query, now),
     query
   ).limit(limit);
 
@@ -224,4 +238,59 @@ export async function listAttachmentSignedUrls(
     results.push({ id: attachment.id, fileName: attachment.file_name, signedUrl: signed?.signedUrl ?? null });
   }
   return results;
+}
+
+export interface InquiryFacetCounts {
+  total: number;
+  status: Record<InquiryStatus, number>;
+  type: Record<string, number>;
+  priority: Record<InquiryPriority, number>;
+  stale: number;
+}
+
+const STATUS_KEYS: InquiryStatus[] = ["new", "in_progress", "resolved"];
+const PRIORITY_KEYS: InquiryPriority[] = ["urgent", "high", "normal", "low"];
+
+/**
+ * 문의함 보기 열의 건수. 마이그레이션 0008의 inquiry_facet_counts RPC 한 번으로
+ * 가져온다. 실패하면 null — 건수는 부가 정보라 목록 표시를 막지 않는다.
+ */
+export async function getInquiryFacetCounts(
+  supabase: SupabaseClient,
+  gameId: string
+): Promise<InquiryFacetCounts | null> {
+  const { data, error } = await supabase.rpc("inquiry_facet_counts", { p_game_id: gameId });
+  if (error || !data) {
+    return null;
+  }
+
+  const counts: InquiryFacetCounts = {
+    total: 0,
+    status: { new: 0, in_progress: 0, resolved: 0 },
+    type: {},
+    priority: { urgent: 0, high: 0, normal: 0, low: 0 },
+    stale: 0,
+  };
+
+  for (const row of data as Array<{ facet: string; key: string; count: number | string }>) {
+    const count = Number(row.count) || 0;
+    switch (row.facet) {
+      case "status":
+        if (STATUS_KEYS.includes(row.key as InquiryStatus)) counts.status[row.key as InquiryStatus] = count;
+        break;
+      case "type":
+        counts.type[row.key] = count;
+        break;
+      case "priority":
+        if (PRIORITY_KEYS.includes(row.key as InquiryPriority)) counts.priority[row.key as InquiryPriority] = count;
+        break;
+      case "stale":
+        counts.stale = count;
+        break;
+      case "total":
+        counts.total = count;
+        break;
+    }
+  }
+  return counts;
 }
