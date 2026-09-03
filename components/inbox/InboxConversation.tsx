@@ -55,7 +55,7 @@ export default function InboxConversation({
       </header>
 
       <div className="flex-1 overflow-y-auto bg-ground px-6 py-5">
-        <InboxTimeline entries={entries} />
+        <InboxTimeline entries={entries} labels={labels} />
       </div>
 
       <ReplyComposer

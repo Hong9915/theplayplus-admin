@@ -1,15 +1,21 @@
 import type { TimelineEntry } from "@/lib/timeline";
 import type { AttachmentWithUrl } from "@/lib/inquiries";
+import type { CategoryLabelMaps } from "@/lib/categories";
 import { emailLocalPart, formatReceivedAt } from "@/lib/format";
+import StatusBadge from "@/components/ui/StatusBadge";
+import ScrollToCurrent from "@/components/inbox/ScrollToCurrent";
 
-const LABEL: Record<TimelineEntry["kind"], string> = {
+type MessageEntry = Exclude<TimelineEntry, { kind: "divider" }>;
+type DividerEntry = Extract<TimelineEntry, { kind: "divider" }>;
+
+const LABEL: Record<MessageEntry["kind"], string> = {
   inquiry: "문의 접수",
   inbound: "이메일 회신",
   outbound: "이메일 발송",
   note: "내부 메모",
 };
 
-function authorText(entry: TimelineEntry): string {
+function authorText(entry: MessageEntry): string {
   switch (entry.kind) {
     case "inquiry":
     case "inbound":
@@ -21,7 +27,7 @@ function authorText(entry: TimelineEntry): string {
   }
 }
 
-function Avatar({ entry }: { entry: TimelineEntry }) {
+function Avatar({ entry }: { entry: MessageEntry }) {
   if (entry.kind === "outbound") {
     return <div className="w-8 h-8 rounded-full bg-ink text-white flex items-center justify-center text-[11px] font-bold shrink-0">P+</div>;
   }
@@ -62,11 +68,44 @@ function Attachments({ attachments }: { attachments: AttachmentWithUrl[] }) {
   );
 }
 
-/** 문의 본문·답변·회신·메모를 시간순 말풍선으로. 데이터 순서는 lib/timeline이 정한다. */
-export default function InboxTimeline({ entries }: { entries: TimelineEntry[] }) {
+/** 같은 계정의 다른 문의가 시작되는 지점. 선택한 문의는 accent로 강조한다. */
+function Divider({ entry, labels }: { entry: DividerEntry; labels: CategoryLabelMaps }) {
+  return (
+    <li
+      data-kind="divider"
+      data-current={entry.current ? "true" : "false"}
+      className={`flex items-center gap-3 pt-2 ${entry.current ? "scroll-mt-4" : ""}`}
+    >
+      <span className={`flex-1 border-t ${entry.current ? "border-accent/40" : "border-line"}`} aria-hidden="true" />
+      <div
+        className={`flex items-center gap-2 max-w-full rounded-full border px-3 py-1 text-xs bg-panel ${
+          entry.current ? "border-accent text-ink" : "border-line text-muted"
+        }`}
+      >
+        <span className="font-mono text-[11px]">{entry.inquiryNo ?? "—"}</span>
+        <span className={`truncate ${entry.current ? "font-semibold" : "font-medium"}`}>{entry.title}</span>
+        <span className="shrink-0">{labels.typeLabels[entry.typeKey] ?? entry.typeKey}</span>
+        <StatusBadge status={entry.status} />
+        <span className="font-mono text-[11px] shrink-0">{formatReceivedAt(entry.at)}</span>
+      </div>
+      <span className={`flex-1 border-t ${entry.current ? "border-accent/40" : "border-line"}`} aria-hidden="true" />
+    </li>
+  );
+}
+
+/**
+ * 문의 본문·답변·회신·메모를 시간순 말풍선으로. 데이터 순서는 lib/timeline이 정한다.
+ * 같은 계정의 문의가 여러 건이면 문의마다 구분선이 들어오고, 선택한 문의로 자동 스크롤한다.
+ */
+export default function InboxTimeline({ entries, labels }: { entries: TimelineEntry[]; labels: CategoryLabelMaps }) {
+  const hasDividers = entries.some((entry) => entry.kind === "divider");
   return (
     <ol className="flex flex-col gap-4">
+      {hasDividers && <ScrollToCurrent />}
       {entries.map((entry) => {
+        if (entry.kind === "divider") {
+          return <Divider key={`divider-${entry.id}`} entry={entry} labels={labels} />;
+        }
         const outbound = entry.kind === "outbound";
         const note = entry.kind === "note";
         return (

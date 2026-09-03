@@ -68,6 +68,34 @@ export async function listMessages(supabase: SupabaseClient, inquiryId: string):
 }
 
 /**
+ * 여러 문의의 대화 기록을 한 번에. 같은 계정의 문의를 한 타임라인에 이어 보여줄 때 쓴다.
+ * 문의 id → 오래된 순 메시지 목록. 빈 id 목록이면 조회하지 않는다.
+ */
+export async function listMessagesByInquiryIds(
+  supabase: SupabaseClient,
+  inquiryIds: string[]
+): Promise<Record<string, MessageRow[]>> {
+  const grouped: Record<string, MessageRow[]> = {};
+  if (inquiryIds.length === 0) {
+    return grouped;
+  }
+
+  const { data, error } = await supabase
+    .from("inquiry_messages")
+    .select(`${COLUMNS}, inquiry_id`)
+    .in("inquiry_id", inquiryIds)
+    .order("sent_at", { ascending: true });
+
+  if (error || !data) {
+    return grouped;
+  }
+  for (const row of data as Array<Parameters<typeof mapRow>[0] & { inquiry_id: string }>) {
+    (grouped[row.inquiry_id] ??= []).push(mapRow(row));
+  }
+  return grouped;
+}
+
+/**
  * 다음 답변을 같은 Gmail 스레드에 묶으려면 지금까지 오간 메일의 Message-ID가
  * 필요하다. 오래된 순으로 돌려주므로 마지막 것이 In-Reply-To가 된다.
  */

@@ -10,10 +10,11 @@ import {
 import { parseInquiryListQuery } from "@/lib/inquiry-filters";
 import { listCategoryLabels, listGames } from "@/lib/categories";
 import { getAccountHistory } from "@/lib/account-history";
-import { listNotes } from "@/lib/notes";
+import { listNotes, listNotesByInquiryIds } from "@/lib/notes";
 import { listEvents } from "@/lib/events";
 import { listTemplates } from "@/lib/templates";
-import { listMessages } from "@/lib/messages";
+import { listMessages, listMessagesByInquiryIds } from "@/lib/messages";
+import type { AccountThread } from "@/lib/timeline";
 import InboxShell, { type InboxSelection } from "@/components/inbox/InboxShell";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +65,22 @@ export default async function InboxPage({
       listMessages(supabase, inquiry.id),
       listInquiryIds(supabase, inquiry.gameId, query),
     ]);
-    selected = { inquiry, attachments, history, notes, events, templates, messages, siblingIds };
+
+    // 같은 계정의 다른 문의도 대화 열에 이어 보여준다. 이력 id로 메시지·메모·첨부를 한 번에 가져온다.
+    const historyIds = history.map((entry) => entry.id);
+    const [pastMessages, pastNotes, pastAttachments] = await Promise.all([
+      listMessagesByInquiryIds(supabase, historyIds),
+      listNotesByInquiryIds(supabase, historyIds),
+      Promise.all(history.map((entry) => listAttachmentSignedUrls(supabase, entry.id))),
+    ]);
+    const pastThreads: AccountThread[] = history.map((entry, index) => ({
+      inquiry: { ...entry, gameAccount: inquiry.gameAccount },
+      attachments: pastAttachments[index],
+      messages: pastMessages[entry.id] ?? [],
+      notes: pastNotes[entry.id] ?? [],
+    }));
+
+    selected = { inquiry, attachments, history, notes, events, templates, messages, siblingIds, pastThreads };
   }
 
   return <InboxShell game={game} query={query} labels={labels} counts={counts} listPage={listPage} selected={selected} />;

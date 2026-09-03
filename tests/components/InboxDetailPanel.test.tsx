@@ -40,7 +40,7 @@ const events: EventRow[] = [
 ];
 
 const history: AccountHistoryEntry[] = [
-  { id: "inq-0", title: "예전 문의", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "payment_refund", createdAt: "2026-07-21T00:00:00.000Z" },
+  { id: "inq-0", inquiryNo: null, title: "예전 문의", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "payment_refund", createdAt: "2026-07-21T00:00:00.000Z" },
 ];
 
 describe("InboxDetailPanel", () => {

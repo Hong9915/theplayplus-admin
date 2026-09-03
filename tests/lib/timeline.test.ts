@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTimeline } from "@/lib/timeline";
+import { buildAccountTimeline, buildTimeline } from "@/lib/timeline";
 import type { InquiryRow } from "@/lib/inquiries";
 import type { MessageRow } from "@/lib/messages";
 import type { NoteRow } from "@/lib/notes";
@@ -67,5 +67,46 @@ describe("buildTimeline", () => {
     const same = "2026-09-03T02:05:00.000Z";
     const entries = buildTimeline(inquiry, [], [{ ...messages[1], sentAt: same }], [{ ...notes[0], createdAt: same }]);
     expect(entries.map((e) => e.id)).toEqual(["inq-1", "m-out", "n-1"]);
+  });
+});
+
+describe("buildAccountTimeline", () => {
+  const older = {
+    inquiry: {
+      id: "inq-0",
+      inquiryNo: "R-20260721-0002",
+      title: "예전 문의",
+      content: "예전 본문",
+      typeKey: "account_login",
+      status: "resolved" as const,
+      gameAccount: "luna_park",
+      createdAt: "2026-07-21T00:00:00.000Z",
+    },
+    attachments: [],
+    messages: [{ ...messages[1], id: "m-old", sentAt: "2026-07-21T01:00:00.000Z" }],
+    notes: [],
+  };
+  const current = { inquiry, attachments: [], messages, notes };
+
+  it("orders threads by inquiry time, adds a divider per thread, and marks the current one", () => {
+    const entries = buildAccountTimeline([current, older], "inq-1");
+    expect(entries.map((e) => `${e.kind}:${e.id}`)).toEqual([
+      "divider:inq-0",
+      "inquiry:inq-0",
+      "outbound:m-old",
+      "divider:inq-1",
+      "inquiry:inq-1",
+      "note:n-1",
+      "outbound:m-out",
+      "inbound:m-in",
+    ]);
+    expect(entries[0]).toMatchObject({ kind: "divider", inquiryNo: "R-20260721-0002", title: "예전 문의", typeKey: "account_login", status: "resolved", current: false });
+    expect(entries[3]).toMatchObject({ kind: "divider", current: true });
+  });
+
+  it("omits dividers when there is a single thread", () => {
+    const entries = buildAccountTimeline([current], "inq-1");
+    expect(entries[0].kind).toBe("inquiry");
+    expect(entries.some((e) => e.kind === "divider")).toBe(false);
   });
 });

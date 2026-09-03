@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { listNotes, createNote } from "@/lib/notes";
+import { listNotes, listNotesByInquiryIds, createNote } from "@/lib/notes";
 
 const sampleRow = {
   id: "note-1",
@@ -71,5 +71,36 @@ describe("createNote", () => {
     });
 
     expect(ok).toBe(false);
+  });
+});
+
+describe("listNotesByInquiryIds", () => {
+  it("fetches notes for several inquiries at once, grouped by inquiry", async () => {
+    const order = vi.fn().mockResolvedValue({
+      data: [
+        { ...sampleRow, inquiry_id: "inq-2" },
+        { ...sampleRow, id: "note-2", inquiry_id: "inq-1", content: "두 번째" },
+      ],
+      error: null,
+    });
+    const inFn = vi.fn(() => ({ order }));
+    const select = vi.fn(() => ({ in: inFn }));
+    const from = vi.fn(() => ({ select }));
+
+    const grouped = await listNotesByInquiryIds({ from } as never, ["inq-1", "inq-2"]);
+
+    expect(from).toHaveBeenCalledWith("inquiry_notes");
+    expect(inFn).toHaveBeenCalledWith("inquiry_id", ["inq-1", "inq-2"]);
+    expect(order).toHaveBeenCalledWith("created_at", { ascending: true });
+    expect(grouped["inq-2"]).toEqual([
+      { id: "note-1", authorEmail: "info@theplayplus.com", content: "결제 로그 확인함", createdAt: "2026-09-02T04:00:00.000Z" },
+    ]);
+    expect(grouped["inq-1"][0].content).toBe("두 번째");
+  });
+
+  it("skips the query for an empty id list", async () => {
+    const from = vi.fn();
+    await expect(listNotesByInquiryIds({ from } as never, [])).resolves.toEqual({});
+    expect(from).not.toHaveBeenCalled();
   });
 });

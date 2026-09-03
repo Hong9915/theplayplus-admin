@@ -5,7 +5,7 @@ import AccountHistoryPanel from "@/components/inquiries/AccountHistoryPanel";
 import type { AccountHistoryEntry } from "@/lib/account-history";
 
 const entry: AccountHistoryEntry = {
-  id: "inq-2",
+  id: "inq-2", inquiryNo: null,
   title: "이전 문의",
   content: "지난주에 결제한 다이아가 아직 안 들어왔습니다. 확인 부탁드립니다.",
   status: "resolved",

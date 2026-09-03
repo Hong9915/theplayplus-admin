@@ -4,6 +4,7 @@ import {
   createOutboundMessage,
   listGmailMessageIds,
   listMessages,
+  listMessagesByInquiryIds,
   listRfcMessageIds,
 } from "@/lib/messages";
 
@@ -124,5 +125,40 @@ describe("createInboundMessage", () => {
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({ direction: "inbound", author_email: "user@example.com", gmail_message_id: "gm-2" })
     );
+  });
+});
+
+describe("listMessagesByInquiryIds", () => {
+  it("fetches every inquiry's messages in one query and groups them by inquiry", async () => {
+    const order = vi.fn().mockResolvedValue({
+      data: [
+        { ...rows[0], inquiry_id: "inq-1" },
+        { ...rows[1], inquiry_id: "inq-2" },
+      ],
+      error: null,
+    });
+    const inFn = vi.fn(() => ({ order }));
+    const select = vi.fn(() => ({ in: inFn }));
+    const from = vi.fn(() => ({ select }));
+
+    const grouped = await listMessagesByInquiryIds({ from } as never, ["inq-1", "inq-2"]);
+
+    expect(from).toHaveBeenCalledWith("inquiry_messages");
+    expect(select).toHaveBeenCalledWith(expect.stringContaining("inquiry_id"));
+    expect(inFn).toHaveBeenCalledWith("inquiry_id", ["inq-1", "inq-2"]);
+    expect(order).toHaveBeenCalledWith("sent_at", { ascending: true });
+    expect(Object.keys(grouped)).toEqual(["inq-1", "inq-2"]);
+    expect(grouped["inq-1"][0]).toMatchObject({ id: "m1", direction: "outbound" });
+    expect(grouped["inq-2"][0]).toMatchObject({ id: "m2", direction: "inbound" });
+  });
+
+  it("skips the query for an empty id list and returns {} on error", async () => {
+    const from = vi.fn();
+    await expect(listMessagesByInquiryIds({ from } as never, [])).resolves.toEqual({});
+    expect(from).not.toHaveBeenCalled();
+
+    const order = vi.fn().mockResolvedValue({ data: null, error: { message: "x" } });
+    const failing = vi.fn(() => ({ select: vi.fn(() => ({ in: vi.fn(() => ({ order })) })) }));
+    await expect(listMessagesByInquiryIds({ from: failing } as never, ["inq-1"])).resolves.toEqual({});
   });
 });

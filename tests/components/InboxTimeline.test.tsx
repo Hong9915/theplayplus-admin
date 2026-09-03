@@ -4,6 +4,8 @@ import { render, screen } from "@testing-library/react";
 import InboxTimeline from "@/components/inbox/InboxTimeline";
 import type { TimelineEntry } from "@/lib/timeline";
 
+const labels = { groupLabels: {}, typeLabels: { payment_refund: "결제/환불", account_login: "계정/로그인" }, typeOrder: [] };
+
 const entries: TimelineEntry[] = [
   {
     kind: "inquiry",
@@ -23,7 +25,7 @@ const entries: TimelineEntry[] = [
 
 describe("InboxTimeline", () => {
   it("renders every entry with its label and body", () => {
-    render(<InboxTimeline entries={entries} />);
+    render(<InboxTimeline entries={entries} labels={labels} />);
     expect(screen.getByText("문의 접수")).toBeInTheDocument();
     expect(screen.getByText("두 번 결제됐어요")).toBeInTheDocument();
     expect(screen.getByText("내부 메모")).toBeInTheDocument();
@@ -35,7 +37,7 @@ describe("InboxTimeline", () => {
   });
 
   it("shows the game account for the inquiry, the id part for staff, and the full email for replies", () => {
-    render(<InboxTimeline entries={entries} />);
+    render(<InboxTimeline entries={entries} labels={labels} />);
     expect(screen.getByText("luna_park")).toBeInTheDocument();
     expect(screen.getByText("hong")).toBeInTheDocument();
     expect(screen.getByText("info")).toBeInTheDocument();
@@ -43,7 +45,7 @@ describe("InboxTimeline", () => {
   });
 
   it("renders attachment thumbnails and a failure note", () => {
-    render(<InboxTimeline entries={entries} />);
+    render(<InboxTimeline entries={entries} labels={labels} />);
     const img = screen.getByRole("img", { name: "명세서.png" });
     expect(img).toHaveAttribute("src", "https://signed.example/a1");
     expect(screen.getByText("깨짐.png (링크 생성 실패)")).toBeInTheDocument();
@@ -52,7 +54,24 @@ describe("InboxTimeline", () => {
   it("falls back to 사용자 when the inquiry has no account", () => {
     const inquiry = entries[0];
     if (inquiry.kind !== "inquiry") throw new Error("fixture");
-    render(<InboxTimeline entries={[{ ...inquiry, author: null, attachments: [] }]} />);
+    render(<InboxTimeline entries={[{ ...inquiry, author: null, attachments: [] }]} labels={labels} />);
     expect(screen.getByText("사용자")).toBeInTheDocument();
+  });
+
+  it("renders a divider per inquiry with number, type label, status, and highlights the current one", () => {
+    const withDividers: TimelineEntry[] = [
+      { kind: "divider", id: "inq-0", at: "2026-07-21T00:00:00.000Z", inquiryNo: "R-20260721-0002", title: "예전 문의", typeKey: "account_login", status: "resolved", current: false },
+      { kind: "divider", id: "inq-1", at: "2026-09-03T01:12:00.000Z", inquiryNo: "R-20260903-0007", title: "중복 결제", typeKey: "payment_refund", status: "in_progress", current: true },
+      ...entries,
+    ];
+    const { container } = render(<InboxTimeline entries={withDividers} labels={labels} />);
+    const dividers = container.querySelectorAll('[data-kind="divider"]');
+    expect(dividers).toHaveLength(2);
+    expect(dividers[0]).toHaveAttribute("data-current", "false");
+    expect(dividers[0]).toHaveTextContent("R-20260721-0002");
+    expect(dividers[0]).toHaveTextContent("계정/로그인");
+    expect(dividers[0]).toHaveTextContent("완료");
+    expect(dividers[1]).toHaveAttribute("data-current", "true");
+    expect(dividers[1]).toHaveTextContent("결제/환불");
   });
 });

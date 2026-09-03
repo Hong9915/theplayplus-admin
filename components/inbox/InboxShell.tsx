@@ -6,7 +6,7 @@ import type { EventRow } from "@/lib/events";
 import type { TemplateRow } from "@/lib/templates";
 import type { MessageRow } from "@/lib/messages";
 import type { InquiryListQuery } from "@/lib/inquiry-filters";
-import { buildTimeline } from "@/lib/timeline";
+import { buildAccountTimeline, type AccountThread } from "@/lib/timeline";
 import InboxNav from "@/components/inbox/InboxNav";
 import InboxList from "@/components/inbox/InboxList";
 import InboxConversation from "@/components/inbox/InboxConversation";
@@ -22,6 +22,8 @@ export interface InboxSelection {
   templates: TemplateRow[];
   messages: MessageRow[];
   siblingIds: string[];
+  /** 같은 게임·같은 계정의 다른 문의와 그 대화. 접수 순 정렬은 buildAccountTimeline이 한다. */
+  pastThreads: AccountThread[];
 }
 
 /** 목록 머리에 보여줄 현재 보기 이름. */
@@ -69,7 +71,13 @@ export default function InboxShell({
             labels={labels}
             query={query}
             siblingIds={selected.siblingIds}
-            entries={buildTimeline(selected.inquiry, selected.attachments, selected.messages, selected.notes)}
+            entries={buildAccountTimeline(
+              [
+                ...selected.pastThreads,
+                { inquiry: selected.inquiry, attachments: selected.attachments, messages: selected.messages, notes: selected.notes },
+              ],
+              selected.inquiry.id
+            )}
             templates={selected.templates}
           />
           <InboxDetailPanel inquiry={selected.inquiry} events={selected.events} history={selected.history} />

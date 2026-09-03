@@ -3,6 +3,7 @@ import type { InquiryStatus } from "@/lib/inquiries";
 
 export interface AccountHistoryEntry {
   id: string;
+  inquiryNo: string | null;
   title: string;
   content: string;
   status: InquiryStatus;
@@ -23,7 +24,7 @@ export async function getAccountHistory(
 
   const { data, error } = await supabase
     .from("inquiries")
-    .select("id, title, content, status, group_key, type_key, created_at")
+    .select("id, inquiry_no, title, content, status, group_key, type_key, created_at")
     .eq("game_id", gameId)
     .eq("game_account", gameAccount)
     .neq("id", excludeInquiryId)
@@ -33,8 +34,9 @@ export async function getAccountHistory(
     throw new Error(`Failed to load account history: ${error.message}`);
   }
 
-  return (data ?? []).map((row: { id: string; title: string; content: string | null; status: string; group_key: string; type_key: string; created_at: string }) => ({
+  return (data ?? []).map((row: { id: string; inquiry_no?: string | null; title: string; content: string | null; status: string; group_key: string; type_key: string; created_at: string }) => ({
     id: row.id,
+    inquiryNo: row.inquiry_no ?? null,
     title: row.title,
     content: row.content ?? "",
     status: row.status as InquiryStatus,
