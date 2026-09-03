@@ -1,3 +1,5 @@
+import type { InquiryRow } from "@/lib/inquiries";
+
 export interface MetaEntry {
   key: string;
   label: string;
@@ -75,4 +77,20 @@ export function metaEntries(meta: unknown): MetaEntry[] {
 export function emailLocalPart(email: string): string {
   const at = email.indexOf("@");
   return at === -1 ? email : email.slice(0, at);
+}
+
+/** 상세 패널 "접수 정보"의 행. 값이 빈 고정 항목은 건너뛰고 meta는 metaEntries 순서를 따른다. */
+export function inquiryMetaRows(inquiry: InquiryRow): MetaEntry[] {
+  const fixed: Array<{ label: string; value: string | null }> = [
+    { label: "게임 계정", value: inquiry.gameAccount },
+    { label: "회사명", value: inquiry.companyName },
+    { label: "회신 이메일", value: inquiry.replyEmail },
+    { label: "접수 시각", value: formatReceivedAt(inquiry.createdAt) },
+  ];
+  return [
+    ...fixed
+      .filter((row) => row.value && row.value.trim() !== "")
+      .map((row) => ({ key: row.label, label: row.label, value: row.value as string })),
+    ...metaEntries(inquiry.meta),
+  ];
 }

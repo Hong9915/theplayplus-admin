@@ -15,16 +15,22 @@ export default function AccountHistoryPanel({
   history,
   gameAccount,
   currentTypeKey = null,
+  gameId,
+  frameless = false,
 }: {
   history: AccountHistoryEntry[];
   gameAccount: string | null;
   /** 지금 보고 있는 문의의 유형. 같은 유형이 반복되는지 세는 데 쓴다. */
   currentTypeKey?: string | null;
+  /** 이력 항목 링크가 이 게임의 인박스 URL을 가리킨다. */
+  gameId: string;
+  /** 상세 패널 안에 넣을 때는 카드 테두리 없이. */
+  frameless?: boolean;
 }) {
   const summary = summarizeHistory(history, currentTypeKey);
 
   return (
-    <aside className="border border-line rounded-xl p-4 bg-panel flex flex-col gap-4">
+    <aside className={frameless ? "flex flex-col gap-4" : "border border-line rounded-xl p-4 bg-panel flex flex-col gap-4"}>
       <div>
         <h2 className="font-semibold mb-2">계정 이력</h2>
         {!gameAccount ? (
@@ -51,7 +57,7 @@ export default function AccountHistoryPanel({
                 {/* 항목 전체가 링크다. 제목만 링크로 두면 본문 미리보기를 눌렀을 때
                     아무 일도 없어 답답하다. */}
                 <Link
-                  href={`/inquiries/${entry.id}`}
+                  href={`/games/${gameId}/inquiries/${entry.id}`}
                   className="block rounded-lg border border-line bg-ground/60 px-3 py-2 hover:border-accent hover:bg-ground transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">

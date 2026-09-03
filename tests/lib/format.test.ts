@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { formatElapsed, formatReceivedAt, metaEntries, emailLocalPart } from "@/lib/format";
+import { formatElapsed, formatReceivedAt, metaEntries, emailLocalPart, inquiryMetaRows } from "@/lib/format";
+import type { InquiryRow } from "@/lib/inquiries";
 
 const NOW = new Date("2026-07-23T12:00:00.000Z");
 
@@ -91,5 +92,39 @@ describe("emailLocalPart", () => {
 
   it("returns an empty string for empty input", () => {
     expect(emailLocalPart("")).toBe("");
+  });
+});
+
+describe("inquiryMetaRows", () => {
+  const base: InquiryRow = {
+    id: "inq-1",
+    inquiryNo: "R-20260723-0005",
+    gameId: "game-1",
+    groupKey: "game_usage",
+    typeKey: "bug_report",
+    gameAccount: "player1",
+    companyName: null,
+    replyEmail: "user@example.com",
+    title: "제목",
+    content: "본문",
+    status: "new",
+    priority: "normal",
+    meta: { device: "iPhone 15", app_version: "2.4.1" },
+    draftReply: null,
+    replyContent: null,
+    repliedAt: null,
+    gmailThreadId: null,
+    createdAt: "2026-07-23T13:55:00.000Z",
+  };
+
+  it("lists fixed rows with values, then meta entries in the known order", () => {
+    const rows = inquiryMetaRows(base);
+    expect(rows.map((r) => r.label)).toEqual(["게임 계정", "회신 이메일", "접수 시각", "앱 버전", "기기"]);
+    expect(rows[0].value).toBe("player1");
+  });
+
+  it("skips empty fixed rows", () => {
+    const rows = inquiryMetaRows({ ...base, gameAccount: "  ", meta: {} });
+    expect(rows.map((r) => r.label)).toEqual(["회신 이메일", "접수 시각"]);
   });
 });

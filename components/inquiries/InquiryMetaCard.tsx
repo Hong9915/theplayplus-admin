@@ -1,20 +1,8 @@
 import type { InquiryRow } from "@/lib/inquiries";
-import { formatReceivedAt, metaEntries } from "@/lib/format";
+import { inquiryMetaRows } from "@/lib/format";
 
 export default function InquiryMetaCard({ inquiry }: { inquiry: InquiryRow }) {
-  const fixed: Array<{ label: string; value: string | null }> = [
-    { label: "게임 계정", value: inquiry.gameAccount },
-    { label: "회사명", value: inquiry.companyName },
-    { label: "회신 이메일", value: inquiry.replyEmail },
-    { label: "접수 시각", value: formatReceivedAt(inquiry.createdAt) },
-  ];
-
-  const rows = [
-    ...fixed
-      .filter((row) => row.value && row.value.trim() !== "")
-      .map((row) => ({ key: row.label, label: row.label, value: row.value as string })),
-    ...metaEntries(inquiry.meta),
-  ];
+  const rows = inquiryMetaRows(inquiry);
 
   return (
     <section className="bg-panel border border-line rounded-2xl p-4">

@@ -88,7 +88,7 @@ export default async function InquiryDetailPage({
           </section>
           <InquiryMetaCard inquiry={inquiry} />
           <InquiryEventLog events={events} createdAt={inquiry.createdAt} />
-          <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} currentTypeKey={inquiry.typeKey} />
+          <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} currentTypeKey={inquiry.typeKey} gameId={inquiry.gameId} />
         </div>
       </div>
     </div>
