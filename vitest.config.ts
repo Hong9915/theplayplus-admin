@@ -12,5 +12,7 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
+    // 다른 세션이 만드는 .claude/worktrees 안의 테스트까지 돌리지 않는다.
+    exclude: ["**/node_modules/**", "**/.claude/**"],
   },
 });
