@@ -21,6 +21,7 @@
 | `docs/superpowers/specs/2026-09-02-inquiry-detail-phase1-design.md` | 접수번호, 우선순위, 상세 화면 재구성 |
 | `docs/superpowers/specs/2026-09-02-inquiry-detail-phase2-design.md` | 내부 메모, 변경 이력, 답변 초안 |
 | `docs/superpowers/specs/2026-09-02-inquiry-detail-phase3-design.md` | 답변 템플릿, LLM 답변 추천 |
+| `docs/superpowers/specs/2026-09-04-service-inbox-design.md` | 서비스 문의(제휴·기타) 인박스 — 인박스 스코프, `/service/inquiries`, 마이그레이션 0012·0013 |
 
 충돌이 있으면 이 PRD가 우선한다.
 
@@ -432,7 +433,7 @@ GEMINI_API_KEY / GEMINI_MODEL
 
 | # | 과제 | 상태 |
 |---|---|---|
-| U1 | **서비스(게임 무관) 문의 관리 UI** | 접수 폼 쪽 구현은 완료됐고 `inquiries.game_id`도 nullable이지만, **이 저장소에는 `service_groups`/`service_types` 마이그레이션과 관리 UI가 아직 없다.** 게임 없이 접수된 문의는 현재 어느 문의함에도 나타나지 않는다. 스펙은 최초 설계 문서의 "2026-09-01 추가" 절에 있다. **우선순위 높음 — 데이터는 들어오는데 볼 수 없는 상태다.** |
+| U1 | ~~**서비스(게임 무관) 문의 관리 UI**~~ | **2026-09-04 완료.** 게임 레일의 "서비스 문의" 타일 → `/service/inquiries`. 스펙은 `docs/superpowers/specs/2026-09-04-service-inbox-design.md`. 남은 것: `service_groups`/`service_types` 편집 UI(지금은 Supabase에서 직접), 서비스 문의용 답변 템플릿(의도적으로 제외). |
 | U2 | **템플릿 관리 페이지 진입 링크** | `/games/[gameId]/templates`는 동작하지만 화면상 진입 경로가 없다. 게임 삭제 기능과의 파일 충돌을 피하려 미뤄둔 것으로, 이제 문의함 헤더나 게임 레일에 링크 한 줄을 추가하면 된다. |
 | U3 | **게임별 카테고리 편집 UI** | 게임 생성 시 기본 카테고리가 시드되지만 이후 수정하는 화면이 없다. 현재는 Supabase에서 직접 고쳐야 한다. `CLAUDE.md`는 "게임별 문의 카테고리 커스터마이징"을 기능으로 적고 있으나 실제로는 시드 시점의 기본값만 들어간다. |
 | U4 | **게임 정보 수정** | 생성과 삭제만 있다. 이름·상태·로고·담당자를 바꾸려면 삭제 후 재생성해야 하는데, 그러면 딸린 문의가 함께 지워진다. |

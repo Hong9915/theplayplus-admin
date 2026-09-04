@@ -226,3 +226,5 @@ create table service_types (
 - `service_groups`/`service_types` 편집 UI는 이번 범위에 포함하지 않음 (필요해지면 Supabase에서 직접 관리) — 게임별 카테고리 관리 UI와 달리, 서비스 카테고리는 자주 안 바뀔 것으로 예상되어 최소 범위로 시작
 
 **RLS:** `service_groups`/`service_types` 모두 `games`/`inquiry_groups`/`inquiry_types`와 동일한 패턴 — anon은 select만, 나머지는 이 저장소의 service-role 클라이언트로만 접근.
+
+**2026-09-04:** 이 절의 관리자 UI는 `docs/superpowers/specs/2026-09-04-service-inbox-design.md`대로 구현됐다. 상단 네비 대신 게임 레일 타일, 목록 페이지 대신 기존 인박스 재사용이다.
