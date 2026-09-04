@@ -24,7 +24,7 @@ function SectionTitle({ children }: { children: ReactNode }) {
   return <h2 className="text-xs font-semibold text-muted">{children}</h2>;
 }
 
-/** 오른쪽 상세 패널. 처리 컨트롤·접수 정보·처리 기록과 계정 이력을 탭으로. */
+/** 오른쪽 상세 패널. 처리 컨트롤·접수 정보·처리 기록과 계정 이력을 탭으로. history가 null이면(서비스 문의) 탭 없이 상세만. */
 export default function InboxDetailPanel({
   inquiry,
   events,
@@ -32,10 +32,11 @@ export default function InboxDetailPanel({
 }: {
   inquiry: InquiryRow;
   events: EventRow[];
-  history: AccountHistoryEntry[];
+  history: AccountHistoryEntry[] | null;
 }) {
   const [tab, setTab] = useState<Tab>("detail");
   const rows = inquiryMetaRows(inquiry);
+  const showHistory = history !== null && tab === "history";
 
   const tabClass = (active: boolean) =>
     `h-8 px-3 inline-flex items-center gap-1.5 text-[13px] border-b-2 transition-colors ${
@@ -44,20 +45,22 @@ export default function InboxDetailPanel({
 
   return (
     <aside className="w-[300px] shrink-0 h-full bg-panel flex flex-col overflow-hidden" aria-label="문의 상세">
-      <div className="flex items-center gap-1 h-[52px] px-3 border-b border-line shrink-0" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === "detail"} onClick={() => setTab("detail")} className={tabClass(tab === "detail")}>
-          상세
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")} className={tabClass(tab === "history")}>
-          계정 이력
-          <span className="inline-flex min-w-[18px] h-4 px-1.5 rounded-full bg-ground text-muted text-[11px] leading-4 justify-center font-normal">
-            {history.length}
-          </span>
-        </button>
-      </div>
+      {history !== null && (
+        <div className="flex items-center gap-1 h-[52px] px-3 border-b border-line shrink-0" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === "detail"} onClick={() => setTab("detail")} className={tabClass(tab === "detail")}>
+            상세
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")} className={tabClass(tab === "history")}>
+            계정 이력
+            <span className="inline-flex min-w-[18px] h-4 px-1.5 rounded-full bg-ground text-muted text-[11px] leading-4 justify-center font-normal">
+              {history.length}
+            </span>
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
-        {tab === "detail" ? (
+        {!showHistory ? (
           <>
             <section className="px-4 py-3.5 border-b border-line flex flex-col gap-2.5">
               <SectionTitle>처리</SectionTitle>
@@ -103,7 +106,7 @@ export default function InboxDetailPanel({
           </>
         ) : (
           <div className="px-4 py-3.5">
-            <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} currentTypeKey={inquiry.typeKey} gameId={inquiry.gameId} frameless />
+            <AccountHistoryPanel history={history ?? []} gameAccount={inquiry.gameAccount} currentTypeKey={inquiry.typeKey} gameId={inquiry.gameId} frameless />
           </div>
         )}
       </div>

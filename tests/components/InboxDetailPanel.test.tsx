@@ -65,4 +65,14 @@ describe("InboxDetailPanel", () => {
     expect(screen.getByRole("link", { name: /예전 문의/ })).toHaveAttribute("href", "/games/game-1/inquiries/inq-0");
     expect(screen.queryByText("접수 정보")).not.toBeInTheDocument();
   });
+
+  it("hides the account history tab entirely when history is null (service inquiries)", () => {
+    render(<InboxDetailPanel inquiry={{ ...inquiry, gameAccount: null, companyName: "플레이컴퍼니" }} events={events} history={null} />);
+    expect(screen.queryByRole("tab", { name: /계정 이력/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getByText("접수 정보")).toBeInTheDocument();
+    expect(screen.getByText("회사명")).toBeInTheDocument();
+    expect(screen.getByText("플레이컴퍼니")).toBeInTheDocument();
+    expect(screen.queryByText("게임 계정")).not.toBeInTheDocument();
+  });
 });
