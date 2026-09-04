@@ -2,7 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendReplyEmail, type SentEmail } from "@/lib/gmail";
 import { AUTO_REPLY_ACTOR, recordEvent } from "@/lib/events";
 import { createOutboundMessage, listRfcMessageIds } from "@/lib/messages";
-import { listCategoryLabels, type CategoryLabelMaps } from "@/lib/categories";
+import { listCategoryLabelsForScope, type CategoryLabelMaps } from "@/lib/categories";
+import { scopeForGameId } from "@/lib/inbox-scope";
 import { COMPANY, renderReplyEmailHtml, renderReplyEmailText } from "@/lib/email-template";
 import { EMAIL_LOGO_CID, EMAIL_LOGO_CONTENT_TYPE, EMAIL_LOGO_FILENAME, getEmailLogo } from "@/lib/email-logo";
 import type { AdminSession } from "@/lib/require-admin-session";
@@ -72,10 +73,11 @@ export async function sendInquiryReply(supabase: SupabaseClient, input: SendRepl
 
   // 이전에 오간 메일이 있으면 그 Message-ID를 참조해 같은 스레드에 붙인다.
   // 게임 이름과 유형 라벨은 메일 꾸밈용이라 못 가져와도 발송은 진행한다.
+  // 서비스 문의(game_id null)는 게임명 없이 전역 서비스 카테고리 라벨을 쓴다.
   const [references, gameName, labels] = await Promise.all([
     listRfcMessageIds(supabase, inquiry.id).catch(() => [] as string[]),
     inquiry.game_id ? fetchGameName(supabase, inquiry.game_id).catch(() => null) : Promise.resolve(null),
-    inquiry.game_id ? listCategoryLabels(supabase, inquiry.game_id).catch(() => EMPTY_LABELS) : Promise.resolve(EMPTY_LABELS),
+    listCategoryLabelsForScope(supabase, scopeForGameId(inquiry.game_id)).catch(() => EMPTY_LABELS),
   ]);
 
   const emailInput = {
