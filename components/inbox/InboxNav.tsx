@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { GameRow, CategoryLabelMaps } from "@/lib/categories";
 import type { InquiryFacetCounts, InquiryPriority, InquiryStatus } from "@/lib/inquiries";
 import { inboxHref, type InquiryListQuery } from "@/lib/inquiry-filters";
-import { gameScope } from "@/lib/inbox-scope";
+import type { InboxScope } from "@/lib/inbox-scope";
 import InboxSearch from "@/components/inbox/InboxSearch";
 import DeleteGameButton from "@/components/games/DeleteGameButton";
 
@@ -31,39 +31,48 @@ const ITEM = "flex items-center justify-between gap-2 h-[34px] px-2.5 rounded-lg
 const ITEM_IDLE = "text-muted hover:bg-ground hover:text-ink";
 const ITEM_ACTIVE = "bg-ground text-ink font-semibold";
 
-/** 문의함 보기 열. 각 항목은 현재 쿼리에서 해당 필터만 바꾼 링크다. 건수는 부가 정보라 없어도 그린다. */
+/**
+ * 문의함 보기 열. 각 항목은 현재 쿼리에서 해당 필터만 바꾼 링크다. 건수는 부가 정보라 없어도 그린다.
+ * game은 게임 스코프에서만 오며 상태 배지·템플릿 링크·삭제 버튼에만 쓴다. 서비스 문의에는 그 셋이 없다.
+ */
 export default function InboxNav({
+  scope,
+  title,
   game,
   query,
   labels,
   counts,
   selectedId,
 }: {
-  game: GameRow;
+  scope: InboxScope;
+  title: string;
+  game: GameRow | null;
   query: InquiryListQuery;
   labels: CategoryLabelMaps;
   counts: InquiryFacetCounts | null;
   selectedId: string | null;
 }) {
-  const href = (patch: Partial<InquiryListQuery>) => inboxHref(gameScope(game.id), selectedId, { ...query, ...patch, page: 1 });
+  const href = (patch: Partial<InquiryListQuery>) => inboxHref(scope, selectedId, { ...query, ...patch, page: 1 });
 
   return (
     <aside className="w-[224px] shrink-0 h-full bg-panel border-r border-line flex flex-col gap-4 px-3 py-4 overflow-y-auto" aria-label="문의함 보기">
       <div className="flex flex-col gap-1.5 px-1">
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-base font-bold truncate">{game.name}</h1>
-          <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium shrink-0 ${
-              game.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-ground text-muted"
-            }`}
-          >
-            {game.status === "active" ? "서비스중" : "종료"}
-          </span>
+          <h1 className="text-base font-bold truncate">{title}</h1>
+          {game && (
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium shrink-0 ${
+                game.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-ground text-muted"
+              }`}
+            >
+              {game.status === "active" ? "서비스중" : "종료"}
+            </span>
+          )}
         </div>
         <p className="text-xs text-muted">{counts ? `문의함 · 전체 ${counts.total}건` : "문의함"}</p>
       </div>
 
-      <InboxSearch scope={gameScope(game.id)} query={query} selectedId={selectedId} />
+      <InboxSearch scope={scope} query={query} selectedId={selectedId} />
 
       <ul className="flex flex-col gap-0.5" aria-label="보기">
         {VIEWS.map((view) => {
@@ -131,14 +140,16 @@ export default function InboxNav({
 
       <div className="flex-1" />
 
-      <div className="flex flex-col gap-2 border-t border-line pt-3">
-        <Link href={`/games/${game.id}/templates`} className={`${ITEM} h-8 ${ITEM_IDLE}`}>
-          답변 템플릿
-        </Link>
-        <div className="px-2.5">
-          <DeleteGameButton gameId={game.id} gameName={game.name} inquiryCount={counts?.total ?? 0} />
+      {game && (
+        <div className="flex flex-col gap-2 border-t border-line pt-3">
+          <Link href={`/games/${game.id}/templates`} className={`${ITEM} h-8 ${ITEM_IDLE}`}>
+            답변 템플릿
+          </Link>
+          <div className="px-2.5">
+            <DeleteGameButton gameId={game.id} gameName={game.name} inquiryCount={counts?.total ?? 0} />
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   );
 }

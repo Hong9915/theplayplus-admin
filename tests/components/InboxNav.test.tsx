@@ -5,6 +5,7 @@ import InboxNav from "@/components/inbox/InboxNav";
 import { DEFAULT_QUERY, type InquiryListQuery } from "@/lib/inquiry-filters";
 import type { InquiryFacetCounts } from "@/lib/inquiries";
 import type { GameRow } from "@/lib/categories";
+import { SERVICE_SCOPE, gameScope } from "@/lib/inbox-scope";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
 
@@ -25,7 +26,17 @@ const counts: InquiryFacetCounts = {
 };
 
 function renderNav(query: InquiryListQuery = DEFAULT_QUERY, c: InquiryFacetCounts | null = counts, selectedId: string | null = null) {
-  return render(<InboxNav game={game} query={query} labels={labels} counts={c} selectedId={selectedId} />);
+  return render(<InboxNav scope={gameScope("g1")} title={game.name} game={game} query={query} labels={labels} counts={c} selectedId={selectedId} />);
+}
+
+const serviceLabels = {
+  groupLabels: { business: "사업 제휴 문의", other: "기타 문의" },
+  typeLabels: { publishing: "퍼블리싱 제휴", press: "언론·보도 문의" },
+  typeOrder: ["publishing", "press"],
+};
+
+function renderServiceNav(query: InquiryListQuery = DEFAULT_QUERY, selectedId: string | null = null) {
+  return render(<InboxNav scope={SERVICE_SCOPE} title="서비스 문의" game={null} query={query} labels={serviceLabels} counts={counts} selectedId={selectedId} />);
 }
 
 describe("InboxNav", () => {
@@ -90,5 +101,30 @@ describe("InboxNav", () => {
     renderNav();
     expect(screen.getByRole("link", { name: "답변 템플릿" })).toHaveAttribute("href", "/games/g1/templates");
     expect(screen.getByRole("button", { name: /삭제/ })).toBeInTheDocument();
+  });
+
+  describe("service scope", () => {
+    it("shows the service title without a game status badge", () => {
+      renderServiceNav();
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("서비스 문의");
+      expect(screen.queryByText("서비스중")).not.toBeInTheDocument();
+      expect(screen.queryByText("종료")).not.toBeInTheDocument();
+      expect(screen.getByText("문의함 · 전체 23건")).toBeInTheDocument();
+    });
+
+    it("links views and types under /service/inquiries", () => {
+      renderServiceNav({ ...DEFAULT_QUERY, sort: "oldest" }, "i1");
+      expect(screen.getByRole("link", { name: /^접수/ })).toHaveAttribute("href", "/service/inquiries/i1?status=new&sort=oldest");
+      const list = screen.getByRole("list", { name: "유형" });
+      const links = within(list).getAllByRole("link");
+      expect(links.map((l) => l.textContent)).toEqual(["퍼블리싱 제휴0", "언론·보도 문의0"]);
+      expect(links[0]).toHaveAttribute("href", "/service/inquiries/i1?type=publishing&sort=oldest");
+    });
+
+    it("has no template link and no delete button", () => {
+      renderServiceNav();
+      expect(screen.queryByRole("link", { name: "답변 템플릿" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /삭제/ })).not.toBeInTheDocument();
+    });
   });
 });
