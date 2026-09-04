@@ -8,7 +8,8 @@ export type InquiryPriority = "urgent" | "high" | "normal" | "low";
 export interface InquiryRow {
   id: string;
   inquiryNo: string | null;
-  gameId: string;
+  /** 서비스 문의(제휴·기타)는 게임이 없어 null. */
+  gameId: string | null;
   groupKey: string;
   typeKey: string;
   gameAccount: string | null;
@@ -42,7 +43,7 @@ export interface AttachmentWithUrl {
 function mapInquiryRow(row: {
   id: string;
   inquiry_no: string | null;
-  game_id: string;
+  game_id: string | null;
   group_key: string;
   type_key: string;
   game_account: string | null;

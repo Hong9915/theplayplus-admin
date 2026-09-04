@@ -7,7 +7,7 @@ import type { TemplateRow } from "@/lib/templates";
 import type { MessageRow } from "@/lib/messages";
 import type { InquiryListQuery } from "@/lib/inquiry-filters";
 import { buildAccountTimeline, type AccountThread } from "@/lib/timeline";
-import { gameScope } from "@/lib/inbox-scope";
+import type { InboxScope } from "@/lib/inbox-scope";
 import InboxNav from "@/components/inbox/InboxNav";
 import InboxList from "@/components/inbox/InboxList";
 import InboxConversation from "@/components/inbox/InboxConversation";
@@ -17,7 +17,8 @@ import InboxEmptyState from "@/components/inbox/InboxEmptyState";
 export interface InboxSelection {
   inquiry: InquiryRow;
   attachments: AttachmentWithUrl[];
-  history: AccountHistoryEntry[];
+  /** 계정 이력. 서비스 문의는 게임 계정이 없어 null. */
+  history: AccountHistoryEntry[] | null;
   notes: NoteRow[];
   events: EventRow[];
   templates: TemplateRow[];
@@ -44,6 +45,8 @@ export function describeView(query: InquiryListQuery): string {
 
 /** 4단 배치. 게임 레일은 관리자 layout이 그리므로 여기에는 보기·목록·대화·상세만 있다. */
 export default function InboxShell({
+  scope,
+  title,
   game,
   query,
   labels,
@@ -51,7 +54,9 @@ export default function InboxShell({
   listPage,
   selected,
 }: {
-  game: GameRow;
+  scope: InboxScope;
+  title: string;
+  game: GameRow | null;
   query: InquiryListQuery;
   labels: CategoryLabelMaps;
   counts: InquiryFacetCounts | null;
@@ -59,11 +64,10 @@ export default function InboxShell({
   selected: InboxSelection | null;
 }) {
   const selectedId = selected?.inquiry.id ?? null;
-  const scope = gameScope(game.id);
 
   return (
     <div className="flex h-screen min-w-[1180px] flex-1">
-      <InboxNav scope={scope} title={game.name} game={game} query={query} labels={labels} counts={counts} selectedId={selectedId} />
+      <InboxNav scope={scope} title={title} game={game} query={query} labels={labels} counts={counts} selectedId={selectedId} />
       <InboxList scope={scope} page={listPage} query={query} labels={labels} selectedId={selectedId} viewLabel={describeView(query)} />
       {selected ? (
         <>

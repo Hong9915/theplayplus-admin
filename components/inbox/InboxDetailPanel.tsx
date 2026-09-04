@@ -106,7 +106,9 @@ export default function InboxDetailPanel({
           </>
         ) : (
           <div className="px-4 py-3.5">
-            <AccountHistoryPanel history={history ?? []} gameAccount={inquiry.gameAccount} currentTypeKey={inquiry.typeKey} gameId={inquiry.gameId} frameless />
+            {inquiry.gameId !== null && (
+              <AccountHistoryPanel history={history ?? []} gameAccount={inquiry.gameAccount} currentTypeKey={inquiry.typeKey} gameId={inquiry.gameId} frameless />
+            )}
           </div>
         )}
       </div>
