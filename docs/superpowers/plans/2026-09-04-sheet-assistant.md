@@ -2586,7 +2586,7 @@ describe("ProposalCard", () => {
         onChange={vi.fn()}
       />
     );
-    expect(screen.getByText("행 추가")).toBeInTheDocument();
+    expect(screen.getByText(/행 추가/)).toBeInTheDocument();
     expect(screen.getByText("c@x.com")).toBeInTheDocument();
   });
 
@@ -3208,7 +3208,7 @@ describe("ConversationSidebar", () => {
     expect(screen.getByText("여신 키우기")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "VIP 확인" })).toHaveAttribute("href", "/games/g1/assistant?c=c1");
     expect(screen.getByRole("link", { name: "보상 코드" })).toHaveAttribute("aria-current", "true");
-    expect(screen.getByRole("link", { name: "새 대화" })).toHaveAttribute("href", "/games/g1/assistant");
+    expect(screen.getByRole("link", { name: /새 대화/ })).toHaveAttribute("href", "/games/g1/assistant");
   });
 
   it("deletes a conversation and navigates away when it was selected", async () => {
@@ -3221,7 +3221,7 @@ describe("ConversationSidebar", () => {
   it("opens settings", async () => {
     const onOpenSettings = vi.fn();
     render(<ConversationSidebar gameId="g1" gameName="G" conversations={[]} selectedId={null} onOpenSettings={onOpenSettings} />);
-    await userEvent.click(screen.getByRole("button", { name: "시트 설정" }));
+    await userEvent.click(screen.getByRole("button", { name: /시트 설정/ }));
     expect(onOpenSettings).toHaveBeenCalled();
   });
 });
