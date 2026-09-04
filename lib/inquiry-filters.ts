@@ -1,4 +1,5 @@
 import type { InquiryPriority, InquiryStatus } from "@/lib/inquiries";
+import { scopeBasePath, type InboxScope } from "@/lib/inbox-scope";
 
 export type InquirySort = "newest" | "oldest" | "priority";
 
@@ -91,28 +92,29 @@ export function toInquiryListSearch(query: InquiryListQuery): string {
 }
 
 /** 목록 화면으로 돌아가는 링크. */
-export function inquiryListHref(gameId: string, query: InquiryListQuery): string {
+export function inquiryListHref(scope: InboxScope, query: InquiryListQuery): string {
   const search = toInquiryListSearch(query);
-  return search ? `/games/${gameId}/inquiries?${search}` : `/games/${gameId}/inquiries`;
+  const base = `${scopeBasePath(scope)}/inquiries`;
+  return search ? `${base}?${search}` : base;
 }
 
 /** 인박스에서 문의 하나를 연 URL. 목록 상태는 같은 URL의 쿼리로 남는다. */
-export function inquiryHref(gameId: string, inquiryId: string, query: InquiryListQuery): string {
+export function inquiryHref(scope: InboxScope, inquiryId: string, query: InquiryListQuery): string {
   const search = toInquiryListSearch(query);
-  const base = `/games/${gameId}/inquiries/${inquiryId}`;
+  const base = `${scopeBasePath(scope)}/inquiries/${inquiryId}`;
   return search ? `${base}?${search}` : base;
 }
 
 /** 선택된 문의가 있으면 유지한 채, 없으면 목록만 가리키는 URL. 필터·정렬·페이지 이동이 쓴다. */
-export function inboxHref(gameId: string, selectedId: string | null, query: InquiryListQuery): string {
-  return selectedId ? inquiryHref(gameId, selectedId, query) : inquiryListHref(gameId, query);
+export function inboxHref(scope: InboxScope, selectedId: string | null, query: InquiryListQuery): string {
+  return selectedId ? inquiryHref(scope, selectedId, query) : inquiryListHref(scope, query);
 }
 
 /** 예전 /inquiries/{id}?list=... 링크를 새 URL로 옮긴다. Slack에 이미 나간 링크 호환용. */
 export function legacyInquiryRedirectHref(
-  gameId: string,
+  scope: InboxScope,
   inquiryId: string,
   listParam: string | null | undefined
 ): string {
-  return inquiryHref(gameId, inquiryId, parseInquiryListQuery(listParam ?? ""));
+  return inquiryHref(scope, inquiryId, parseInquiryListQuery(listParam ?? ""));
 }

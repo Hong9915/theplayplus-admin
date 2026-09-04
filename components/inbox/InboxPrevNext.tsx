@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { inquiryHref, type InquiryListQuery } from "@/lib/inquiry-filters";
+import type { InboxScope } from "@/lib/inbox-scope";
 
 const BTN = "w-7 h-[26px] inline-flex items-center justify-center rounded-md text-muted hover:bg-ground hover:text-ink transition-colors";
 const BTN_OFF = "w-7 h-[26px] inline-flex items-center justify-center rounded-md text-muted opacity-40";
@@ -14,12 +15,12 @@ function Chevron({ dir }: { dir: "left" | "right" }) {
 
 /** 같은 목록 조건 안에서 이전/다음 문의. ids는 listInquiryIds가 같은 조건·정렬로 뽑은 전체 id다. */
 export default function InboxPrevNext({
-  gameId,
+  scope,
   inquiryId,
   query,
   ids,
 }: {
-  gameId: string;
+  scope: InboxScope;
   inquiryId: string;
   query: InquiryListQuery;
   ids: string[];
@@ -33,7 +34,7 @@ export default function InboxPrevNext({
   return (
     <nav className="flex items-center gap-0.5 border border-line rounded-lg p-0.5" aria-label="문의 이동">
       {prevId ? (
-        <Link href={inquiryHref(gameId, prevId, query)} className={BTN} aria-label="이전 문의" rel="prev">
+        <Link href={inquiryHref(scope, prevId, query)} className={BTN} aria-label="이전 문의" rel="prev">
           <Chevron dir="left" />
         </Link>
       ) : (
@@ -45,7 +46,7 @@ export default function InboxPrevNext({
         {index + 1} / {ids.length}
       </span>
       {nextId ? (
-        <Link href={inquiryHref(gameId, nextId, query)} className={BTN} aria-label="다음 문의" rel="next">
+        <Link href={inquiryHref(scope, nextId, query)} className={BTN} aria-label="다음 문의" rel="next">
           <Chevron dir="right" />
         </Link>
       ) : (

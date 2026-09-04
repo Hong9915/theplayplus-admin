@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { getInquiryById } from "@/lib/inquiries";
 import { legacyInquiryRedirectHref } from "@/lib/inquiry-filters";
+import { scopeForGameId } from "@/lib/inbox-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -22,5 +23,5 @@ export default async function LegacyInquiryPage({
     notFound();
   }
   const listParam = Array.isArray(searchParams.list) ? searchParams.list[0] : searchParams.list;
-  redirect(legacyInquiryRedirectHref(inquiry.gameId, inquiry.id, listParam));
+  redirect(legacyInquiryRedirectHref(scopeForGameId(inquiry.gameId), inquiry.id, listParam));
 }

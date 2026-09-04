@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import InboxList from "@/components/inbox/InboxList";
 import type { InquiryPage, InquiryRow } from "@/lib/inquiries";
 import { DEFAULT_QUERY, type InquiryListQuery } from "@/lib/inquiry-filters";
+import { gameScope } from "@/lib/inbox-scope";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -50,7 +51,7 @@ const labels = {
 };
 
 function renderList(page: InquiryPage, query: InquiryListQuery = DEFAULT_QUERY, selectedId: string | null = null) {
-  return render(<InboxList gameId="g1" page={page} query={query} labels={labels} selectedId={selectedId} viewLabel="전체" />);
+  return render(<InboxList scope={gameScope("g1")} page={page} query={query} labels={labels} selectedId={selectedId} viewLabel="전체" />);
 }
 
 describe("InboxList", () => {

@@ -5,6 +5,7 @@ import InboxConversation from "@/components/inbox/InboxConversation";
 import type { InquiryRow } from "@/lib/inquiries";
 import type { TimelineEntry } from "@/lib/timeline";
 import { DEFAULT_QUERY } from "@/lib/inquiry-filters";
+import { gameScope } from "@/lib/inbox-scope";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/inbox/ReplyComposer", () => ({ default: () => <div data-testid="composer" /> }));
@@ -39,7 +40,7 @@ const entries: TimelineEntry[] = [{ kind: "inquiry", id: "inq-1", at: inquiry.cr
 
 function renderIt(overrides: Partial<InquiryRow> = {}) {
   return render(
-    <InboxConversation gameId="g1" inquiry={{ ...inquiry, ...overrides }} labels={labels} query={DEFAULT_QUERY} siblingIds={["x", "inq-1", "y"]} entries={entries} templates={[]} />
+    <InboxConversation scope={gameScope("g1")} inquiry={{ ...inquiry, ...overrides }} labels={labels} query={DEFAULT_QUERY} siblingIds={["x", "inq-1", "y"]} entries={entries} templates={[]} />
   );
 }
 
@@ -54,6 +55,15 @@ describe("InboxConversation", () => {
     expect(screen.getByText("2 / 3")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "완료로 표시" })).toBeInTheDocument();
     expect(screen.getByTestId("composer")).toBeInTheDocument();
+  });
+
+  it("keeps header meta on one line so a narrow column truncates instead of wrapping", () => {
+    renderIt();
+    const badge = screen.getByText("처리중");
+    expect(badge.className).toMatch(/whitespace-nowrap/);
+    expect(badge.className).toMatch(/shrink-0/);
+    expect(screen.getByText("게임 이용 문의 · 결제/환불").className).toMatch(/truncate/);
+    expect(screen.getByText(/접수 .* · 경과 0분/).className).toMatch(/truncate/);
   });
 
   it("shows 회신 확인 only when there is a Gmail thread", () => {

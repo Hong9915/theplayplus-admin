@@ -8,6 +8,7 @@ import {
   parseInquiryListQuery,
   toInquiryListSearch,
 } from "@/lib/inquiry-filters";
+import { SERVICE_SCOPE, gameScope } from "@/lib/inbox-scope";
 
 describe("parseInquiryListQuery", () => {
   it("returns defaults for empty params", () => {
@@ -61,10 +62,18 @@ describe("toInquiryListSearch", () => {
 
 describe("hrefs", () => {
   it("builds the list href with and without a query", () => {
-    expect(inquiryListHref("g1", DEFAULT_QUERY)).toBe("/games/g1/inquiries");
-    expect(inquiryListHref("g1", { ...DEFAULT_QUERY, status: "new" })).toBe("/games/g1/inquiries?status=new");
+    expect(inquiryListHref(gameScope("g1"), DEFAULT_QUERY)).toBe("/games/g1/inquiries");
+    expect(inquiryListHref(gameScope("g1"), { ...DEFAULT_QUERY, status: "new" })).toBe("/games/g1/inquiries?status=new");
   });
 
+  it("builds service inbox hrefs under /service", () => {
+    expect(inquiryListHref(SERVICE_SCOPE, DEFAULT_QUERY)).toBe("/service/inquiries");
+    expect(inquiryListHref(SERVICE_SCOPE, { ...DEFAULT_QUERY, status: "new" })).toBe("/service/inquiries?status=new");
+    expect(inquiryHref(SERVICE_SCOPE, "i1", { ...DEFAULT_QUERY, page: 2 })).toBe("/service/inquiries/i1?page=2");
+    expect(inboxHref(SERVICE_SCOPE, null, DEFAULT_QUERY)).toBe("/service/inquiries");
+    expect(inboxHref(SERVICE_SCOPE, "i1", DEFAULT_QUERY)).toBe("/service/inquiries/i1");
+    expect(legacyInquiryRedirectHref(SERVICE_SCOPE, "i1", "status=new")).toBe("/service/inquiries/i1?status=new");
+  });
 });
 
 describe("priority and stale", () => {
@@ -93,22 +102,22 @@ describe("priority and stale", () => {
 
 describe("inbox hrefs", () => {
   it("builds the inquiry href with the list query on the same URL", () => {
-    expect(inquiryHref("g1", "i1", DEFAULT_QUERY)).toBe("/games/g1/inquiries/i1");
-    expect(inquiryHref("g1", "i1", { ...DEFAULT_QUERY, status: "new", page: 2 })).toBe(
+    expect(inquiryHref(gameScope("g1"), "i1", DEFAULT_QUERY)).toBe("/games/g1/inquiries/i1");
+    expect(inquiryHref(gameScope("g1"), "i1", { ...DEFAULT_QUERY, status: "new", page: 2 })).toBe(
       "/games/g1/inquiries/i1?status=new&page=2"
     );
   });
 
   it("inboxHref keeps the selected inquiry when there is one", () => {
-    expect(inboxHref("g1", null, { ...DEFAULT_QUERY, q: "x" })).toBe("/games/g1/inquiries?q=x");
-    expect(inboxHref("g1", "i1", { ...DEFAULT_QUERY, q: "x" })).toBe("/games/g1/inquiries/i1?q=x");
+    expect(inboxHref(gameScope("g1"), null, { ...DEFAULT_QUERY, q: "x" })).toBe("/games/g1/inquiries?q=x");
+    expect(inboxHref(gameScope("g1"), "i1", { ...DEFAULT_QUERY, q: "x" })).toBe("/games/g1/inquiries/i1?q=x");
   });
 
   it("legacy redirect decodes the old list param into the new URL", () => {
-    expect(legacyInquiryRedirectHref("g1", "i1", undefined)).toBe("/games/g1/inquiries/i1");
-    expect(legacyInquiryRedirectHref("g1", "i1", "status=new&sort=oldest")).toBe(
+    expect(legacyInquiryRedirectHref(gameScope("g1"), "i1", undefined)).toBe("/games/g1/inquiries/i1");
+    expect(legacyInquiryRedirectHref(gameScope("g1"), "i1", "status=new&sort=oldest")).toBe(
       "/games/g1/inquiries/i1?status=new&sort=oldest"
     );
-    expect(legacyInquiryRedirectHref("g1", "i1", "status=bogus")).toBe("/games/g1/inquiries/i1");
+    expect(legacyInquiryRedirectHref(gameScope("g1"), "i1", "status=bogus")).toBe("/games/g1/inquiries/i1");
   });
 });

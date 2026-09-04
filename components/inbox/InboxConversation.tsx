@@ -3,6 +3,7 @@ import type { CategoryLabelMaps } from "@/lib/categories";
 import type { TemplateRow } from "@/lib/templates";
 import type { TimelineEntry } from "@/lib/timeline";
 import type { InquiryListQuery } from "@/lib/inquiry-filters";
+import type { InboxScope } from "@/lib/inbox-scope";
 import { formatElapsed, formatReceivedAt } from "@/lib/format";
 import StatusBadge from "@/components/ui/StatusBadge";
 import ResolveButton from "@/components/inquiries/ResolveButton";
@@ -13,7 +14,7 @@ import ReplyComposer from "@/components/inbox/ReplyComposer";
 
 /** 가운데 열: 헤더(제목·상태·이동·완료) / 타임라인 / 작성란. */
 export default function InboxConversation({
-  gameId,
+  scope,
   inquiry,
   labels,
   query,
@@ -21,7 +22,7 @@ export default function InboxConversation({
   entries,
   templates,
 }: {
-  gameId: string;
+  scope: InboxScope;
   inquiry: InquiryRow;
   labels: CategoryLabelMaps;
   query: InquiryListQuery;
@@ -29,6 +30,8 @@ export default function InboxConversation({
   entries: TimelineEntry[];
   templates: TemplateRow[];
 }) {
+  const category = `${labels.groupLabels[inquiry.groupKey] ?? inquiry.groupKey} · ${labels.typeLabels[inquiry.typeKey] ?? inquiry.typeKey}`;
+  const received = `접수 ${formatReceivedAt(inquiry.createdAt)} · 경과 ${formatElapsed(inquiry.createdAt)}`;
   return (
     <section className="flex-1 min-w-0 h-full bg-panel border-r border-line flex flex-col overflow-hidden" aria-label="대화">
       <header className="flex items-center justify-between gap-4 h-16 px-5 border-b border-line shrink-0">
@@ -37,18 +40,19 @@ export default function InboxConversation({
             <span className="font-mono text-[13px] text-muted shrink-0">{inquiry.inquiryNo ?? "—"}</span>
             <h1 className="text-base font-bold truncate">{inquiry.title}</h1>
           </div>
-          <div className="flex items-center gap-2.5 text-xs text-muted">
+          {/* 창이 좁아 폭이 모자라면 줄바꿈 대신 말줄임. 헤더 높이가 고정이라 줄이 늘면 위아래가 잘린다. */}
+          <div className="flex items-center gap-2.5 min-w-0 text-xs text-muted">
             <StatusBadge status={inquiry.status} />
-            <span>
-              {labels.groupLabels[inquiry.groupKey] ?? inquiry.groupKey} · {labels.typeLabels[inquiry.typeKey] ?? inquiry.typeKey}
+            <span className="truncate" title={category}>
+              {category}
             </span>
-            <span>
-              접수 {formatReceivedAt(inquiry.createdAt)} · 경과 {formatElapsed(inquiry.createdAt)}
+            <span className="truncate" title={received}>
+              {received}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <InboxPrevNext gameId={gameId} inquiryId={inquiry.id} query={query} ids={siblingIds} />
+          <InboxPrevNext scope={scope} inquiryId={inquiry.id} query={query} ids={siblingIds} />
           {inquiry.gmailThreadId && <SyncRepliesButton inquiryId={inquiry.id} />}
           <ResolveButton inquiryId={inquiry.id} currentStatus={inquiry.status} />
         </div>

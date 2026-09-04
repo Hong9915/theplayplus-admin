@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { InquiryPage, InquiryRow, InquiryStatus } from "@/lib/inquiries";
 import type { CategoryLabelMaps } from "@/lib/categories";
 import { SORT_OPTIONS, inboxHref, inquiryHref, type InquiryListQuery } from "@/lib/inquiry-filters";
+import type { InboxScope } from "@/lib/inbox-scope";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { formatElapsed } from "@/lib/format";
 
@@ -32,14 +33,14 @@ function firstLine(content: string): string {
 }
 
 export default function InboxList({
-  gameId,
+  scope,
   page,
   query,
   labels,
   selectedId,
   viewLabel,
 }: {
-  gameId: string;
+  scope: InboxScope;
   page: InquiryPage;
   query: InquiryListQuery;
   labels: CategoryLabelMaps;
@@ -65,7 +66,7 @@ export default function InboxList({
 
   function navigate(next: Partial<InquiryListQuery>, resetPage = true) {
     const merged: InquiryListQuery = { ...query, ...next, page: resetPage ? 1 : next.page ?? query.page };
-    router.replace(inboxHref(gameId, selectedId, merged));
+    router.replace(inboxHref(scope, selectedId, merged));
   }
 
   const allChecked = rows.length > 0 && rows.every((row) => checked.has(row.id));
@@ -149,7 +150,7 @@ export default function InboxList({
               return (
                 <li
                   key={inquiry.id}
-                  onClick={() => router.push(inquiryHref(gameId, inquiry.id, query))}
+                  onClick={() => router.push(inquiryHref(scope, inquiry.id, query))}
                   aria-current={selected ? "true" : undefined}
                   className={`flex gap-2 px-4 py-3 border-b border-line cursor-pointer transition-colors border-l-2 ${
                     selected || inquiry.status === "new" ? "border-l-accent" : "border-l-transparent"

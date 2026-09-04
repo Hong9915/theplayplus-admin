@@ -7,6 +7,7 @@ import type { TemplateRow } from "@/lib/templates";
 import type { MessageRow } from "@/lib/messages";
 import type { InquiryListQuery } from "@/lib/inquiry-filters";
 import { buildAccountTimeline, type AccountThread } from "@/lib/timeline";
+import { gameScope } from "@/lib/inbox-scope";
 import InboxNav from "@/components/inbox/InboxNav";
 import InboxList from "@/components/inbox/InboxList";
 import InboxConversation from "@/components/inbox/InboxConversation";
@@ -58,15 +59,16 @@ export default function InboxShell({
   selected: InboxSelection | null;
 }) {
   const selectedId = selected?.inquiry.id ?? null;
+  const scope = gameScope(game.id);
 
   return (
     <div className="flex h-screen min-w-[1180px] flex-1">
       <InboxNav game={game} query={query} labels={labels} counts={counts} selectedId={selectedId} />
-      <InboxList gameId={game.id} page={listPage} query={query} labels={labels} selectedId={selectedId} viewLabel={describeView(query)} />
+      <InboxList scope={scope} page={listPage} query={query} labels={labels} selectedId={selectedId} viewLabel={describeView(query)} />
       {selected ? (
         <>
           <InboxConversation
-            gameId={game.id}
+            scope={scope}
             inquiry={selected.inquiry}
             labels={labels}
             query={query}

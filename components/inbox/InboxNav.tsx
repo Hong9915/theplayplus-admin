@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { GameRow, CategoryLabelMaps } from "@/lib/categories";
 import type { InquiryFacetCounts, InquiryPriority, InquiryStatus } from "@/lib/inquiries";
 import { inboxHref, type InquiryListQuery } from "@/lib/inquiry-filters";
+import { gameScope } from "@/lib/inbox-scope";
 import InboxSearch from "@/components/inbox/InboxSearch";
 import DeleteGameButton from "@/components/games/DeleteGameButton";
 
@@ -44,7 +45,7 @@ export default function InboxNav({
   counts: InquiryFacetCounts | null;
   selectedId: string | null;
 }) {
-  const href = (patch: Partial<InquiryListQuery>) => inboxHref(game.id, selectedId, { ...query, ...patch, page: 1 });
+  const href = (patch: Partial<InquiryListQuery>) => inboxHref(gameScope(game.id), selectedId, { ...query, ...patch, page: 1 });
 
   return (
     <aside className="w-[224px] shrink-0 h-full bg-panel border-r border-line flex flex-col gap-4 px-3 py-4 overflow-y-auto" aria-label="문의함 보기">
@@ -62,7 +63,7 @@ export default function InboxNav({
         <p className="text-xs text-muted">{counts ? `문의함 · 전체 ${counts.total}건` : "문의함"}</p>
       </div>
 
-      <InboxSearch gameId={game.id} query={query} selectedId={selectedId} />
+      <InboxSearch scope={gameScope(game.id)} query={query} selectedId={selectedId} />
 
       <ul className="flex flex-col gap-0.5" aria-label="보기">
         {VIEWS.map((view) => {

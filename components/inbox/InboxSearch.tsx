@@ -3,16 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { inboxHref, type InquiryListQuery } from "@/lib/inquiry-filters";
+import type { InboxScope } from "@/lib/inbox-scope";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
 /** 문의함 보기 열의 검색창. 입력을 300ms 모았다가 URL의 q로 옮기고 1페이지로 돌아간다. */
 export default function InboxSearch({
-  gameId,
+  scope,
   query,
   selectedId,
 }: {
-  gameId: string;
+  scope: InboxScope;
   query: InquiryListQuery;
   selectedId: string | null;
 }) {
@@ -35,7 +36,7 @@ export default function InboxSearch({
     setValue(next);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      router.replace(inboxHref(gameId, selectedId, { ...query, q: next.trim(), page: 1 }));
+      router.replace(inboxHref(scope, selectedId, { ...query, q: next.trim(), page: 1 }));
     }, SEARCH_DEBOUNCE_MS);
   }
 
