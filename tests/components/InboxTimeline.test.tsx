@@ -21,10 +21,11 @@ const entries: TimelineEntry[] = [
       { id: "a1", fileName: "명세서.png", signedUrl: "https://signed.example/a1" },
       { id: "a2", fileName: "깨짐.png", signedUrl: null },
     ],
+    translations: {},
   },
   { kind: "note", id: "n-1", at: "2026-09-03T01:40:00.000Z", author: "hong@theplayplus.com", body: "중복 승인 확인" },
-  { kind: "outbound", id: "m-1", at: "2026-09-03T02:05:00.000Z", author: "info@theplayplus.com", body: "환불 처리했습니다", auto: false },
-  { kind: "inbound", id: "m-2", at: "2026-09-03T04:48:00.000Z", author: "luna@example.com", body: "감사합니다" },
+  { kind: "outbound", id: "m-1", inquiryId: "inq-1", at: "2026-09-03T02:05:00.000Z", author: "info@theplayplus.com", body: "환불 처리했습니다", auto: false, translations: {} },
+  { kind: "inbound", id: "m-2", inquiryId: "inq-1", at: "2026-09-03T04:48:00.000Z", author: "luna@example.com", body: "감사합니다", translations: {} },
 ];
 
 describe("InboxTimeline", () => {
@@ -74,7 +75,7 @@ describe("InboxTimeline", () => {
   it("labels an automatic reply so staff do not mistake it for their own", () => {
     render(
       <InboxTimeline
-        entries={[{ kind: "outbound", id: "m-auto", at: "2026-09-03T01:13:00.000Z", author: null, body: "접수되었습니다", auto: true }]}
+        entries={[{ kind: "outbound", id: "m-auto", inquiryId: "inq-1", at: "2026-09-03T01:13:00.000Z", author: null, body: "접수되었습니다", auto: true, translations: {} }]}
         labels={labels}
       />
     );
@@ -86,7 +87,7 @@ describe("InboxTimeline", () => {
   it("falls back to 사용자 when the inquiry has no account", () => {
     const inquiry = entries[0];
     if (inquiry.kind !== "inquiry") throw new Error("fixture");
-    render(<InboxTimeline entries={[{ ...inquiry, author: null, attachments: [] }]} labels={labels} />);
+    render(<InboxTimeline entries={[{ ...inquiry, author: null, attachments: [], translations: {} }]} labels={labels} />);
     expect(screen.getByText("사용자")).toBeInTheDocument();
   });
 

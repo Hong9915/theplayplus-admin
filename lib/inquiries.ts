@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PAGE_SIZE, type InquiryListQuery } from "@/lib/inquiry-filters";
 import { SERVICE_RAIL_KEY, scopeGameId, type InboxScope } from "@/lib/inbox-scope";
+import { parseTranslations, type Translations } from "@/lib/translations";
 
 export type InquiryStatus = "new" | "in_progress" | "resolved";
 export type InquiryPriority = "urgent" | "high" | "normal" | "low";
@@ -31,6 +32,8 @@ export interface InquiryRow {
   /** datetime-local 문자열 (YYYY-MM-DDTHH:mm). */
   occurredAt: string | null;
   deviceInfo: string | null;
+  /** 관리자가 우클릭으로 만든 본문 번역(마이그레이션 0015). 없으면 빈 객체. */
+  translations: Translations;
   createdAt: string;
 }
 
@@ -62,6 +65,7 @@ function mapInquiryRow(row: {
   payment_no?: string | null;
   occurred_at?: string | null;
   device_info?: string | null;
+  translations?: unknown;
   created_at: string;
 }): InquiryRow {
   return {
@@ -86,6 +90,7 @@ function mapInquiryRow(row: {
     paymentNo: row.payment_no ?? null,
     occurredAt: row.occurred_at ?? null,
     deviceInfo: row.device_info ?? null,
+    translations: parseTranslations(row.translations),
     createdAt: row.created_at,
   };
 }

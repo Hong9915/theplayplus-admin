@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdminSession } from "@/lib/require-admin-session";
+import { parseTranslations, type Translations } from "@/lib/translations";
 
 export type MessageDirection = "outbound" | "inbound";
 
@@ -13,6 +14,8 @@ export interface MessageRow {
   sentAt: string;
   /** 매크로 자동 답변. 타임라인이 "자동 발송"으로 구분한다. */
   autoSent: boolean;
+  /** 관리자가 우클릭으로 만든 본문 번역(마이그레이션 0015). 없으면 빈 객체. */
+  translations: Translations;
 }
 
 export interface CreateOutboundMessageInput {
@@ -35,7 +38,7 @@ export interface CreateInboundMessageInput {
   sentAt: string;
 }
 
-const COLUMNS = "id, direction, author_email, body, gmail_message_id, rfc_message_id, sent_at, auto_sent";
+const COLUMNS = "id, direction, author_email, body, gmail_message_id, rfc_message_id, sent_at, auto_sent, translations";
 
 function mapRow(row: {
   id: string;
@@ -46,6 +49,7 @@ function mapRow(row: {
   rfc_message_id: string | null;
   sent_at: string;
   auto_sent?: boolean | null;
+  translations?: unknown;
 }): MessageRow {
   return {
     id: row.id,
@@ -56,7 +60,23 @@ function mapRow(row: {
     rfcMessageId: row.rfc_message_id,
     sentAt: row.sent_at,
     autoSent: row.auto_sent === true,
+    translations: parseTranslations(row.translations),
   };
+}
+
+/** 메시지 하나. 문의 id도 맞아야 한다 — 다른 문의의 메시지를 id만 알고 건드리지 못하게. */
+export async function getMessage(supabase: SupabaseClient, inquiryId: string, messageId: string): Promise<MessageRow | null> {
+  const { data, error } = await supabase
+    .from("inquiry_messages")
+    .select(COLUMNS)
+    .eq("id", messageId)
+    .eq("inquiry_id", inquiryId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+  return mapRow(data);
 }
 
 /** 문의 하나의 대화 기록. 오래된 것부터. */

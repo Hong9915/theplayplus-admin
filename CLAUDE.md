@@ -13,6 +13,8 @@ THE PLAY+ 고객지원 관리자 페이지. `theplayplus-contact`(문의 접수 
 
 7. **유형별 매크로 자동 답변** — 답변 템플릿(`reply_templates`)에 "자동 발송"을 켜 두면(게임·유형당 하나, 공용 템플릿은 유형 전용이 없을 때의 대체) 새 문의에 그 내용을 브랜드 이메일로 보낸다. 접수 직후가 아니라 **30분~1시간 뒤 랜덤**으로 나간다: 접수 시 DB 트리거가 `inquiries.auto_reply_due_at`을 채우고(그 게임에 자동 발송 템플릿이 있을 때만), Supabase `pg_cron`이 매분 `/api/auto-reply/run`을 호출하면 `claim_due_auto_replies` RPC로 예정 시각이 지난 건을 가져와 보낸다(마이그레이션 0014). RPC가 예정을 지우면서 행을 돌려주므로 호출이 겹쳐도 두 번 보내지 않고, 기다리는 사이 관리자가 먼저 답했거나 템플릿이 꺼졌으면 건너뛰며, 발송 실패는 5분 뒤로 다시 예약한다. 상태는 `접수`로 남기고 마지막 답변도 갱신하지 않으며, 타임라인에는 "자동 발송"으로, 이력에는 "자동 답변 발송"으로 구분해 보인다. 인증은 Slack 알림과 같은 `x-webhook-secret`(`lib/webhook-secret.ts`)
 
+8. **대화 번역** — 대화 열의 말풍선(문의 본문·이메일 회신·보낸 답변, 내부 메모 제외)을 우클릭하면 "한국어로 번역" / "중국어(간체)로 번역" 메뉴가 뜨고, 번역문이 원문 아래에 이어 붙는다(`components/inbox/TranslatableBody.tsx`). `POST /api/inquiries/{id}/translate`가 DB의 원문을 읽어 DeepL(`lib/deepl.ts`, `DEEPL_API_KEY`, `:fx` 키면 무료 엔드포인트)로 번역하고 `inquiries.translations` / `inquiry_messages.translations` jsonb(`{"ko":…, "zh":…}`, 마이그레이션 0015)에 언어별로 저장해 다시 열어도 남는다(`lib/translations.ts`). 원문이 이미 그 언어면 저장하지 않고 안내만 한다. 저장된 언어는 메뉴가 숨기기/다시 번역으로 바뀐다.
+
 상세 설계는 `docs/superpowers/specs/2026-09-01-admin-panel-design.md`, 인박스 화면은 `docs/superpowers/specs/2026-09-03-inbox-layout-design.md`, 자동 답변은 `docs/superpowers/specs/2026-09-03-auto-reply-design.md` 참고.
 
 ## 기술 스택

@@ -57,6 +57,7 @@ describe("listMessages", () => {
       rfcMessageId: "<a@theplayplus.com>",
       sentAt: "2026-09-01T00:00:00.000Z",
       autoSent: false,
+      translations: {},
     });
     expect(result[1].direction).toBe("inbound");
   });

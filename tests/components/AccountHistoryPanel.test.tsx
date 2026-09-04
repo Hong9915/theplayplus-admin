@@ -14,6 +14,7 @@ const entry: AccountHistoryEntry = {
   occurredAt: null,
   paymentNo: null,
   deviceInfo: null,
+  translations: {},
   createdAt: "2025-06-01T00:00:00.000Z",
 };
 

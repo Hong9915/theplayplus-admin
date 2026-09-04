@@ -2,6 +2,7 @@ import type { AttachmentWithUrl, InquiryRow, InquiryStatus } from "@/lib/inquiri
 import type { MessageRow } from "@/lib/messages";
 import type { NoteRow } from "@/lib/notes";
 import { inquiryDetailRows, type MetaEntry } from "@/lib/format";
+import type { Translations } from "@/lib/translations";
 
 /** 타임라인을 만드는 데 필요한 문의 정보. 현재 문의(InquiryRow)와 계정 이력 항목 모두 여기에 맞춘다. */
 export type ThreadInquiry = Pick<
@@ -17,6 +18,7 @@ export type ThreadInquiry = Pick<
   | "occurredAt"
   | "paymentNo"
   | "deviceInfo"
+  | "translations"
 >;
 
 /** 문의 하나와 거기에 딸린 첨부·메시지·메모. */
@@ -47,9 +49,11 @@ export type TimelineEntry =
       /** 유형별 추가 항목(발생 일시·결제번호·기기/사양). 말풍선 안에 본문 아래로 그린다. */
       details: MetaEntry[];
       attachments: AttachmentWithUrl[];
+      /** 우클릭 번역 결과. 언어별로 있으면 말풍선 아래 이어서 그린다. */
+      translations: Translations;
     }
-  | { kind: "outbound"; id: string; at: string; author: string | null; body: string; auto: boolean }
-  | { kind: "inbound"; id: string; at: string; author: string | null; body: string }
+  | { kind: "outbound"; id: string; inquiryId: string; at: string; author: string | null; body: string; auto: boolean; translations: Translations }
+  | { kind: "inbound"; id: string; inquiryId: string; at: string; author: string | null; body: string; translations: Translations }
   | { kind: "note"; id: string; at: string; author: string; body: string };
 
 /**
@@ -71,11 +75,19 @@ export function buildTimeline(
     body: inquiry.content,
     details: inquiryDetailRows(inquiry),
     attachments,
+    translations: inquiry.translations,
   };
 
   const rest: TimelineEntry[] = [
     ...messages.map((message): TimelineEntry => {
-      const base = { id: message.id, at: message.sentAt, author: message.authorEmail, body: message.body };
+      const base = {
+        id: message.id,
+        inquiryId: inquiry.id,
+        at: message.sentAt,
+        author: message.authorEmail,
+        body: message.body,
+        translations: message.translations,
+      };
       return message.direction === "outbound"
         ? { kind: "outbound", ...base, auto: message.autoSent }
         : { kind: "inbound", ...base };

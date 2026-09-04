@@ -33,6 +33,7 @@ function makeInquiry(overrides: Partial<InquiryRow>): InquiryRow {
     repliedAt: null,
     gmailThreadId: null,
     locale: null,
+    translations: {},
     paymentNo: null,
     occurredAt: null,
     deviceInfo: null,

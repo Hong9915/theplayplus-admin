@@ -47,6 +47,7 @@ function inquiry(overrides: Partial<inquiriesModule.InquiryRow>): inquiriesModul
     repliedAt: null,
     gmailThreadId: null,
     locale: null,
+    translations: {},
     paymentNo: null,
     occurredAt: null,
     deviceInfo: null,
@@ -106,7 +107,7 @@ describe("loadInboxPage", () => {
   it("game scope: loads history, past threads, and templates for the selected inquiry", async () => {
     vi.mocked(inquiriesModule.getInquiryById).mockResolvedValue(inquiry({}));
     vi.mocked(historyModule.getAccountHistory).mockResolvedValue([
-      { id: "inq-0", inquiryNo: null, title: "예전", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "bug_report", occurredAt: null, paymentNo: null, deviceInfo: null, createdAt: "2026-08-01T00:00:00.000Z" },
+      { id: "inq-0", inquiryNo: null, title: "예전", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "bug_report", occurredAt: null, paymentNo: null, deviceInfo: null, translations: {}, createdAt: "2026-08-01T00:00:00.000Z" },
     ]);
 
     const data = await loadInboxPage({} as never, gameScope("g1"), "inq-1", {});
@@ -133,7 +134,7 @@ describe("loadInboxPage", () => {
   it("fetches the selected and past inquiries' attachments in one batched lookup", async () => {
     vi.mocked(inquiriesModule.getInquiryById).mockResolvedValue(inquiry({}));
     vi.mocked(historyModule.getAccountHistory).mockResolvedValue([
-      { id: "inq-0", inquiryNo: null, title: "예전", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "bug_report", occurredAt: null, paymentNo: null, deviceInfo: null, createdAt: "2026-08-01T00:00:00.000Z" },
+      { id: "inq-0", inquiryNo: null, title: "예전", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "bug_report", occurredAt: null, paymentNo: null, deviceInfo: null, translations: {}, createdAt: "2026-08-01T00:00:00.000Z" },
     ]);
     vi.mocked(inquiriesModule.listAttachmentSignedUrlsByInquiryIds).mockResolvedValue({
       "inq-1": [{ id: "att-1", fileName: "now.png", signedUrl: "https://signed.example/now" }],

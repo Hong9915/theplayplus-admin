@@ -35,6 +35,7 @@ const inquiry = {
   repliedAt: null,
   gmailThreadId: null,
   locale: null,
+  translations: {},
   paymentNo: null,
   occurredAt: null,
   deviceInfo: null,

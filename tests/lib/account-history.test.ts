@@ -60,6 +60,7 @@ describe("getAccountHistory", () => {
         occurredAt: null,
         paymentNo: "imp_1",
         deviceInfo: null,
+        translations: {},
         createdAt: "2025-06-01T00:00:00.000Z",
       },
     ]);
