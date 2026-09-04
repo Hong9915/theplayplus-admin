@@ -5,6 +5,7 @@ import { getInquiryById } from "@/lib/inquiries";
 import { listCategoryLabels, listGames } from "@/lib/categories";
 import { listTemplates } from "@/lib/templates";
 import { listRecentRepliesByType } from "@/lib/replies";
+import { gameScope } from "@/lib/inbox-scope";
 import { streamSuggestion, type SuggestEvent } from "@/lib/suggest";
 
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
@@ -22,7 +23,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
     listCategoryLabels(supabase, inquiry.gameId),
     listGames(supabase),
     listTemplates(supabase, inquiry.gameId),
-    listRecentRepliesByType(supabase, inquiry.gameId, inquiry.typeKey),
+    listRecentRepliesByType(supabase, gameScope(inquiry.gameId), inquiry.typeKey),
   ]);
 
   const game = games.find((entry) => entry.id === inquiry.gameId);
