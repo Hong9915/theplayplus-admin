@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { InboxScope } from "@/lib/inbox-scope";
 import { google, type gmail_v1 } from "googleapis";
 
 export interface InlineImage {
@@ -10,6 +11,7 @@ export interface InlineImage {
 }
 
 export interface SendReplyEmailInput {
+  mailbox: Mailbox;
   to: string;
   subject: string;
   /** 텍스트 본문. HTML을 못 보는 메일 앱과 회신 동기화가 이 부분을 읽는다. */
@@ -38,17 +40,55 @@ export interface InboundEmail {
   sentAt: string;
 }
 
-function getGmailClient() {
+/**
+ * 답변이 나가는 메일함. 게임 문의는 help@, 서비스 문의는 info@처럼 계정이
+ * 다르므로 스코프 종류(InboxScope.kind)와 같은 값으로 고른다.
+ */
+export type Mailbox = InboxScope["kind"];
+
+interface MailboxCredentials {
+  refreshToken: string;
+  sender: string;
+}
+
+/**
+ * 메일함별 토큰과 발신 주소. OAuth 클라이언트는 공용이고 계정마다 refresh
+ * token이 다르다. 서비스용 두 값이 모두 비어 있으면 게임용으로 대신 보내
+ * 설정 전에도 발송이 막히지 않게 한다. 하나만 있으면 설정 실수라 오류.
+ */
+function resolveMailbox(mailbox: Mailbox): MailboxCredentials {
+  const gameToken = process.env.GMAIL_REFRESH_TOKEN;
+  const gameSender = process.env.GMAIL_SENDER;
+  if (!gameToken || !gameSender) {
+    throw new Error("Missing one of GMAIL_REFRESH_TOKEN, GMAIL_SENDER environment variables");
+  }
+  if (mailbox === "game") {
+    return { refreshToken: gameToken, sender: gameSender };
+  }
+
+  const serviceToken = process.env.GMAIL_SERVICE_REFRESH_TOKEN;
+  const serviceSender = process.env.GMAIL_SERVICE_SENDER;
+  if (!serviceToken && !serviceSender) {
+    return { refreshToken: gameToken, sender: gameSender };
+  }
+  if (!serviceToken || !serviceSender) {
+    throw new Error("Set both GMAIL_SERVICE_REFRESH_TOKEN and GMAIL_SERVICE_SENDER, or neither");
+  }
+  return { refreshToken: serviceToken, sender: serviceSender };
+}
+
+/** 그 메일함에서 나가는 메일의 From 주소. 메일 푸터에도 같은 주소를 찍는다. */
+export function mailboxSender(mailbox: Mailbox): string {
+  return resolveMailbox(mailbox).sender;
+}
+
+function getGmailClient(mailbox: Mailbox) {
   const clientId = process.env.GMAIL_CLIENT_ID;
   const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
-  const sender = process.env.GMAIL_SENDER;
-
-  if (!clientId || !clientSecret || !refreshToken || !sender) {
-    throw new Error(
-      "Missing one of GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, GMAIL_SENDER environment variables"
-    );
+  if (!clientId || !clientSecret) {
+    throw new Error("Missing one of GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET environment variables");
   }
+  const { refreshToken, sender } = resolveMailbox(mailbox);
 
   const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
   oauth2Client.setCredentials({ refresh_token: refreshToken });
@@ -169,7 +209,7 @@ export function encodeRfc2822Message(input: {
 }
 
 export async function sendReplyEmail(input: SendReplyEmailInput): Promise<SentEmail> {
-  const { gmail, sender } = getGmailClient();
+  const { gmail, sender } = getGmailClient(input.mailbox);
   const rfcMessageId = buildRfcMessageId(sender);
   const raw = encodeRfc2822Message({
     sender,
@@ -266,8 +306,8 @@ function extractAddress(from: string | null): string | null {
  * 스레드에서 우리가 보낸 것이 아닌 메일, 즉 사용자 회신만 골라낸다.
  * gmail.readonly 스코프가 필요하다.
  */
-export async function fetchInboundReplies(threadId: string): Promise<InboundEmail[]> {
-  const { gmail, sender } = getGmailClient();
+export async function fetchInboundReplies(threadId: string, mailbox: Mailbox): Promise<InboundEmail[]> {
+  const { gmail, sender } = getGmailClient(mailbox);
   const response = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
   const messages = response.data.messages ?? [];
   const senderAddress = sender.trim().toLowerCase();

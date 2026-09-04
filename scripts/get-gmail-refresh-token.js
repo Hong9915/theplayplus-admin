@@ -1,5 +1,5 @@
 /**
- * 1회성 유틸: GMAIL_REFRESH_TOKEN 발급용 스크립트.
+ * 1회성 유틸: Gmail refresh token 발급용 스크립트.
  *
  * 사용법: .env.local에 GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET를 채워둔 뒤
  *   node scripts/get-gmail-refresh-token.js
@@ -7,6 +7,11 @@
  * 실행하면 인증 URL이 출력됩니다. 브라우저에서 그 URL을 열고
  * 로그인/동의하면, 로컬 서버가 인증 코드를 받아 자동으로 refresh token을
  * 교환해 콘솔에 출력합니다.
+ *
+ * 발신 계정이 둘이므로 계정마다 한 번씩, 총 두 번 실행합니다:
+ *   - 게임 문의 계정(help@)으로 로그인 → GMAIL_REFRESH_TOKEN / GMAIL_SENDER
+ *   - 서비스 문의 계정(info@)으로 로그인 → GMAIL_SERVICE_REFRESH_TOKEN / GMAIL_SERVICE_SENDER
+ * 이미 로그인된 다른 Google 계정으로 동의하지 않도록 계정 선택 화면에서 확인하세요.
  */
 const fs = require("fs");
 const path = require("path");
@@ -56,7 +61,7 @@ async function main() {
     ],
   });
 
-  console.log("\n아래 URL을 브라우저에서 열고 info@theplayplus.com 계정으로 로그인/동의하세요:\n");
+  console.log("\n아래 URL을 브라우저에서 열고, 토큰을 발급할 발신 계정(게임 문의 help@ 또는 서비스 문의 info@)으로 로그인/동의하세요:\n");
   console.log(authUrl, "\n");
 
   const server = http.createServer(async (req, res) => {
@@ -74,8 +79,10 @@ async function main() {
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("인증이 완료되었습니다. 터미널을 확인하세요. 이 탭은 닫아도 됩니다.");
 
-      console.log("\n발급 완료. .env.local에 아래 값을 넣으세요:\n");
-      console.log(`GMAIL_REFRESH_TOKEN=${tokens.refresh_token}\n`);
+      console.log("\n발급 완료. 로그인한 계정에 맞는 변수에 넣으세요:\n");
+      console.log("  게임 문의 계정이면   GMAIL_REFRESH_TOKEN (발신 주소는 GMAIL_SENDER)");
+      console.log("  서비스 문의 계정이면 GMAIL_SERVICE_REFRESH_TOKEN (발신 주소는 GMAIL_SERVICE_SENDER)\n");
+      console.log(`refresh_token=${tokens.refresh_token}\n`);
 
       if (!tokens.refresh_token) {
         console.warn(

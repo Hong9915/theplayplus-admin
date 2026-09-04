@@ -4,7 +4,10 @@ import * as gmailModule from "@/lib/gmail";
 import * as eventsModule from "@/lib/events";
 import * as messagesModule from "@/lib/messages";
 
-vi.mock("@/lib/gmail", () => ({ sendReplyEmail: vi.fn() }));
+vi.mock("@/lib/gmail", () => ({
+  sendReplyEmail: vi.fn(),
+  mailboxSender: vi.fn((mailbox: string) => (mailbox === "service" ? "info@theplayplus.com" : "help@theplayplus.com")),
+}));
 vi.mock("@/lib/events", async () => {
   const actual = await vi.importActual<typeof import("@/lib/events")>("@/lib/events");
   return { ...actual, recordEvent: vi.fn() };
@@ -68,8 +71,11 @@ describe("sendInquiryReply", () => {
       expect.objectContaining({ to: "luna@example.com", subject: "[R-20260903-0001] Re: 중복 결제", threadId: null })
     );
     const sendInput = vi.mocked(gmailModule.sendReplyEmail).mock.calls[0][0];
+    expect(sendInput.mailbox).toBe("game");
     expect(sendInput.html).toContain("여신 키우기 고객센터");
     expect(sendInput.html).toContain("결제/환불 · 환불");
+    expect(sendInput.html).toContain("help@theplayplus.com");
+    expect(sendInput.body).toContain("help@theplayplus.com");
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ status: "in_progress", reply_content: "환불 처리했습니다", draft_reply: null, gmail_thread_id: "thread-1" })
     );
@@ -97,6 +103,19 @@ describe("sendInquiryReply", () => {
       expect.anything(),
       expect.objectContaining({ actor: eventsModule.AUTO_REPLY_ACTOR, kind: "auto_reply_sent" })
     );
+  });
+
+  it("service inquiries go out from the service mailbox with its address in the footer", async () => {
+    const { supabase } = mockSupabase();
+    const serviceInquiry: ReplyableInquiry = { ...inquiry, game_id: null, group_key: "partnership", type_key: "partnership" };
+
+    await sendInquiryReply(supabase, { inquiry: serviceInquiry, body: "검토하겠습니다", mode: "manual", actor: ADMIN });
+
+    const sendInput = vi.mocked(gmailModule.sendReplyEmail).mock.calls[0][0];
+    expect(sendInput.mailbox).toBe("service");
+    expect(sendInput.html).toContain("info@theplayplus.com");
+    expect(sendInput.html).not.toContain("help@theplayplus.com");
+    expect(sendInput.body).toContain("info@theplayplus.com");
   });
 
   it("threads onto the existing conversation when there is one", async () => {

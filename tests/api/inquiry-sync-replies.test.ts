@@ -10,7 +10,7 @@ vi.mock("@/lib/require-admin-session", () => ({ requireAdminSession: vi.fn() }))
 vi.mock("@/lib/gmail", () => ({ fetchInboundReplies: vi.fn() }));
 vi.mock("@/lib/messages", () => ({ createInboundMessage: vi.fn(), listGmailMessageIds: vi.fn() }));
 
-function mockInquiry(row: { id: string; gmail_thread_id: string | null } | null) {
+function mockInquiry(row: { id: string; game_id?: string | null; gmail_thread_id: string | null } | null) {
   const single = vi.fn().mockResolvedValue({ data: row, error: row ? null : { message: "not found" } });
   const eq = vi.fn(() => ({ single }));
   const select = vi.fn(() => ({ eq }));
@@ -26,7 +26,7 @@ describe("POST /api/inquiries/[id]/sync-replies", () => {
     vi.mocked(gmailModule.fetchInboundReplies).mockReset();
     vi.mocked(messagesModule.createInboundMessage).mockReset().mockResolvedValue(true);
     vi.mocked(messagesModule.listGmailMessageIds).mockReset().mockResolvedValue(new Set());
-    mockInquiry({ id: "inq-1", gmail_thread_id: "thread-1" });
+    mockInquiry({ id: "inq-1", game_id: "game-1", gmail_thread_id: "thread-1" });
   });
 
   it("returns 401 without a session", async () => {
@@ -59,13 +59,22 @@ describe("POST /api/inquiries/[id]/sync-replies", () => {
 
     const response = await POST(request(), { params: { id: "inq-1" } });
 
-    expect(gmailModule.fetchInboundReplies).toHaveBeenCalledWith("thread-1");
+    expect(gmailModule.fetchInboundReplies).toHaveBeenCalledWith("thread-1", "game");
     expect(messagesModule.createInboundMessage).toHaveBeenCalledTimes(1);
     expect(messagesModule.createInboundMessage).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ inquiryId: "inq-1", gmailMessageId: "gm-new", body: "새 회신" })
     );
     await expect(response.json()).resolves.toEqual({ success: true, added: 1 });
+  });
+
+  it("reads a service inquiry's thread from the service mailbox", async () => {
+    mockInquiry({ id: "inq-1", game_id: null, gmail_thread_id: "thread-9" });
+    vi.mocked(gmailModule.fetchInboundReplies).mockResolvedValue([]);
+
+    await POST(request(), { params: { id: "inq-1" } });
+
+    expect(gmailModule.fetchInboundReplies).toHaveBeenCalledWith("thread-9", "service");
   });
 
   it("reports a Gmail failure distinctly", async () => {

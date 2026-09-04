@@ -3,6 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase";
 import { requireAdminSession } from "@/lib/require-admin-session";
 import { fetchInboundReplies } from "@/lib/gmail";
 import { createInboundMessage, listGmailMessageIds } from "@/lib/messages";
+import { scopeForGameId } from "@/lib/inbox-scope";
 
 /**
  * Gmail 스레드에서 사용자 회신을 가져와 inquiry_messages에 넣는다.
@@ -16,7 +17,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
   const supabase = getSupabaseServerClient();
   const { data: inquiry, error } = await supabase
     .from("inquiries")
-    .select("id, gmail_thread_id")
+    .select("id, game_id, gmail_thread_id")
     .eq("id", params.id)
     .single();
 
@@ -29,7 +30,8 @@ export async function POST(_request: Request, { params }: { params: { id: string
 
   let inbound;
   try {
-    inbound = await fetchInboundReplies(inquiry.gmail_thread_id);
+    // 게임 문의와 서비스 문의는 다른 계정으로 보냈으니 그 계정의 메일함에서 읽는다.
+    inbound = await fetchInboundReplies(inquiry.gmail_thread_id, scopeForGameId(inquiry.game_id).kind);
   } catch (fetchError) {
     console.warn("[sync-replies] Gmail thread fetch failed", fetchError);
     return NextResponse.json({ success: false, error: "fetch_failed" }, { status: 502 });

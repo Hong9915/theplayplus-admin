@@ -14,6 +14,7 @@ const base = {
   },
   logoCid: "theplayplus-logo",
   contactUrl: "https://www.theplayplus.com/",
+  contactEmail: "help@theplayplus.com",
 };
 
 describe("escapeHtml", () => {
@@ -78,6 +79,12 @@ describe("renderReplyEmailHtml", () => {
     expect(html).toContain('href="https://www.theplayplus.com/"');
     expect(html).toContain("주식회사 더플레이플러스");
     expect(html).toContain("847-81-03647");
+    expect(html).toContain("help@theplayplus.com");
+    expect(html).not.toContain("info@theplayplus.com");
+  });
+
+  it("prints whichever contact address it is given", () => {
+    const html = renderReplyEmailHtml({ ...base, contactEmail: "info@theplayplus.com" });
     expect(html).toContain("info@theplayplus.com");
   });
 });
@@ -89,5 +96,6 @@ describe("renderReplyEmailText", () => {
     expect(text).toContain("[고객님께서 문의하신 내용]");
     expect(text).toContain("접수번호: TP-20260901-0042");
     expect(text).toContain("제목: 아이템이 안 들어왔어요");
+    expect(text).toContain("help@theplayplus.com");
   });
 });

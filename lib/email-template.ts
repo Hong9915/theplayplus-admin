@@ -22,6 +22,8 @@ export interface ReplyEmailInput {
   /** HTML 안에서 `cid:<logoCid>`로 참조되는 인라인 로고 첨부 ID */
   logoCid: string;
   contactUrl: string;
+  /** 푸터에 찍는 고객센터 주소. 그 메일의 발신 주소와 같다. */
+  contactEmail: string;
 }
 
 export const COMPANY = {
@@ -29,7 +31,6 @@ export const COMPANY = {
   representative: "강범준",
   registrationNo: "847-81-03647",
   address: "서울특별시 구로구 디지털로31길 38-21 이앤씨벤처드림타워3차 6층 602호",
-  email: "info@theplayplus.com",
   siteUrl: "https://www.theplayplus.com/",
 } as const;
 
@@ -155,7 +156,7 @@ export function renderReplyEmailHtml(input: ReplyEmailInput): string {
                   <div style="font-weight:700;color:${COLORS.body};">${COMPANY.name}</div>
                   <div>대표 ${COMPANY.representative} · 사업자등록번호 ${COMPANY.registrationNo}</div>
                   <div>${COMPANY.address}</div>
-                  <div>${COMPANY.email}</div>
+                  <div>${escapeHtml(input.contactEmail)}</div>
                   <div style="margin-top:6px;">© 2026 ${COMPANY.name}. All rights reserved.</div>
                 </td>
               </tr>
@@ -192,7 +193,7 @@ export function renderReplyEmailText(input: ReplyEmailInput): string {
     "",
     `추가 문의: ${input.contactUrl}`,
     "",
-    `${COMPANY.name} · ${COMPANY.email}`,
+    `${COMPANY.name} · ${input.contactEmail}`,
   ];
   return lines.filter((line) => line !== null).join("\n");
 }

@@ -311,10 +311,10 @@ Supabase(Postgres)에 저장하며 `theplayplus-contact`와 **동일한 프로�
 
 ### Gmail API (`googleapis`)
 
-- `info@theplayplus.com` Google Workspace 계정으로 발송한다.
+- 발신 계정은 문의 스코프로 갈린다. 게임 문의는 `help@theplayplus.com`, 게임 없이 접수된 서비스 문의는 `info@theplayplus.com` Google Workspace 계정으로 발송하고, 회신 동기화도 그 계정의 메일함에서 읽는다. 서비스용 토큰이 없으면 게임 계정으로 대신 보낸다.
 - 필요한 스코프: 발송(`gmail.send` 상당)과 회신 동기화를 위한 `gmail.readonly`.
 - 메일은 RFC 2822 형식으로 직접 조립해 base64url로 인코딩한다. `Message-ID`도 직접 생성한다 — Gmail이 붙여주는 값을 다시 읽으려면 발송 후 조회를 한 번 더 해야 하는데, 직접 넣으면 Gmail이 그대로 보존한다.
-- refresh token은 **최초 1회 계정 소유자가 OAuth 동의 화면에서 직접 발급**해야 한다. 코드로 자동화되지 않는 수동 준비 단계이며 `scripts/get-gmail-refresh-token.js`가 이를 돕는다.
+- refresh token은 **계정마다 최초 1회 계정 소유자가 OAuth 동의 화면에서 직접 발급**해야 한다. 코드로 자동화되지 않는 수동 준비 단계이며 `scripts/get-gmail-refresh-token.js`가 이를 돕는다(계정마다 한 번씩 실행).
 
 ### Gemini API (`@google/genai`)
 
@@ -332,7 +332,9 @@ Supabase(Postgres)에 저장하며 `theplayplus-contact`와 **동일한 프로�
 ```
 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY   # 브라우저·미들웨어 (Auth)
 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY                    # 서버 (RLS 우회)
-GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN / GMAIL_SENDER
+GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET                       # 공용 OAuth 클라이언트
+GMAIL_REFRESH_TOKEN / GMAIL_SENDER                          # 게임 문의 발신 계정 (help@)
+GMAIL_SERVICE_REFRESH_TOKEN / GMAIL_SERVICE_SENDER          # 서비스 문의 발신 계정 (info@), 둘 다 비우면 게임 계정으로 대체
 GEMINI_API_KEY / GEMINI_MODEL
 ```
 

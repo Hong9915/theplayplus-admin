@@ -12,6 +12,7 @@ vi.mock("@/lib/supabase", () => ({
 
 vi.mock("@/lib/gmail", () => ({
   sendReplyEmail: vi.fn(),
+  mailboxSender: vi.fn((mailbox: string) => (mailbox === "service" ? "info@theplayplus.com" : "help@theplayplus.com")),
 }));
 
 vi.mock("@/lib/events", () => ({ recordEvent: vi.fn() }));

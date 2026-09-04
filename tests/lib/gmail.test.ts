@@ -24,7 +24,7 @@ describe("sendReplyEmail", () => {
     process.env.GMAIL_CLIENT_ID = "client-id";
     process.env.GMAIL_CLIENT_SECRET = "client-secret";
     process.env.GMAIL_REFRESH_TOKEN = "refresh-token";
-    process.env.GMAIL_SENDER = "info@theplayplus.com";
+    process.env.GMAIL_SENDER = "help@theplayplus.com";
   });
 
   afterEach(() => {
@@ -34,12 +34,12 @@ describe("sendReplyEmail", () => {
   it("throws when Gmail environment variables are missing", async () => {
     delete process.env.GMAIL_REFRESH_TOKEN;
     const { sendReplyEmail } = await import("@/lib/gmail");
-    await expect(sendReplyEmail({ to: "a@b.com", subject: "s", body: "b" })).rejects.toThrow(/GMAIL_REFRESH_TOKEN/);
+    await expect(sendReplyEmail({ mailbox: "game", to: "a@b.com", subject: "s", body: "b" })).rejects.toThrow(/GMAIL_REFRESH_TOKEN/);
   });
 
   it("sends a base64url-encoded RFC 2822 message via the Gmail API", async () => {
     const { sendReplyEmail } = await import("@/lib/gmail");
-    await sendReplyEmail({ to: "user@example.com", subject: "답변입니다", body: "본문 내용" });
+    await sendReplyEmail({ mailbox: "game", to: "user@example.com", subject: "답변입니다", body: "본문 내용" });
 
     expect(setCredentialsMock).toHaveBeenCalledWith({ refresh_token: "refresh-token" });
     expect(sendMock).toHaveBeenCalledTimes(1);
@@ -51,7 +51,7 @@ describe("sendReplyEmail", () => {
       call.requestBody.raw.replace(/-/g, "+").replace(/_/g, "/"),
       "base64"
     ).toString("utf-8");
-    expect(decoded).toContain("From: info@theplayplus.com");
+    expect(decoded).toContain("From: help@theplayplus.com");
     expect(decoded).toContain("To: user@example.com");
     expect(decoded).toContain("본문 내용");
     expect(decoded).toMatch(/Message-ID: <[0-9a-f-]+@theplayplus\.com>/);
@@ -60,7 +60,7 @@ describe("sendReplyEmail", () => {
 
   it("returns the Gmail ids and the Message-ID it generated", async () => {
     const { sendReplyEmail } = await import("@/lib/gmail");
-    const sent = await sendReplyEmail({ to: "user@example.com", subject: "s", body: "b" });
+    const sent = await sendReplyEmail({ mailbox: "game", to: "user@example.com", subject: "s", body: "b" });
 
     expect(sent.gmailMessageId).toBe("gm-1");
     expect(sent.gmailThreadId).toBe("thread-1");
@@ -71,6 +71,7 @@ describe("sendReplyEmail", () => {
   it("threads a follow-up with In-Reply-To, References, and the Gmail threadId", async () => {
     const { sendReplyEmail } = await import("@/lib/gmail");
     await sendReplyEmail({
+      mailbox: "game",
       to: "user@example.com",
       subject: "s",
       body: "b",
@@ -88,7 +89,7 @@ describe("sendReplyEmail", () => {
   it("propagates an error when the Gmail API call fails", async () => {
     sendMock.mockRejectedValue(new Error("gmail down"));
     const { sendReplyEmail } = await import("@/lib/gmail");
-    await expect(sendReplyEmail({ to: "a@b.com", subject: "s", body: "b" })).rejects.toThrow("gmail down");
+    await expect(sendReplyEmail({ mailbox: "game", to: "a@b.com", subject: "s", body: "b" })).rejects.toThrow("gmail down");
   });
 });
 
@@ -157,7 +158,7 @@ describe("fetchInboundReplies", () => {
     process.env.GMAIL_CLIENT_ID = "client-id";
     process.env.GMAIL_CLIENT_SECRET = "client-secret";
     process.env.GMAIL_REFRESH_TOKEN = "refresh-token";
-    process.env.GMAIL_SENDER = "info@theplayplus.com";
+    process.env.GMAIL_SENDER = "help@theplayplus.com";
   });
 
   it("returns only messages not sent by us, with the quoted part removed", async () => {
@@ -169,7 +170,7 @@ describe("fetchInboundReplies", () => {
             internalDate: "1756771380000",
             payload: {
               mimeType: "text/plain",
-              headers: [{ name: "From", value: "THE PLAY+ <info@theplayplus.com>" }],
+              headers: [{ name: "From", value: "THE PLAY+ <help@theplayplus.com>" }],
               body: { data: b64url("우리가 보낸 답변") },
             },
           },
@@ -190,7 +191,7 @@ describe("fetchInboundReplies", () => {
     });
     const { fetchInboundReplies } = await import("@/lib/gmail");
 
-    const inbound = await fetchInboundReplies("thread-1");
+    const inbound = await fetchInboundReplies("thread-1", "game");
 
     expect(threadGetMock).toHaveBeenCalledWith({ userId: "me", id: "thread-1", format: "full" });
     expect(inbound).toEqual([
@@ -207,7 +208,7 @@ describe("fetchInboundReplies", () => {
   it("propagates a Gmail failure so the route can report it", async () => {
     threadGetMock.mockRejectedValue(new Error("insufficient scope"));
     const { fetchInboundReplies } = await import("@/lib/gmail");
-    await expect(fetchInboundReplies("thread-1")).rejects.toThrow("insufficient scope");
+    await expect(fetchInboundReplies("thread-1", "game")).rejects.toThrow("insufficient scope");
   });
 });
 
@@ -219,7 +220,7 @@ describe("sendReplyEmail with an HTML body", () => {
     process.env.GMAIL_CLIENT_ID = "client-id";
     process.env.GMAIL_CLIENT_SECRET = "client-secret";
     process.env.GMAIL_REFRESH_TOKEN = "refresh-token";
-    process.env.GMAIL_SENDER = "info@theplayplus.com";
+    process.env.GMAIL_SENDER = "help@theplayplus.com";
   });
 
   function decodeRaw(): string {
@@ -230,6 +231,7 @@ describe("sendReplyEmail with an HTML body", () => {
   it("sends multipart/alternative with the plain text first and the HTML base64-encoded", async () => {
     const { sendReplyEmail } = await import("@/lib/gmail");
     await sendReplyEmail({
+      mailbox: "game",
       to: "user@example.com",
       subject: "s",
       body: "평문 본문",
@@ -250,6 +252,7 @@ describe("sendReplyEmail with an HTML body", () => {
     const { sendReplyEmail } = await import("@/lib/gmail");
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     await sendReplyEmail({
+      mailbox: "game",
       to: "user@example.com",
       subject: "s",
       body: "평문",
@@ -268,9 +271,100 @@ describe("sendReplyEmail with an HTML body", () => {
 
   it("still sends plain text only when no HTML is given", async () => {
     const { sendReplyEmail } = await import("@/lib/gmail");
-    await sendReplyEmail({ to: "user@example.com", subject: "s", body: "평문" });
+    await sendReplyEmail({ mailbox: "game", to: "user@example.com", subject: "s", body: "평문" });
     const decoded = decodeRaw();
     expect(decoded).not.toContain("multipart");
     expect(decoded).toContain("Content-Type: text/plain; charset=UTF-8");
+  });
+});
+
+describe("mailboxes", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.resetModules();
+    sendMock.mockReset().mockResolvedValue({ data: { id: "gm-1", threadId: "thread-1" } });
+    threadGetMock.mockReset();
+    setCredentialsMock.mockReset();
+    process.env.GMAIL_CLIENT_ID = "client-id";
+    process.env.GMAIL_CLIENT_SECRET = "client-secret";
+    process.env.GMAIL_REFRESH_TOKEN = "game-token";
+    process.env.GMAIL_SENDER = "help@theplayplus.com";
+    process.env.GMAIL_SERVICE_REFRESH_TOKEN = "service-token";
+    process.env.GMAIL_SERVICE_SENDER = "info@theplayplus.com";
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  function decodeRaw(): string {
+    const call = sendMock.mock.calls[0][0];
+    return Buffer.from(call.requestBody.raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
+  }
+
+  it("sends service inquiries from the service account", async () => {
+    const { sendReplyEmail } = await import("@/lib/gmail");
+    await sendReplyEmail({ mailbox: "service", to: "user@example.com", subject: "s", body: "b" });
+
+    expect(setCredentialsMock).toHaveBeenCalledWith({ refresh_token: "service-token" });
+    expect(decodeRaw()).toContain("From: info@theplayplus.com");
+  });
+
+  it("sends game inquiries from the game account", async () => {
+    const { sendReplyEmail } = await import("@/lib/gmail");
+    await sendReplyEmail({ mailbox: "game", to: "user@example.com", subject: "s", body: "b" });
+
+    expect(setCredentialsMock).toHaveBeenCalledWith({ refresh_token: "game-token" });
+    expect(decodeRaw()).toContain("From: help@theplayplus.com");
+  });
+
+  it("falls back to the game account when the service account is not configured", async () => {
+    delete process.env.GMAIL_SERVICE_REFRESH_TOKEN;
+    delete process.env.GMAIL_SERVICE_SENDER;
+    const { sendReplyEmail } = await import("@/lib/gmail");
+    await sendReplyEmail({ mailbox: "service", to: "user@example.com", subject: "s", body: "b" });
+
+    expect(setCredentialsMock).toHaveBeenCalledWith({ refresh_token: "game-token" });
+    expect(decodeRaw()).toContain("From: help@theplayplus.com");
+  });
+
+  it("requires both service values before using the service account", async () => {
+    delete process.env.GMAIL_SERVICE_REFRESH_TOKEN;
+    const { sendReplyEmail } = await import("@/lib/gmail");
+    await expect(sendReplyEmail({ mailbox: "service", to: "a@b.com", subject: "s", body: "b" })).rejects.toThrow(
+      /GMAIL_SERVICE_REFRESH_TOKEN/
+    );
+  });
+
+  it("exposes the sender address of each mailbox", async () => {
+    const { mailboxSender } = await import("@/lib/gmail");
+    expect(mailboxSender("game")).toBe("help@theplayplus.com");
+    expect(mailboxSender("service")).toBe("info@theplayplus.com");
+  });
+
+  it("reads service replies from the service account and skips its own mail", async () => {
+    threadGetMock.mockResolvedValue({
+      data: {
+        messages: [
+          {
+            id: "gm-out",
+            internalDate: "1756771380000",
+            payload: { mimeType: "text/plain", headers: [{ name: "From", value: "THE PLAY+ <info@theplayplus.com>" }], body: { data: b64url("보낸 답변") } },
+          },
+          {
+            id: "gm-in",
+            internalDate: "1756774980000",
+            payload: { mimeType: "text/plain", headers: [{ name: "From", value: "User <user@example.com>" }], body: { data: b64url("회신") } },
+          },
+        ],
+      },
+    });
+    const { fetchInboundReplies } = await import("@/lib/gmail");
+
+    const inbound = await fetchInboundReplies("thread-1", "service");
+
+    expect(setCredentialsMock).toHaveBeenCalledWith({ refresh_token: "service-token" });
+    expect(inbound.map((email) => email.gmailMessageId)).toEqual(["gm-in"]);
   });
 });
