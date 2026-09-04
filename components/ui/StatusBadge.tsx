@@ -14,7 +14,7 @@ const STATUS_STYLE: Record<InquiryStatus, string> = {
 
 export default function StatusBadge({ status }: { status: InquiryStatus }) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}>
+    <span className={`inline-flex items-center shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}>
       {STATUS_LABEL[status]}
     </span>
   );
