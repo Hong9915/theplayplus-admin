@@ -117,6 +117,25 @@ export async function createTemplate(supabase: SupabaseClient, input: CreateTemp
   return !error;
 }
 
+export interface UpdateTemplateInput {
+  typeKey: string | null;
+  title: string;
+  content: string;
+}
+
+/**
+ * 제목·내용·유형 수정. 자동 발송이 켜진 템플릿의 유형을 이미 자동 발송이
+ * 있는 유형으로 바꾸면 유니크 인덱스(0010)에 걸려 false가 난다 — 그 경우
+ * 관리자가 한쪽 자동 발송을 먼저 꺼야 한다.
+ */
+export async function updateTemplate(supabase: SupabaseClient, id: string, input: UpdateTemplateInput): Promise<boolean> {
+  const { error } = await supabase
+    .from("reply_templates")
+    .update({ title: input.title, content: input.content, type_key: input.typeKey })
+    .eq("id", id);
+  return !error;
+}
+
 export async function deleteTemplate(supabase: SupabaseClient, id: string): Promise<boolean> {
   const { error } = await supabase.from("reply_templates").delete().eq("id", id);
   return !error;

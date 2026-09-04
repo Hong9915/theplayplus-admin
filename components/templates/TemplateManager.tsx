@@ -4,6 +4,13 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { TemplateRow } from "@/lib/templates";
 
+interface EditDraft {
+  id: string;
+  title: string;
+  content: string;
+  typeKey: string;
+}
+
 export default function TemplateManager({
   gameId,
   templates,
@@ -22,6 +29,8 @@ export default function TemplateManager({
   // 브라우저 confirm()은 쓰지 않는다. 삭제 버튼을 누르면 그 행에 인라인
   // 확인이 뜨는 2단계로 만든다.
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  // 수정은 목록 항목 자리에 폼을 펼치는 인라인 방식. 한 번에 하나만 편집한다.
+  const [editing, setEditing] = useState<EditDraft | null>(null);
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
@@ -60,6 +69,51 @@ export default function TemplateManager({
     setTitle("");
     setContent("");
     setTypeKey("");
+    router.refresh();
+  }
+
+  function startEdit(template: TemplateRow) {
+    setError(null);
+    setPendingDelete(null);
+    setEditing({ id: template.id, title: template.title, content: template.content, typeKey: template.typeKey ?? "" });
+  }
+
+  async function handleSaveEdit() {
+    if (!editing) return;
+    const trimmedTitle = editing.title.trim();
+    const trimmedContent = editing.content.trim();
+    if (trimmedTitle === "" || trimmedContent === "") {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    let json: { success: boolean };
+    try {
+      const response = await fetch(`/api/templates/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: trimmedTitle,
+          content: trimmedContent,
+          typeKey: editing.typeKey === "" ? null : editing.typeKey,
+        }),
+      });
+      json = await response.json();
+    } catch {
+      setSubmitting(false);
+      setError("템플릿 수정에 실패했습니다.");
+      return;
+    }
+    setSubmitting(false);
+
+    if (!json.success) {
+      // 실패해도 편집 중인 내용은 남겨 다시 시도할 수 있게 한다.
+      setError("템플릿 수정에 실패했습니다.");
+      return;
+    }
+
+    setEditing(null);
     router.refresh();
   }
 
@@ -145,7 +199,8 @@ export default function TemplateManager({
             placeholder="답변에 삽입될 본문을 작성합니다."
             className={inputClass}
           />
-          {error && <p className="text-red-600 text-sm">{error}</p>}
+          {/* 편집 중 오류는 편집 폼 쪽에 뜬다. */}
+          {error && !editing && <p className="text-red-600 text-sm">{error}</p>}
           <button
             type="submit"
             disabled={submitting}
@@ -164,6 +219,58 @@ export default function TemplateManager({
           <ul className="flex flex-col gap-3">
             {templates.map((template) => (
               <li key={template.id} className="border-b border-line last:border-b-0 pb-3 last:pb-0">
+                {editing?.id === template.id ? (
+                  <div className="flex flex-col gap-2">
+                    <input
+                      value={editing.title}
+                      onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                      aria-label="템플릿 제목"
+                      className={inputClass}
+                    />
+                    <select
+                      value={editing.typeKey}
+                      onChange={(e) => setEditing({ ...editing, typeKey: e.target.value })}
+                      aria-label="적용 유형"
+                      className={inputClass}
+                    >
+                      <option value="">공용 (모든 유형)</option>
+                      {Object.entries(typeLabels).map(([key, label]) => (
+                        <option key={key} value={key}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <textarea
+                      value={editing.content}
+                      onChange={(e) => setEditing({ ...editing, content: e.target.value })}
+                      rows={6}
+                      aria-label="템플릿 내용"
+                      className={inputClass}
+                    />
+                    {error && <p className="text-red-600 text-sm">{error}</p>}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveEdit}
+                        disabled={submitting}
+                        className="border border-accent bg-accent text-white rounded-lg px-3 py-1.5 text-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
+                      >
+                        저장
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing(null);
+                          setError(null);
+                        }}
+                        className="border border-line rounded-lg px-3 py-1.5 text-sm hover:bg-ground transition-colors"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                <>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-medium flex items-center gap-2">
@@ -176,6 +283,13 @@ export default function TemplateManager({
                       {template.typeKey === null ? "공용" : typeLabels[template.typeKey] ?? template.typeKey}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => startEdit(template)}
+                    className="shrink-0 text-sm text-muted hover:text-ink transition-colors"
+                  >
+                    수정
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleAutoSend(template.id, !template.autoSend)}
@@ -213,6 +327,8 @@ export default function TemplateManager({
                   )}
                 </div>
                 <p className="whitespace-pre-wrap text-sm mt-2 text-muted">{template.content}</p>
+                </>
+                )}
               </li>
             ))}
           </ul>

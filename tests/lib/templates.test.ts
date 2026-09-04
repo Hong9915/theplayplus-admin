@@ -5,6 +5,7 @@ import {
   deleteTemplate,
   findAutoReplyTemplate,
   setTemplateAutoSend,
+  updateTemplate,
 } from "@/lib/templates";
 
 const sampleRow = {
@@ -191,6 +192,34 @@ describe("setTemplateAutoSend", () => {
   it("reports failure when the template does not exist", async () => {
     const { from } = mockTemplate(null);
     await expect(setTemplateAutoSend({ from } as never, "missing", true)).resolves.toBe(false);
+  });
+});
+
+describe("updateTemplate", () => {
+  it("updates title, content, and type by id and reports success", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn(() => ({ eq }));
+    const from = vi.fn(() => ({ update }));
+
+    const ok = await updateTemplate({ from } as never, "tpl-1", { title: "새 제목", content: "새 본문", typeKey: "refund" });
+
+    expect(from).toHaveBeenCalledWith("reply_templates");
+    expect(update).toHaveBeenCalledWith({ title: "새 제목", content: "새 본문", type_key: "refund" });
+    expect(eq).toHaveBeenCalledWith("id", "tpl-1");
+    expect(ok).toBe(true);
+  });
+
+  it("passes a null type through to make the template shared", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn(() => ({ eq }));
+    await updateTemplate({ from: () => ({ update }) } as never, "tpl-1", { title: "t", content: "c", typeKey: null });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ type_key: null }));
+  });
+
+  it("reports failure instead of throwing", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: { message: "db error" } });
+    const update = vi.fn(() => ({ eq }));
+    await expect(updateTemplate({ from: () => ({ update }) } as never, "tpl-1", { title: "t", content: "c", typeKey: null })).resolves.toBe(false);
   });
 });
 
