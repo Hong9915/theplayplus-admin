@@ -145,6 +145,65 @@ describe("TemplateManager", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
+  it("edits a template inline and saves title, content, and type", async () => {
+    render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
+    const list = within(screen.getByRole("list"));
+
+    await userEvent.click(list.getAllByRole("button", { name: "수정" })[0]);
+
+    // 기존 값이 채워진 편집 폼이 그 자리에 뜬다.
+    const title = list.getByLabelText("템플릿 제목");
+    const content = list.getByLabelText("템플릿 내용");
+    expect(title).toHaveValue("환불 안내");
+    expect(content).toHaveValue("환불 절차입니다.");
+
+    await userEvent.clear(title);
+    await userEvent.type(title, "환불 안내 (수정)");
+    await userEvent.clear(content);
+    await userEvent.type(content, "새 절차입니다.");
+    await userEvent.selectOptions(list.getByLabelText("적용 유형"), "bug_report");
+    await userEvent.click(list.getByRole("button", { name: "저장" }));
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/templates/tpl-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ title: "환불 안내 (수정)", content: "새 절차입니다.", typeKey: "bug_report" }),
+      })
+    );
+    expect(refreshMock).toHaveBeenCalled();
+  });
+
+  it("cancels an edit without saving", async () => {
+    render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
+    const list = within(screen.getByRole("list"));
+
+    await userEvent.click(list.getAllByRole("button", { name: "수정" })[0]);
+    await userEvent.type(list.getByLabelText("템플릿 제목"), " 변경");
+    await userEvent.click(list.getByRole("button", { name: "취소" }));
+
+    expect(list.queryByLabelText("템플릿 제목")).not.toBeInTheDocument();
+    expect(list.getByText("환불 안내")).toBeInTheDocument();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not save an edit with a blank title and shows an error when saving fails", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: false }) }) as never;
+    render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
+    const list = within(screen.getByRole("list"));
+
+    await userEvent.click(list.getAllByRole("button", { name: "수정" })[0]);
+    await userEvent.clear(list.getByLabelText("템플릿 제목"));
+    await userEvent.click(list.getByRole("button", { name: "저장" }));
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    await userEvent.type(list.getByLabelText("템플릿 제목"), "제목");
+    await userEvent.click(list.getByRole("button", { name: "저장" }));
+    expect(await screen.findByText("템플릿 수정에 실패했습니다.")).toBeInTheDocument();
+    // 실패해도 편집 중인 내용은 남는다.
+    expect(list.getByLabelText("템플릿 제목")).toHaveValue("제목");
+  });
+
   it("cancels the delete when 아니오 is chosen", async () => {
     render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
 
