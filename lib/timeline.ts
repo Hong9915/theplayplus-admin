@@ -48,7 +48,7 @@ export type TimelineEntry =
       details: MetaEntry[];
       attachments: AttachmentWithUrl[];
     }
-  | { kind: "outbound"; id: string; at: string; author: string | null; body: string }
+  | { kind: "outbound"; id: string; at: string; author: string | null; body: string; auto: boolean }
   | { kind: "inbound"; id: string; at: string; author: string | null; body: string }
   | { kind: "note"; id: string; at: string; author: string; body: string };
 
@@ -74,15 +74,12 @@ export function buildTimeline(
   };
 
   const rest: TimelineEntry[] = [
-    ...messages.map(
-      (message): TimelineEntry => ({
-        kind: message.direction,
-        id: message.id,
-        at: message.sentAt,
-        author: message.authorEmail,
-        body: message.body,
-      })
-    ),
+    ...messages.map((message): TimelineEntry => {
+      const base = { id: message.id, at: message.sentAt, author: message.authorEmail, body: message.body };
+      return message.direction === "outbound"
+        ? { kind: "outbound", ...base, auto: message.autoSent }
+        : { kind: "inbound", ...base };
+    }),
     ...notes.map(
       (note): TimelineEntry => ({
         kind: "note",

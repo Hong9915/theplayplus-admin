@@ -9,6 +9,8 @@ export interface GameRow {
   createdAt: string;
 }
 
+export type InquiryTypePriority = "urgent" | "high" | "normal" | "low";
+
 export interface DefaultCategoryType {
   key: string;
   labelKo: string;
@@ -17,6 +19,12 @@ export interface DefaultCategoryType {
   requiresGameAccount: boolean;
   requiresCompanyName: boolean;
   allowAttachments: boolean;
+  requiresAttachments: boolean;
+  collectsPaymentNo: boolean;
+  collectsOccurredAt: boolean;
+  collectsDeviceInfo: boolean;
+  /** 접수 시 트리거(마이그레이션 0009)가 이 값을 문의 우선순위로 넣는다. */
+  defaultPriority: InquiryTypePriority;
   sortOrder: number;
 }
 
@@ -29,110 +37,76 @@ export interface DefaultCategoryGroup {
   types: DefaultCategoryType[];
 }
 
+/** 게임 유형 공통 플래그. 모든 유형이 게임 계정을 받고 첨부를 허용한다. */
+const GAME_TYPE = {
+  requiresGameAccount: true,
+  requiresCompanyName: false,
+  allowAttachments: true,
+  requiresAttachments: false,
+  collectsPaymentNo: false,
+  collectsOccurredAt: false,
+  collectsDeviceInfo: false,
+  defaultPriority: "normal" as InquiryTypePriority,
+};
+
+/**
+ * 새 게임에 복사되는 문의 종류·유형 시드. 여신 키우기에서 운영하며 다듬은
+ * 구성을 그대로 쓴다. 유형 키는 lib/default-templates.ts의 자동 답변 템플릿과
+ * 짝을 이루므로 바꾸면 그쪽도 함께 바꿔야 한다.
+ */
 export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
   {
-    key: "game_usage",
-    labelKo: "게임 이용 문의",
-    labelZh: "游戏使用咨询",
-    labelEn: "Game Usage",
+    key: "account_security",
+    labelKo: "계정/보안",
+    labelZh: "账号/安全",
+    labelEn: "Account/Security",
     sortOrder: 0,
     types: [
-      {
-        key: "account_login",
-        labelKo: "계정/로그인",
-        labelZh: "账号/登录",
-        labelEn: "Account / Login",
-        requiresGameAccount: true,
-        requiresCompanyName: false,
-        allowAttachments: false,
-        sortOrder: 0,
-      },
-      {
-        key: "payment_refund",
-        labelKo: "결제/환불",
-        labelZh: "付款/退款",
-        labelEn: "Payment / Refund",
-        requiresGameAccount: true,
-        requiresCompanyName: false,
-        allowAttachments: false,
-        sortOrder: 1,
-      },
-      {
-        key: "bug_report",
-        labelKo: "버그·오류 신고",
-        labelZh: "错误/漏洞举报",
-        labelEn: "Bug / Error Report",
-        requiresGameAccount: true,
-        requiresCompanyName: false,
-        allowAttachments: true,
-        sortOrder: 2,
-      },
-      {
-        key: "general",
-        labelKo: "이용 문의",
-        labelZh: "使用咨询",
-        labelEn: "General Inquiry",
-        requiresGameAccount: true,
-        requiresCompanyName: false,
-        allowAttachments: false,
-        sortOrder: 3,
-      },
+      { ...GAME_TYPE, key: "account_inquiry", labelKo: "계정 문의", labelZh: "账号咨询", labelEn: "Account Inquiry", sortOrder: 0 },
+      { ...GAME_TYPE, key: "account_restriction", labelKo: "계정이용제한", labelZh: "账号使用限制", labelEn: "Account Restriction", sortOrder: 1 },
     ],
   },
   {
-    key: "business",
-    labelKo: "사업 제휴 문의",
-    labelZh: "商务合作咨询",
-    labelEn: "Business Partnership",
+    key: "game_usage",
+    labelKo: "게임 이용",
+    labelZh: "游戏使用",
+    labelEn: "Game Usage",
     sortOrder: 1,
     types: [
+      { ...GAME_TYPE, key: "suggestion", labelKo: "건의 사항", labelZh: "建议事项", labelEn: "Suggestion", defaultPriority: "low", sortOrder: 0 },
+      { ...GAME_TYPE, key: "game_content", labelKo: "게임 내용", labelZh: "游戏内容", labelEn: "Game Content", sortOrder: 1 },
+      { ...GAME_TYPE, key: "bug_report", labelKo: "버그 제보(기타)", labelZh: "错误反馈(其他)", labelEn: "Bug Report (Other)", sortOrder: 2 },
+      { ...GAME_TYPE, key: "restore_request", labelKo: "복구 문의", labelZh: "恢复咨询", labelEn: "Restore Request", defaultPriority: "urgent", sortOrder: 3 },
       {
-        key: "publishing",
-        labelKo: "퍼블리싱/유통 제휴",
-        labelZh: "发行/分销合作",
-        labelEn: "Publishing / Distribution",
-        requiresGameAccount: false,
-        requiresCompanyName: true,
-        allowAttachments: false,
-        sortOrder: 0,
+        ...GAME_TYPE,
+        key: "install_connect",
+        labelKo: "설치/접속/실행",
+        labelZh: "安装/连接/运行",
+        labelEn: "Install/Connect/Launch",
+        requiresAttachments: true,
+        collectsDeviceInfo: true,
+        sortOrder: 4,
       },
-      {
-        key: "marketing",
-        labelKo: "마케팅 제휴",
-        labelZh: "市场合作",
-        labelEn: "Marketing Partnership",
-        requiresGameAccount: false,
-        requiresCompanyName: true,
-        allowAttachments: false,
-        sortOrder: 1,
-      },
+      { ...GAME_TYPE, key: "event_inquiry", labelKo: "이벤트 문의", labelZh: "活动咨询", labelEn: "Event Inquiry", sortOrder: 5 },
     ],
   },
   {
-    key: "other",
-    labelKo: "기타 문의",
-    labelZh: "其他咨询",
-    labelEn: "Other",
+    key: "payment_refund",
+    labelKo: "결제/환불",
+    labelZh: "支付/退款",
+    labelEn: "Payment/Refund",
     sortOrder: 2,
     types: [
+      { ...GAME_TYPE, key: "payment", labelKo: "결제", labelZh: "支付", labelEn: "Payment", collectsOccurredAt: true, defaultPriority: "urgent", sortOrder: 0 },
       {
-        key: "press",
-        labelKo: "언론·취재",
-        labelZh: "媒体采访",
-        labelEn: "Press / Media",
-        requiresGameAccount: false,
-        requiresCompanyName: false,
-        allowAttachments: false,
-        sortOrder: 0,
-      },
-      {
-        key: "etc",
-        labelKo: "기타",
-        labelZh: "其他",
-        labelEn: "Other",
-        requiresGameAccount: false,
-        requiresCompanyName: false,
-        allowAttachments: false,
+        ...GAME_TYPE,
+        key: "refund",
+        labelKo: "환불",
+        labelZh: "退款",
+        labelEn: "Refund",
+        collectsPaymentNo: true,
+        collectsOccurredAt: true,
+        defaultPriority: "urgent",
         sortOrder: 1,
       },
     ],
@@ -167,6 +141,11 @@ export async function createDefaultCategoriesForGame(supabase: SupabaseClient, g
       requires_game_account: type.requiresGameAccount,
       requires_company_name: type.requiresCompanyName,
       allow_attachments: type.allowAttachments,
+      requires_attachments: type.requiresAttachments,
+      collects_payment_no: type.collectsPaymentNo,
+      collects_occurred_at: type.collectsOccurredAt,
+      collects_device_info: type.collectsDeviceInfo,
+      default_priority: type.defaultPriority,
       sort_order: type.sortOrder,
     }));
 

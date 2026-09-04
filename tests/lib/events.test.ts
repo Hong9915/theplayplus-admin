@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { listEvents, recordEvent, describeEvent } from "@/lib/events";
+import { AUTO_REPLY_ACTOR, listEvents, recordEvent, describeEvent } from "@/lib/events";
 
 const sampleRow = {
   id: "evt-1",
@@ -26,6 +26,14 @@ describe("describeEvent", () => {
   it("describes reply and note events without values", () => {
     expect(describeEvent({ kind: "reply_sent", fromValue: null, toValue: null })).toBe("답변 발송");
     expect(describeEvent({ kind: "note_added", fromValue: null, toValue: null })).toBe("메모 추가");
+  });
+
+  it("describes an auto reply distinctly from a manual one", () => {
+    expect(describeEvent({ kind: "auto_reply_sent", fromValue: null, toValue: null })).toBe("자동 답변 발송");
+  });
+
+  it("exposes a fixed system actor for auto replies", () => {
+    expect(AUTO_REPLY_ACTOR.email).toBe("auto-reply@theplayplus.com");
   });
 
   it("falls back to the raw value when a code has no Korean label", () => {

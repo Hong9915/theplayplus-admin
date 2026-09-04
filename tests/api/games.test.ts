@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/games/route";
 import * as supabaseModule from "@/lib/supabase";
 import * as categoriesModule from "@/lib/categories";
+import * as defaultTemplatesModule from "@/lib/default-templates";
 import * as requireAdminSessionModule from "@/lib/require-admin-session";
 
 vi.mock("@/lib/supabase", () => ({
@@ -10,6 +11,10 @@ vi.mock("@/lib/supabase", () => ({
 
 vi.mock("@/lib/categories", () => ({
   createDefaultCategoriesForGame: vi.fn(),
+}));
+
+vi.mock("@/lib/default-templates", () => ({
+  createDefaultTemplatesForGame: vi.fn(),
 }));
 
 vi.mock("@/lib/require-admin-session", () => ({
@@ -43,7 +48,31 @@ describe("POST /api/games", () => {
   beforeEach(() => {
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReset();
     vi.mocked(categoriesModule.createDefaultCategoriesForGame).mockReset().mockResolvedValue(undefined);
+    vi.mocked(defaultTemplatesModule.createDefaultTemplatesForGame).mockReset().mockResolvedValue(undefined);
     vi.mocked(requireAdminSessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
+  });
+
+  it("seeds the default auto reply templates after the categories", async () => {
+    mockSupabaseSuccess();
+    const request = new Request("http://localhost/api/games", { method: "POST", body: buildFormData() });
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(defaultTemplatesModule.createDefaultTemplatesForGame).toHaveBeenCalledWith(expect.anything(), "game-1");
+  });
+
+  it("keeps the game and warns when template seeding fails", async () => {
+    mockSupabaseSuccess();
+    vi.mocked(defaultTemplatesModule.createDefaultTemplatesForGame).mockRejectedValue(new Error("seed failed"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const request = new Request("http://localhost/api/games", { method: "POST", body: buildFormData() });
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.warning).toBe("template_seed_failed");
   });
 
   it("returns 401 when there is no admin session", async () => {

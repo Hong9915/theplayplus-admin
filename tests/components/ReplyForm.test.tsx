@@ -95,7 +95,7 @@ describe("ReplyForm", () => {
   });
 
   const templates = [
-    { id: "tpl-1", typeKey: "payment_refund", title: "환불 안내", content: "환불 절차입니다." },
+    { id: "tpl-1", typeKey: "payment_refund", title: "환불 안내", content: "환불 절차입니다.", autoSend: false },
   ];
 
   it("does not render the template picker when no template applies", () => {

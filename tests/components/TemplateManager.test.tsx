@@ -12,8 +12,8 @@ vi.mock("next/navigation", () => ({
 const typeLabels = { payment_refund: "결제/환불", bug_report: "버그·오류 신고" };
 
 const templates = [
-  { id: "tpl-1", typeKey: "payment_refund", title: "환불 안내", content: "환불 절차입니다." },
-  { id: "tpl-2", typeKey: null, title: "공용 인사", content: "문의 주셔서 감사합니다." },
+  { id: "tpl-1", typeKey: "payment_refund", title: "환불 안내", content: "환불 절차입니다.", autoSend: false },
+  { id: "tpl-2", typeKey: null, title: "공용 인사", content: "문의 주셔서 감사합니다.", autoSend: false },
 ];
 
 describe("TemplateManager", () => {
@@ -112,6 +112,37 @@ describe("TemplateManager", () => {
       expect.objectContaining({ method: "DELETE" })
     );
     expect(refreshMock).toHaveBeenCalled();
+  });
+
+  it("shows which template auto-sends and lets staff turn it on or off", async () => {
+    const withAuto = [{ ...templates[0], autoSend: true }, templates[1]];
+    render(<TemplateManager gameId="game-1" templates={withAuto} typeLabels={typeLabels} />);
+    const list = within(screen.getByRole("list"));
+
+    expect(list.getByText("자동 발송 중")).toBeInTheDocument();
+
+    await userEvent.click(list.getByRole("button", { name: "자동 발송 끄기" }));
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/templates/tpl-1",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ autoSend: false }) })
+    );
+
+    await userEvent.click(list.getByRole("button", { name: "자동 발송 켜기" }));
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/templates/tpl-2",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ autoSend: true }) })
+    );
+    expect(refreshMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows an error when toggling auto send fails", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: false }) }) as never;
+    render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
+
+    await userEvent.click(screen.getAllByRole("button", { name: "자동 발송 켜기" })[0]);
+
+    expect(await screen.findByText("자동 발송 설정에 실패했습니다.")).toBeInTheDocument();
+    expect(refreshMock).not.toHaveBeenCalled();
   });
 
   it("cancels the delete when 아니오 is chosen", async () => {

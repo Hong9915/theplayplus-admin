@@ -111,6 +111,12 @@ export default function GameForm({
       return;
     }
 
+    if (json.warning === "template_seed_failed") {
+      setMessage("게임은 추가되었지만 기본 답변 템플릿 생성에 실패했습니다. 답변 템플릿 화면에서 직접 추가해주세요.");
+      onCreated(json.game, json.warning);
+      return;
+    }
+
     setMessage("게임이 추가되었습니다.");
     onCreated(json.game);
   }

@@ -63,6 +63,29 @@ export default function TemplateManager({
     router.refresh();
   }
 
+  async function handleAutoSend(id: string, autoSend: boolean) {
+    setError(null);
+
+    let json: { success: boolean };
+    try {
+      const response = await fetch(`/api/templates/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ autoSend }),
+      });
+      json = await response.json();
+    } catch {
+      setError("자동 발송 설정에 실패했습니다.");
+      return;
+    }
+
+    if (!json.success) {
+      setError("자동 발송 설정에 실패했습니다.");
+      return;
+    }
+
+    router.refresh();
+  }
+
   async function handleDelete(id: string) {
     setError(null);
 
@@ -143,11 +166,24 @@ export default function TemplateManager({
               <li key={template.id} className="border-b border-line last:border-b-0 pb-3 last:pb-0">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-medium">{template.title}</p>
+                    <p className="font-medium flex items-center gap-2">
+                      {template.title}
+                      {template.autoSend && (
+                        <span className="text-[11px] font-semibold text-accent bg-accent/10 rounded-full px-2 py-0.5">자동 발송 중</span>
+                      )}
+                    </p>
                     <p className="text-xs text-muted mt-0.5">
                       {template.typeKey === null ? "공용" : typeLabels[template.typeKey] ?? template.typeKey}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleAutoSend(template.id, !template.autoSend)}
+                    title="켜면 이 유형의 새 문의에 이 템플릿이 자동으로 발송됩니다. 같은 유형에는 하나만 켤 수 있습니다."
+                    className="shrink-0 text-sm text-muted hover:text-ink transition-colors"
+                  >
+                    {template.autoSend ? "자동 발송 끄기" : "자동 발송 켜기"}
+                  </button>
                   {pendingDelete === template.id ? (
                     <div className="flex items-center gap-2 shrink-0 text-sm">
                       <span className="text-muted">삭제할까요?</span>

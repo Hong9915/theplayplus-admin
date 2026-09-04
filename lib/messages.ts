@@ -11,15 +11,19 @@ export interface MessageRow {
   gmailMessageId: string | null;
   rfcMessageId: string | null;
   sentAt: string;
+  /** 매크로 자동 답변. 타임라인이 "자동 발송"으로 구분한다. */
+  autoSent: boolean;
 }
 
 export interface CreateOutboundMessageInput {
   inquiryId: string;
-  author: AdminSession;
+  /** 자동 답변은 보낸 관리자가 없으므로 null. */
+  author: AdminSession | null;
   body: string;
   gmailMessageId: string | null;
   rfcMessageId: string | null;
   sentAt?: string;
+  autoSent?: boolean;
 }
 
 export interface CreateInboundMessageInput {
@@ -31,7 +35,7 @@ export interface CreateInboundMessageInput {
   sentAt: string;
 }
 
-const COLUMNS = "id, direction, author_email, body, gmail_message_id, rfc_message_id, sent_at";
+const COLUMNS = "id, direction, author_email, body, gmail_message_id, rfc_message_id, sent_at, auto_sent";
 
 function mapRow(row: {
   id: string;
@@ -41,6 +45,7 @@ function mapRow(row: {
   gmail_message_id: string | null;
   rfc_message_id: string | null;
   sent_at: string;
+  auto_sent?: boolean | null;
 }): MessageRow {
   return {
     id: row.id,
@@ -50,6 +55,7 @@ function mapRow(row: {
     gmailMessageId: row.gmail_message_id,
     rfcMessageId: row.rfc_message_id,
     sentAt: row.sent_at,
+    autoSent: row.auto_sent === true,
   };
 }
 
@@ -117,11 +123,12 @@ export async function createOutboundMessage(
   const { error } = await supabase.from("inquiry_messages").insert({
     inquiry_id: input.inquiryId,
     direction: "outbound",
-    author_email: input.author.email,
+    author_email: input.author?.email ?? null,
     body: input.body,
     gmail_message_id: input.gmailMessageId,
     rfc_message_id: input.rfcMessageId,
     ...(input.sentAt ? { sent_at: input.sentAt } : {}),
+    auto_sent: input.autoSent === true,
   });
   return !error;
 }

@@ -17,6 +17,7 @@ const rows = [
     gmail_message_id: "gm-1",
     rfc_message_id: "<a@theplayplus.com>",
     sent_at: "2026-09-01T00:00:00.000Z",
+    auto_sent: false,
   },
   {
     id: "m2",
@@ -26,6 +27,7 @@ const rows = [
     gmail_message_id: "gm-2",
     rfc_message_id: null,
     sent_at: "2026-09-01T01:00:00.000Z",
+    auto_sent: false,
   },
 ];
 
@@ -54,8 +56,15 @@ describe("listMessages", () => {
       gmailMessageId: "gm-1",
       rfcMessageId: "<a@theplayplus.com>",
       sentAt: "2026-09-01T00:00:00.000Z",
+      autoSent: false,
     });
     expect(result[1].direction).toBe("inbound");
+  });
+
+  it("maps auto_sent so the timeline can mark macro replies", async () => {
+    const { from } = mockSelect([{ ...rows[0], auto_sent: true }]);
+    const result = await listMessages({ from } as never, "inq-1");
+    expect(result[0].autoSent).toBe(true);
   });
 
   it("returns an empty array on error", async () => {
@@ -93,7 +102,24 @@ describe("createOutboundMessage", () => {
       gmail_message_id: "gm-1",
       rfc_message_id: "<a@theplayplus.com>",
       sent_at: "2026-09-01T00:00:00.000Z",
+      auto_sent: false,
     });
+  });
+
+  it("records an auto reply with no author and auto_sent set", async () => {
+    const { from, insert } = mockSelect([]);
+    const ok = await createOutboundMessage({ from } as never, {
+      inquiryId: "inq-1",
+      author: null,
+      autoSent: true,
+      body: "접수되었습니다",
+      gmailMessageId: "gm-9",
+      rfcMessageId: "<z@theplayplus.com>",
+      sentAt: "2026-09-01T00:00:00.000Z",
+    });
+
+    expect(ok).toBe(true);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ author_email: null, auto_sent: true }));
   });
 
   it("returns false when the insert fails", async () => {

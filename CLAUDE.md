@@ -4,14 +4,16 @@ THE PLAY+ 고객지원 관리자 페이지. `theplayplus-contact`(문의 접수 
 
 ## 핵심 기능
 
-1. **게임 관리** — 게임 추가(이름/상태 필수, 로고 선택, 게임별 문의 카테고리 커스터마이징), 게임 목록에서 선택
-2. **인박스 화면** — `/games/{gameId}/inquiries[/{inquiryId}]` 한 페이지가 4단(게임 레일 · 문의함 보기 · 문의 목록 · 대화+답변 · 상세 패널)을 서버 렌더한다. 필터(상태/유형/우선순위/3일 이상 미처리)·정렬·검색·페이지는 URL 쿼리로 관리하고 DB에서 처리하며, 문의를 골라도 같은 쿼리가 URL에 남는다. 보기 건수는 `inquiry_facet_counts` RPC(마이그레이션 0008) 한 번으로 가져오고 실패하면 건수 없이 그린다. 체크박스로 여러 건 상태 일괄 변경. 게임 레일에 접수(new) 건수 배지. 예전 `/inquiries/{id}` 링크는 새 URL로 리다이렉트된다.
-3. **문의 답변 발송** — 대화 열에서 답변을 작성해 Gmail API로 `info@theplayplus.com` 계정으로 바로 발송. 메일은 THE PLAY+ 브랜드 HTML 템플릿(`lib/email-template.ts`, 로고는 `lib/email-logo.ts`에 base64 인라인 첨부)과 텍스트 본문을 함께 담은 multipart로 나간다. 발송 성공 시 상태가 자동으로 `처리중`으로 바뀌고 답변이 `inquiry_messages`에 쌓임 (`완료`는 헤더의 "완료로 표시" 버튼이나 상태 셀렉트로 직접 변경). 후속 답변은 같은 Gmail 스레드로 묶이며, "회신 확인" 버튼으로 사용자 회신을 스레드에서 가져와 타임라인에 표시 (`gmail.readonly` 스코프 필요). Cmd/Ctrl+Enter 발송, 초안 자동 저장
+1. **게임 관리** — 게임 추가(이름/상태 필수, 로고 선택, 게임별 문의 카테고리 커스터마이징), 게임 목록에서 선택. 새 게임에는 `lib/categories.ts`의 기본 종류·유형(계정/보안, 게임 이용, 결제/환불의 10개 유형)과 `lib/default-templates.ts`의 유형별 자동 답변 템플릿이 자동 발송 켜진 상태로 복사된다. 템플릿 복사 실패는 경고만 낸다
+2. **인박스 화면** — `/games/{gameId}/inquiries[/{inquiryId}]` 한 페이지가 4단(게임 레일 · 문의함 보기 · 문의 목록 · 대화+답변 · 상세 패널)을 서버 렌더한다. 필터(상태/유형/우선순위/3일 이상 미처리)·정렬·검색·페이지는 URL 쿼리로 관리하고 DB에서 처리하며, 문의를 골라도 같은 쿼리가 URL에 남는다. 보기 건수는 `inquiry_facet_counts` RPC(마이그레이션 0008) 한 번으로 가져오고 실패하면 건수 없이 그린다. 체크박스로 여러 건 상태 일괄 변경. 게임 레일에 접수(new) 건수 배지. 우선순위는 접수 시 DB 트리거가 유형의 `inquiry_types.default_priority`로 정한다(결제·환불·복구 `urgent`, 건의 사항 `low`, 나머지 `normal`, 마이그레이션 0009). 관리자가 상세에서 바꾼 값은 유지된다. 예전 `/inquiries/{id}` 링크는 새 URL로 리다이렉트된다.
+3. **문의 답변 발송** — 대화 열에서 답변을 작성해 Gmail API로 `info@theplayplus.com` 계정으로 바로 발송. 메일은 THE PLAY+ 브랜드 HTML 템플릿(`lib/email-template.ts`, 로고는 `lib/email-logo.ts`에 base64 인라인 첨부)과 텍스트 본문을 함께 담은 multipart로 나간다. 발송 성공 시 상태가 자동으로 `처리중`으로 바뀌고 답변이 `inquiry_messages`에 쌓임 (`완료`는 헤더의 "완료로 표시" 버튼이나 상태 셀렉트로 직접 변경). 후속 답변은 같은 Gmail 스레드로 묶이며, "회신 확인" 버튼으로 사용자 회신을 스레드에서 가져와 타임라인에 표시 (`gmail.readonly` 스코프 필요). Cmd/Ctrl+Enter 발송, 초안 자동 저장. 메일 조립·발송·기록은 `lib/send-reply.ts`에 있고 수동/자동 답변이 공유한다
 4. **계정 이력 패널** — 상세 패널의 계정 이력 탭에서 같은 게임 내 동일 `game_account`의 과거 문의를 요약(건수/미처리/같은 유형)과 함께 보여주고 각 항목은 상세로 링크 (이벤트 참여 이력은 현재 데이터 소스가 없어 확장 지점만 마련)
 5. **대화·이동** — 대화 열은 문의 본문(첨부 포함)·보낸 답변·사용자 회신·내부 메모를 시간순 한 줄기로 보여주고(`lib/timeline.ts`), 같은 게임·같은 `game_account`의 다른 문의도 접수 순으로 구분선을 두고 이어 보여준다(선택한 문의로 자동 스크롤). 작성란은 답변/내부 메모 탭. 헤더의 이전/다음은 목록과 같은 조건·정렬 안에서 움직인다.
 6. **새 문의 Slack 알림** — Supabase Database Webhook(`inquiries` INSERT)이 `/api/notify/inquiry`를 호출하면 게임명·유형·제목·상세 링크를 Slack Incoming Webhook으로 보낸다(`lib/slack.ts`). 호출자는 `x-webhook-secret` 헤더가 `INQUIRY_WEBHOOK_SECRET`과 일치해야 하고, `SLACK_WEBHOOK_URL`이 비어 있으면 조용히 건너뛴다. 지금은 모든 신규 문의를 보내며, 특정 유형만 보내려면 이 라우트에서 거르면 된다.
 
-상세 설계는 `docs/superpowers/specs/2026-09-01-admin-panel-design.md`, 인박스 화면은 `docs/superpowers/specs/2026-09-03-inbox-layout-design.md` 참고.
+7. **유형별 매크로 자동 답변** — 답변 템플릿(`reply_templates`)에 "자동 발송"을 켜 두면(게임·유형당 하나, 공용 템플릿은 유형 전용이 없을 때의 대체) Supabase Database Webhook(`inquiries` INSERT)이 `/api/auto-reply/inquiry`를 호출할 때 그 내용을 브랜드 이메일로 바로 보낸다. 상태는 `접수`로 남기고 마지막 답변도 갱신하지 않으며, 타임라인에는 "자동 발송"으로, 이력에는 "자동 답변 발송"으로 구분해 보인다. 웹훅 재시도로 같은 문의에 두 번 보내지 않는다. 인증은 Slack 알림과 같은 `x-webhook-secret`(마이그레이션 0010, `lib/webhook-secret.ts`)
+
+상세 설계는 `docs/superpowers/specs/2026-09-01-admin-panel-design.md`, 인박스 화면은 `docs/superpowers/specs/2026-09-03-inbox-layout-design.md`, 자동 답변은 `docs/superpowers/specs/2026-09-03-auto-reply-design.md` 참고.
 
 ## 기술 스택
 
@@ -27,6 +29,12 @@ THE PLAY+ 고객지원 관리자 페이지. `theplayplus-contact`(문의 접수 
 2. 관리자 앱 환경변수에 `SLACK_WEBHOOK_URL`(발급한 URL)과 `INQUIRY_WEBHOOK_SECRET`(임의의 긴 문자열) 설정 후 재배포
 3. Supabase 대시보드 → Database → Webhooks → Create: 테이블 `inquiries`, 이벤트 `Insert`, 타입 HTTP Request(POST), URL `https://<관리자 도메인>/api/notify/inquiry`, HTTP Headers에 `x-webhook-secret: <2번의 비밀값>` 추가
 4. 접수 폼에서 테스트 문의를 넣어 Slack 채널에 메시지가 오는지 확인 (로컬 개발 서버는 외부에서 못 부르므로 배포 환경에서 확인)
+
+## 자동 답변 설정 절차
+
+1. 3번과 같은 방식으로 Supabase 웹훅을 하나 더 만든다: 테이블 `inquiries`, 이벤트 `Insert`, URL `https://<관리자 도메인>/api/auto-reply/inquiry`, HTTP Headers에 같은 `x-webhook-secret`
+2. 관리자 앱의 게임별 "답변 템플릿" 화면에서 유형별 템플릿을 만들고 "자동 발송 켜기"를 누른다. 같은 유형에 다른 템플릿을 켜면 이전 것은 자동으로 꺼진다
+3. 접수 폼에서 테스트 문의를 넣어 메일이 오는지, 문의함 타임라인에 "자동 발송"으로 보이는지 확인
 
 ## 컨벤션
 

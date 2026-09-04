@@ -23,7 +23,7 @@ const entries: TimelineEntry[] = [
     ],
   },
   { kind: "note", id: "n-1", at: "2026-09-03T01:40:00.000Z", author: "hong@theplayplus.com", body: "중복 승인 확인" },
-  { kind: "outbound", id: "m-1", at: "2026-09-03T02:05:00.000Z", author: "info@theplayplus.com", body: "환불 처리했습니다" },
+  { kind: "outbound", id: "m-1", at: "2026-09-03T02:05:00.000Z", author: "info@theplayplus.com", body: "환불 처리했습니다", auto: false },
   { kind: "inbound", id: "m-2", at: "2026-09-03T04:48:00.000Z", author: "luna@example.com", body: "감사합니다" },
 ];
 
@@ -69,6 +69,18 @@ describe("InboxTimeline", () => {
     if (inquiry.kind !== "inquiry") throw new Error("fixture");
     render(<InboxTimeline entries={[{ ...inquiry, details: [] }]} labels={labels} />);
     expect(screen.queryByTestId("inquiry-details")).not.toBeInTheDocument();
+  });
+
+  it("labels an automatic reply so staff do not mistake it for their own", () => {
+    render(
+      <InboxTimeline
+        entries={[{ kind: "outbound", id: "m-auto", at: "2026-09-03T01:13:00.000Z", author: null, body: "접수되었습니다", auto: true }]}
+        labels={labels}
+      />
+    );
+    expect(screen.getByText("자동 발송")).toBeInTheDocument();
+    expect(screen.getByText("THE PLAY+ 자동 답변")).toBeInTheDocument();
+    expect(screen.queryByText("이메일 발송")).not.toBeInTheDocument();
   });
 
   it("falls back to 사용자 when the inquiry has no account", () => {

@@ -15,12 +15,19 @@ const LABEL: Record<MessageEntry["kind"], string> = {
   note: "내부 메모",
 };
 
+function labelText(entry: MessageEntry): string {
+  // 자동 답변은 관리자가 직접 보낸 것과 구분해야 이미 답한 것으로 착각하지 않는다.
+  if (entry.kind === "outbound" && entry.auto) return "자동 발송";
+  return LABEL[entry.kind];
+}
+
 function authorText(entry: MessageEntry): string {
   switch (entry.kind) {
     case "inquiry":
     case "inbound":
       return entry.author ?? "사용자";
     case "outbound":
+      if (entry.auto) return "THE PLAY+ 자동 답변";
       return entry.author ? emailLocalPart(entry.author) : "THE PLAY+ 고객지원";
     case "note":
       return emailLocalPart(entry.author);
@@ -114,7 +121,7 @@ export default function InboxTimeline({ entries, labels }: { entries: TimelineEn
             <div className={`flex flex-col gap-1.5 max-w-[640px] min-w-0 ${outbound ? "items-end" : ""}`}>
               <div className="flex items-baseline gap-2 text-xs">
                 <span className={`font-semibold ${note ? "text-amber-700" : outbound ? "text-ink" : "text-accent"}`}>{authorText(entry)}</span>
-                <span className="text-muted">{LABEL[entry.kind]}</span>
+                <span className="text-muted">{labelText(entry)}</span>
                 <span className="text-muted font-mono">{formatReceivedAt(entry.at)}</span>
               </div>
               <div

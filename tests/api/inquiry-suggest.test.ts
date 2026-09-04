@@ -121,9 +121,9 @@ describe("POST /api/inquiries/[id]/suggest", () => {
 
   it("only forwards templates for this type or shared ones", async () => {
     vi.mocked(templatesModule.listTemplates).mockResolvedValue([
-      { id: "t1", typeKey: "payment_refund", title: "환불", content: "환불 본문" },
-      { id: "t2", typeKey: null, title: "공용", content: "공용 본문" },
-      { id: "t3", typeKey: "bug_report", title: "버그", content: "버그 본문" },
+      { id: "t1", typeKey: "payment_refund", title: "환불", content: "환불 본문", autoSend: false },
+      { id: "t2", typeKey: null, title: "공용", content: "공용 본문", autoSend: false },
+      { id: "t3", typeKey: "bug_report", title: "버그", content: "버그 본문", autoSend: false },
     ]);
 
     await POST(suggestRequest(), { params: { id: "inq-1" } });
