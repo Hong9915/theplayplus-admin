@@ -91,10 +91,21 @@ describe("POST /api/inquiries/[id]/reply", () => {
       })),
     }));
 
+    const serviceGroupsSelect = vi.fn(() => ({
+      order: vi.fn().mockResolvedValue({ data: [{ id: "sg-1", key: "business", label_ko: "사업 제휴 문의" }], error: null }),
+    }));
+    const serviceTypesSelect = vi.fn(() => ({
+      in: vi.fn(() => ({
+        order: vi.fn().mockResolvedValue({ data: [{ key: "publishing", label_ko: "퍼블리싱 제휴", group_id: "sg-1" }], error: null }),
+      })),
+    }));
+
     const from = vi.fn((table: string) => {
       if (table === "games") return { select: gameSelect };
       if (table === "inquiry_groups") return { select: groupsSelect };
       if (table === "inquiry_types") return { select: typesSelect };
+      if (table === "service_groups") return { select: serviceGroupsSelect };
+      if (table === "service_types") return { select: serviceTypesSelect };
       return { select, update };
     });
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReturnValue({ from } as never);
@@ -286,5 +297,24 @@ describe("POST /api/inquiries/[id]/reply", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ success: true });
+  });
+
+  it("labels a service inquiry (game_id null) with the service category and no game name", async () => {
+    mockFetchInquiry({
+      id: "inq-1",
+      reply_email: "partner@example.com",
+      title: "퍼블리싱 제안",
+      game_id: null,
+      group_key: "business",
+      type_key: "publishing",
+    });
+    vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(SENT);
+
+    const response = await POST(jsonRequest({ replyContent: "제안 감사합니다" }), { params: { id: "inq-1" } });
+
+    expect(response.status).toBe(200);
+    const sendInput = vi.mocked(gmailModule.sendReplyEmail).mock.calls[0][0];
+    expect(sendInput.body).toContain("문의 유형: 사업 제휴 문의 · 퍼블리싱 제휴");
+    expect(sendInput.html).toContain("퍼블리싱 제휴");
   });
 });

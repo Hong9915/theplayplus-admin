@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { requireAdminSession } from "@/lib/require-admin-session";
 import { getInquiryById } from "@/lib/inquiries";
-import { listCategoryLabels, listGames } from "@/lib/categories";
-import { listTemplates } from "@/lib/templates";
+import { listCategoryLabelsForScope, listGames } from "@/lib/categories";
+import { scopeForGameId } from "@/lib/inbox-scope";
+import { listTemplates, type TemplateRow } from "@/lib/templates";
 import { listRecentRepliesByType } from "@/lib/replies";
-import { gameScope } from "@/lib/inbox-scope";
 import { streamSuggestion, type SuggestEvent } from "@/lib/suggest";
 
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
@@ -19,14 +19,16 @@ export async function POST(_request: Request, { params }: { params: { id: string
     return NextResponse.json({ success: false, error: "not_found" }, { status: 404 });
   }
 
+  // 서비스 문의(game_id null)는 게임·템플릿이 없다. 라벨과 과거 답변은 서비스 스코프로 찾는다.
+  const scope = scopeForGameId(inquiry.gameId);
   const [labels, games, templates, pastReplies] = await Promise.all([
-    listCategoryLabels(supabase, inquiry.gameId),
-    listGames(supabase),
-    listTemplates(supabase, inquiry.gameId),
-    listRecentRepliesByType(supabase, gameScope(inquiry.gameId), inquiry.typeKey),
+    listCategoryLabelsForScope(supabase, scope),
+    scope.kind === "game" ? listGames(supabase) : Promise.resolve([]),
+    scope.kind === "game" ? listTemplates(supabase, scope.gameId) : Promise.resolve([] as TemplateRow[]),
+    listRecentRepliesByType(supabase, scope, inquiry.typeKey),
   ]);
 
-  const game = games.find((entry) => entry.id === inquiry.gameId);
+  const game = scope.kind === "game" ? games.find((entry) => entry.id === scope.gameId) : undefined;
 
   // 해당 유형 템플릿 + 공용 템플릿(type_key가 null)만 근거로 넘긴다.
   const relevant = templates.filter(

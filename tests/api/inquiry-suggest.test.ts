@@ -10,7 +10,7 @@ import * as sessionModule from "@/lib/require-admin-session";
 
 vi.mock("@/lib/supabase", () => ({ getSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/inquiries", () => ({ getInquiryById: vi.fn() }));
-vi.mock("@/lib/categories", () => ({ listCategoryLabels: vi.fn(), listGames: vi.fn() }));
+vi.mock("@/lib/categories", () => ({ listCategoryLabelsForScope: vi.fn(), listGames: vi.fn() }));
 vi.mock("@/lib/templates", () => ({ listTemplates: vi.fn() }));
 vi.mock("@/lib/replies", () => ({ listRecentRepliesByType: vi.fn() }));
 vi.mock("@/lib/suggest", () => ({ streamSuggestion: vi.fn() }));
@@ -65,7 +65,7 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReset().mockReturnValue({} as never);
     vi.mocked(sessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
     vi.mocked(inquiriesModule.getInquiryById).mockReset().mockResolvedValue(inquiry);
-    vi.mocked(categoriesModule.listCategoryLabels).mockReset().mockResolvedValue({
+    vi.mocked(categoriesModule.listCategoryLabelsForScope).mockReset().mockResolvedValue({
       groupLabels: { game_usage: "게임 이용 문의" },
       typeLabels: { payment_refund: "결제/환불" },
       typeOrder: ["payment_refund"],
@@ -160,5 +160,37 @@ describe("POST /api/inquiries/[id]/suggest", () => {
       { type: "text", text: "일부" },
       { type: "error", reason: "refused" },
     ]);
+  });
+
+  it("suggests for a service inquiry without a game: no templates, blank game name, service scope lookups", async () => {
+    vi.mocked(inquiriesModule.getInquiryById).mockResolvedValue({
+      ...inquiry,
+      gameId: null,
+      gameAccount: null,
+      companyName: "플레이컴퍼니",
+      groupKey: "business",
+      typeKey: "publishing",
+    } as never);
+    vi.mocked(categoriesModule.listCategoryLabelsForScope).mockResolvedValue({
+      groupLabels: { business: "사업 제휴 문의" },
+      typeLabels: { publishing: "퍼블리싱 제휴" },
+      typeOrder: ["publishing"],
+    });
+
+    const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
+
+    expect(response.status).toBe(200);
+    expect(templatesModule.listTemplates).not.toHaveBeenCalled();
+    expect(categoriesModule.listCategoryLabelsForScope).toHaveBeenCalledWith(expect.anything(), { kind: "service" });
+    expect(repliesModule.listRecentRepliesByType).toHaveBeenCalledWith(expect.anything(), { kind: "service" }, "publishing");
+    expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameName: "",
+        groupLabel: "사업 제휴 문의",
+        typeLabel: "퍼블리싱 제휴",
+        companyName: "플레이컴퍼니",
+        templates: [],
+      })
+    );
   });
 });
