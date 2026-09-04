@@ -61,7 +61,8 @@ language sql
 stable
 as $$
   with scoped as (
-    select * from inquiries where game_id is not distinct from p_game_id
+    select * from inquiries
+    where game_id = p_game_id or (p_game_id is null and game_id is null)
   )
   select 'status'::text, status::text, count(*) from scoped group by status
   union all
@@ -76,7 +77,7 @@ as $$
 $$;
 ```
 
-`is not distinct from`는 null끼리도 같다고 보므로 게임 uuid와 null을 한 함수로 처리한다. 권한 설정(0008)은 유지된다.
+`or`로 푼 조건은 게임 uuid와 null을 한 함수로 처리하면서 `game_id` 인덱스도 탈 수 있다(`is not distinct from`는 인덱스를 못 쓴다). 권한 설정(0008)은 유지된다.
 
 `supabase/migrations/0009`와 별도로 `supabase/migrations/0010_service_categories.sql`에 접수 폼 저장소의 `0003_service_categories.sql`을 그대로 복사해 둔다. 이미 적용된 DB에서는 `if not exists`/`on conflict do nothing`으로 아무 일도 하지 않으며, 이 저장소만 보고도 스키마를 알 수 있게 하는 기록 목적이다.
 
