@@ -51,7 +51,7 @@ URL 헬퍼(`lib/inquiry-filters.ts`)의 `inquiryListHref`·`inquiryHref`·`inbox
 - `getInquiryFacetCounts(supabase, scope)`는 RPC에 `p_game_id: scopeGameId(scope)`를 넘긴다.
 - `countNewInquiriesByGame`은 `game_id` null 행을 건너뛰는 대신 예약 키 `"service"`로 센다. 반환 타입은 그대로 `Record<string, number>`이고, `SERVICE_RAIL_KEY = "service"` 상수를 `lib/inbox-scope.ts`에 둔다(게임 id는 uuid라 충돌하지 않는다).
 
-`supabase/migrations/0009_service_inquiry_facets.sql`
+`supabase/migrations/0012_service_inquiry_facets.sql`
 
 ```sql
 -- p_game_id가 null이면 게임 없는(서비스) 문의를 센다. 0008과 서명이 같아 create or replace로 덮어쓴다.
@@ -79,7 +79,7 @@ $$;
 
 `or`로 푼 조건은 게임 uuid와 null을 한 함수로 처리하면서 `game_id` 인덱스도 탈 수 있다(`is not distinct from`는 인덱스를 못 쓴다). 권한 설정(0008)은 유지된다.
 
-`supabase/migrations/0009`와 별도로 `supabase/migrations/0010_service_categories.sql`에 접수 폼 저장소의 `0003_service_categories.sql`을 그대로 복사해 둔다. 이미 적용된 DB에서는 `if not exists`/`on conflict do nothing`으로 아무 일도 하지 않으며, 이 저장소만 보고도 스키마를 알 수 있게 하는 기록 목적이다.
+`supabase/migrations/0012`와 별도로 `supabase/migrations/0013_service_categories.sql`에 접수 폼 저장소의 `0003_service_categories.sql`을 그대로 복사해 둔다. 이미 적용된 DB에서는 `if not exists`/`on conflict do nothing`으로 아무 일도 하지 않으며, 이 저장소만 보고도 스키마를 알 수 있게 하는 기록 목적이다.
 
 `lib/categories.ts`
 
@@ -153,7 +153,7 @@ P+ 로고와 구분선 아래, 게임 목록 위에 "서비스 문의" 타일을
 
 - 서비스 카테고리 조회 실패: 빈 라벨 맵으로 그린다. 유형 필터 목록이 비고 문의의 유형은 키 그대로 보인다. 핵심(목록·답변)은 막지 않는다.
 - 건수 RPC 실패: 기존대로 `null`을 돌려주고 건수 없이 그린다.
-- 마이그레이션 0009를 아직 적용하지 않은 상태에서 서비스 스코프로 RPC를 부르면 `game_id = null` 비교가 항상 거짓이라 건수가 전부 0으로 나온다. 목록은 RPC와 무관하게 정상이다. 배포 순서: 0009 적용 → 코드 배포.
+- 마이그레이션 0012를 아직 적용하지 않은 상태에서 서비스 스코프로 RPC를 부르면 `game_id = null` 비교가 항상 거짓이라 건수가 전부 0으로 나온다. 목록은 RPC와 무관하게 정상이다. 배포 순서: 0012 적용 → 코드 배포. (0009~0011은 우선순위·자동답변 브랜치의 마이그레이션이라 번호를 0012부터 쓴다.)
 - 서비스 스코프에서 게임 문의 id를 열면 `notFound()`. 반대도 같다.
 
 ## 테스트
@@ -173,5 +173,5 @@ P+ 로고와 구분선 아래, 게임 목록 위에 "서비스 문의" 타일을
 ## 문서
 
 - `CLAUDE.md` 핵심 기능 2번에 서비스 문의 스코프(`/service/inquiries`)를 한 줄 추가.
-- `docs/PRD.md` U1을 완료로 옮기고 0009/0010 마이그레이션을 기록.
+- `docs/PRD.md` U1을 완료로 옮기고 0012/0013 마이그레이션을 기록.
 - `docs/superpowers/specs/2026-09-01-admin-panel-design.md`의 "2026-09-01 추가" 절 끝에 이 문서로의 링크를 단다.

@@ -37,8 +37,8 @@ Claude-Session: https://claude.ai/code/session_01M5jqLuCMqTMFeYsSa8txRe
 | `lib/categories.ts` | `listServiceCategoryLabels`, `listCategoryLabelsForScope` 추가. |
 | `lib/replies.ts` | 과거 답변 조회가 스코프를 받는다. |
 | `lib/inbox-page.ts` (신규) | 두 인박스 페이지가 공유하는 서버 데이터 로더. |
-| `supabase/migrations/0009_service_inquiry_facets.sql` (신규) | 건수 RPC가 null 인자를 서비스 문의로 센다. |
-| `supabase/migrations/0010_service_categories.sql` (신규) | 접수 폼 저장소 0003의 사본(기록용). |
+| `supabase/migrations/0012_service_inquiry_facets.sql` (신규) | 건수 RPC가 null 인자를 서비스 문의로 센다. |
+| `supabase/migrations/0013_service_categories.sql` (신규) | 접수 폼 저장소 0003의 사본(기록용). |
 | `app/(admin)/service/inquiries/[[...inquiryId]]/page.tsx` (신규) | 서비스 스코프 인박스 페이지. |
 | `app/(admin)/games/[gameId]/inquiries/[[...inquiryId]]/page.tsx` | 로더 호출만 남긴다. |
 | `app/(admin)/inquiries/[id]/page.tsx` | `game_id` null이면 서비스 URL로 리다이렉트. |
@@ -402,12 +402,12 @@ git commit -m "refactor: inbox URL helpers and link components take an InboxScop
 
 ---
 
-### Task 3: 목록·id·건수 조회가 스코프로 `game_id` 조건을 만든다 + 마이그레이션 0009
+### Task 3: 목록·id·건수 조회가 스코프로 `game_id` 조건을 만든다 + 마이그레이션 0012
 
 **Files:**
 - Modify: `lib/inquiries.ts:110-225, 273-280`
 - Modify: `app/(admin)/games/[gameId]/inquiries/[[...inquiryId]]/page.tsx:41-46, 63`
-- Create: `supabase/migrations/0009_service_inquiry_facets.sql`
+- Create: `supabase/migrations/0012_service_inquiry_facets.sql`
 - Test: `tests/lib/inquiries.test.ts`
 
 **Interfaces:**
@@ -576,9 +576,9 @@ import { gameScope } from "@/lib/inbox-scope";
 ```
 63행: `listInquiryIds(supabase, scope, query),`
 
-- [ ] **Step 5: Write migration 0009**
+- [ ] **Step 5: Write migration 0012**
 
-`supabase/migrations/0009_service_inquiry_facets.sql`:
+`supabase/migrations/0012_service_inquiry_facets.sql`:
 
 ```sql
 -- 문의함 보기 건수 RPC가 p_game_id = null을 "게임 없는 서비스 문의(제휴·기타)"로 센다.
@@ -622,17 +622,17 @@ Expected: PASS, tsc 오류 없음.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add lib/inquiries.ts tests/lib/inquiries.test.ts supabase/migrations/0009_service_inquiry_facets.sql "app/(admin)/games/[gameId]/inquiries/[[...inquiryId]]/page.tsx"
+git add lib/inquiries.ts tests/lib/inquiries.test.ts supabase/migrations/0012_service_inquiry_facets.sql "app/(admin)/games/[gameId]/inquiries/[[...inquiryId]]/page.tsx"
 git commit -m "feat: inquiry queries and facet counts accept a service scope (game_id is null)"
 ```
 
 ---
 
-### Task 4: 서비스 카테고리 라벨 + 마이그레이션 0010
+### Task 4: 서비스 카테고리 라벨 + 마이그레이션 0013
 
 **Files:**
 - Modify: `lib/categories.ts` (`listCategoryLabels` 아래에 추가)
-- Create: `supabase/migrations/0010_service_categories.sql`
+- Create: `supabase/migrations/0013_service_categories.sql`
 - Test: `tests/lib/categories.test.ts`
 
 **Interfaces:**
@@ -747,7 +747,7 @@ import type { InboxScope } from "@/lib/inbox-scope";
 ```ts
 /**
  * 서비스 문의(제휴·기타)의 전역 카테고리 라벨. 접수 폼 저장소가 만든
- * service_groups/service_types(마이그레이션 0010 사본)에서 읽는다. 게임과 무관하게
+ * service_groups/service_types(마이그레이션 0013 사본)에서 읽는다. 게임과 무관하게
  * 하나뿐이라 game_id 조건이 없다. 실패하면 빈 맵 — 라벨은 부가 정보다.
  */
 export async function listServiceCategoryLabels(supabase: SupabaseClient): Promise<CategoryLabelMaps> {
@@ -797,9 +797,9 @@ export async function listCategoryLabelsForScope(supabase: SupabaseClient, scope
 }
 ```
 
-- [ ] **Step 4: Write migration 0010**
+- [ ] **Step 4: Write migration 0013**
 
-`supabase/migrations/0010_service_categories.sql` — 접수 폼 저장소(`~/Documents/theplayplus/supabase/migrations/0003_service_categories.sql`)의 사본. 머리 주석만 다르다:
+`supabase/migrations/0013_service_categories.sql` — 접수 폼 저장소(`~/Documents/theplayplus/supabase/migrations/0003_service_categories.sql`)의 사본. 머리 주석만 다르다:
 
 ```sql
 -- theplayplus-contact 저장소의 0003_service_categories.sql 사본. 공유 DB에는 이미
@@ -869,7 +869,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add lib/categories.ts tests/lib/categories.test.ts supabase/migrations/0010_service_categories.sql
+git add lib/categories.ts tests/lib/categories.test.ts supabase/migrations/0013_service_categories.sql
 git commit -m "feat: read service inquiry category labels from service_groups/service_types"
 ```
 
@@ -2141,7 +2141,7 @@ git commit -m "feat: service inquiry inbox at /service/inquiries sharing the gam
 핵심 기능 2번 문단 끝(`예전 `/inquiries/{id}` 링크는 새 URL로 리다이렉트된다.` 뒤)에 추가:
 
 ```
-게임 레일 맨 위의 "서비스 문의" 타일은 게임 없이 접수된 제휴·기타 문의(`game_id is null`)를 같은 화면으로 `/service/inquiries[/{inquiryId}]`에서 보여준다(`lib/inbox-scope.ts`의 스코프로 분기). 유형 필터는 전역 `service_groups`/`service_types`(마이그레이션 0010)에서 오고, 건수 RPC는 0009부터 null 인자를 서비스 문의로 센다. 서비스 문의에는 계정 이력·같은 계정 이어보기·답변 템플릿이 없다.
+게임 레일 맨 위의 "서비스 문의" 타일은 게임 없이 접수된 제휴·기타 문의(`game_id is null`)를 같은 화면으로 `/service/inquiries[/{inquiryId}]`에서 보여준다(`lib/inbox-scope.ts`의 스코프로 분기). 유형 필터는 전역 `service_groups`/`service_types`(마이그레이션 0013)에서 오고, 건수 RPC는 0012부터 null 인자를 서비스 문의로 센다. 서비스 문의에는 계정 이력·같은 계정 이어보기·답변 템플릿이 없다.
 ```
 
 핵심 기능 6번(Slack 알림) 문단에 한 문장 추가: `서비스 문의는 게임명 자리에 "서비스 문의"가 들어가고 링크는 /service/inquiries/{id}다.`
@@ -2150,7 +2150,7 @@ git commit -m "feat: service inquiry inbox at /service/inquiries sharing the gam
 
 20행 표에 행 추가:
 ```
-| `docs/superpowers/specs/2026-09-04-service-inbox-design.md` | 서비스 문의(제휴·기타) 인박스 — 인박스 스코프, `/service/inquiries`, 마이그레이션 0009·0010 |
+| `docs/superpowers/specs/2026-09-04-service-inbox-design.md` | 서비스 문의(제휴·기타) 인박스 — 인박스 스코프, `/service/inquiries`, 마이그레이션 0012·0013 |
 ```
 435행 U1을 바꾼다:
 ```
@@ -2179,4 +2179,4 @@ git commit -m "docs: record the service inquiry inbox in CLAUDE.md, PRD, and the
 
 - [ ] **Step 6: 배포 메모 (코드 아님)**
 
-배포 순서는 스펙대로: Supabase SQL Editor에서 `0009_service_inquiry_facets.sql` 적용 → 코드 배포. 0010은 이미 적용된 스키마의 사본이라 돌려도 무해하다. 0009를 먼저 적용하지 않으면 서비스 문의함의 건수만 0으로 나오고 목록은 정상이다.
+배포 순서는 스펙대로: Supabase SQL Editor에서 `0012_service_inquiry_facets.sql` 적용 → 코드 배포. 0013은 이미 적용된 스키마의 사본이라 돌려도 무해하다. 0012를 먼저 적용하지 않으면 서비스 문의함의 건수만 0으로 나오고 목록은 정상이다.
