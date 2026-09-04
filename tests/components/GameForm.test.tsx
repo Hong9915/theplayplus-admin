@@ -55,6 +55,22 @@ describe("GameForm", () => {
     expect(onCreated).toHaveBeenCalledWith(createdGame, "logo_upload_failed");
   });
 
+  it("keeps the created game and warns when the default templates could not be seeded", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ success: true, game: createdGame, warning: "template_seed_failed" }),
+    }) as never;
+    const onCreated = vi.fn();
+    render(<GameForm onCreated={onCreated} />);
+
+    await userEvent.type(screen.getByLabelText("게임명"), "여신키우기");
+    await userEvent.click(screen.getByRole("button", { name: "게임 추가" }));
+
+    expect(
+      await screen.findByText("게임은 추가되었지만 기본 답변 템플릿 생성에 실패했습니다. 답변 템플릿 화면에서 직접 추가해주세요.")
+    ).toBeInTheDocument();
+    expect(onCreated).toHaveBeenCalledWith(createdGame, "template_seed_failed");
+  });
+
   it("shows the picked logo filename and lets it be removed again", async () => {
     render(<GameForm onCreated={vi.fn()} />);
 

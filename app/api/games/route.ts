@@ -4,6 +4,7 @@ import { gameFormSchema } from "@/lib/game-schema";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { buildGameLogoPath } from "@/lib/storage";
 import { createDefaultCategoriesForGame } from "@/lib/categories";
+import { createDefaultTemplatesForGame } from "@/lib/default-templates";
 import { requireAdminSession } from "@/lib/require-admin-session";
 
 export async function POST(request: Request) {
@@ -75,6 +76,15 @@ export async function POST(request: Request) {
   } catch {
     await supabase.from("games").delete().eq("id", inserted.id);
     return NextResponse.json({ success: false, error: "category_seed_failed" }, { status: 500 });
+  }
+
+  // 자동 답변 템플릿은 화면에서 다시 만들 수 있는 부가 데이터다. 실패해도
+  // 게임을 되돌리지 않고 경고만 낸다. 로고 경고가 이미 있으면 그쪽을 남긴다.
+  try {
+    await createDefaultTemplatesForGame(supabase, inserted.id);
+  } catch (error) {
+    console.error("[api/games] default template seed failed", { gameId: inserted.id, error });
+    warning = warning ?? "template_seed_failed";
   }
 
   return NextResponse.json(

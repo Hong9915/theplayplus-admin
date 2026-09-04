@@ -3,10 +3,25 @@ import { DEFAULT_CATEGORY_TEMPLATE, createDefaultCategoriesForGame, listCategory
 
 describe("DEFAULT_CATEGORY_TEMPLATE", () => {
   it("defines three groups in order with the expected type counts", () => {
-    expect(DEFAULT_CATEGORY_TEMPLATE.map((g) => g.key)).toEqual(["game_usage", "business", "other"]);
-    expect(DEFAULT_CATEGORY_TEMPLATE[0].types).toHaveLength(4);
-    expect(DEFAULT_CATEGORY_TEMPLATE[1].types).toHaveLength(2);
-    expect(DEFAULT_CATEGORY_TEMPLATE[2].types).toHaveLength(2);
+    expect(DEFAULT_CATEGORY_TEMPLATE.map((g) => g.key)).toEqual(["account_security", "game_usage", "payment_refund"]);
+    expect(DEFAULT_CATEGORY_TEMPLATE[0].types.map((t) => t.key)).toEqual(["account_inquiry", "account_restriction"]);
+    expect(DEFAULT_CATEGORY_TEMPLATE[1].types.map((t) => t.key)).toEqual([
+      "suggestion",
+      "game_content",
+      "bug_report",
+      "restore_request",
+      "install_connect",
+      "event_inquiry",
+    ]);
+    expect(DEFAULT_CATEGORY_TEMPLATE[2].types.map((t) => t.key)).toEqual(["payment", "refund"]);
+  });
+
+  it("carries the per-type form flags the contact form reads", () => {
+    const byKey = Object.fromEntries(DEFAULT_CATEGORY_TEMPLATE.flatMap((g) => g.types.map((t) => [t.key, t])));
+    expect(byKey.install_connect).toMatchObject({ requiresAttachments: true, collectsDeviceInfo: true });
+    expect(byKey.payment).toMatchObject({ collectsOccurredAt: true, collectsPaymentNo: false });
+    expect(byKey.refund).toMatchObject({ collectsOccurredAt: true, collectsPaymentNo: true });
+    expect(byKey.bug_report).toMatchObject({ requiresGameAccount: true, allowAttachments: true, requiresAttachments: false });
   });
 
   it("every group and type has a Korean, Chinese, and English label", () => {
@@ -50,7 +65,7 @@ describe("createDefaultCategoriesForGame", () => {
     expect(supabase.groupsInsert).toHaveBeenCalledTimes(3);
     expect(supabase.groupsInsert).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ game_id: "game-abc", key: "game_usage" })
+      expect.objectContaining({ game_id: "game-abc", key: "account_security" })
     );
   });
 
@@ -60,9 +75,13 @@ describe("createDefaultCategoriesForGame", () => {
 
     expect(supabase.typesInsert).toHaveBeenCalledTimes(3);
     const firstGroupTypes = supabase.typesInsert.mock.calls[0][0];
-    expect(firstGroupTypes).toHaveLength(4);
+    expect(firstGroupTypes).toHaveLength(2);
     expect(firstGroupTypes[0]).toEqual(
-      expect.objectContaining({ group_id: "group-1", key: "account_login", requires_game_account: true })
+      expect.objectContaining({ group_id: "group-1", key: "account_inquiry", requires_game_account: true })
+    );
+    const gameUsageTypes = supabase.typesInsert.mock.calls[1][0] as Array<Record<string, unknown>>;
+    expect(gameUsageTypes.find((row) => row.key === "install_connect")).toEqual(
+      expect.objectContaining({ requires_attachments: true, collects_device_info: true, collects_payment_no: false })
     );
   });
 
@@ -72,18 +91,19 @@ describe("createDefaultCategoriesForGame", () => {
         select: () => ({ single: () => Promise.resolve({ data: null, error: { message: "db error" } }) }),
       }),
     }));
-    await expect(createDefaultCategoriesForGame({ from } as never, "game-abc")).rejects.toThrow(/game_usage/);
+    await expect(createDefaultCategoriesForGame({ from } as never, "game-abc")).rejects.toThrow(/account_security/);
   });
 });
 
 describe("default priority per type", () => {
-  it("marks payment/refund as urgent and every other template type as normal", () => {
+  it("marks payment/refund/restore urgent, suggestion low, and everything else normal", () => {
     const priorities = Object.fromEntries(
       DEFAULT_CATEGORY_TEMPLATE.flatMap((g) => g.types.map((t) => [t.key, t.defaultPriority]))
     );
-    expect(priorities.payment_refund).toBe("urgent");
+    const urgent = ["payment", "refund", "restore_request"];
     for (const [key, priority] of Object.entries(priorities)) {
-      if (key !== "payment_refund") expect(priority).toBe("normal");
+      const expected = urgent.includes(key) ? "urgent" : key === "suggestion" ? "low" : "normal";
+      expect(priority, key).toBe(expected);
     }
   });
 
@@ -99,13 +119,11 @@ describe("default priority per type", () => {
 
     await createDefaultCategoriesForGame({ from } as never, "game-abc");
 
-    const firstGroupTypes = typesInsert.mock.calls[0][0] as Array<Record<string, unknown>>;
-    expect(firstGroupTypes.find((row) => row.key === "payment_refund")).toEqual(
-      expect.objectContaining({ default_priority: "urgent" })
-    );
-    expect(firstGroupTypes.find((row) => row.key === "bug_report")).toEqual(
-      expect.objectContaining({ default_priority: "normal" })
-    );
+    const gameUsageTypes = typesInsert.mock.calls[1][0] as Array<Record<string, unknown>>;
+    const paymentTypes = typesInsert.mock.calls[2][0] as Array<Record<string, unknown>>;
+    expect(paymentTypes.find((row) => row.key === "refund")).toEqual(expect.objectContaining({ default_priority: "urgent" }));
+    expect(gameUsageTypes.find((row) => row.key === "suggestion")).toEqual(expect.objectContaining({ default_priority: "low" }));
+    expect(gameUsageTypes.find((row) => row.key === "bug_report")).toEqual(expect.objectContaining({ default_priority: "normal" }));
   });
 });
 
