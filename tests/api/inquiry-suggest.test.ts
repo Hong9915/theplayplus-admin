@@ -71,7 +71,7 @@ describe("POST /api/inquiries/[id]/suggest", () => {
       typeOrder: ["payment_refund"],
     });
     vi.mocked(categoriesModule.listGames).mockReset().mockResolvedValue([
-      { id: "game-1", name: "여신키우기", status: "active", logoPath: null, ownerName: null, createdAt: "" },
+      { id: "game-1", name: "여신키우기", status: "active", logoPath: null, ownerName: null, createdAt: "", sheetId: null },
     ]);
     vi.mocked(templatesModule.listTemplates).mockReset().mockResolvedValue([]);
     vi.mocked(repliesModule.listRecentRepliesByType).mockReset().mockResolvedValue([]);

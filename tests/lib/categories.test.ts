@@ -164,6 +164,7 @@ describe("listGames", () => {
         logoPath: "game-1/logo.png",
         ownerName: "홍길동",
         createdAt: "2026-01-01T00:00:00.000Z",
+        sheetId: null,
       },
     ]);
   });
@@ -174,6 +175,25 @@ describe("listGames", () => {
     const from = vi.fn(() => ({ select }));
 
     await expect(listGames({ from } as never)).rejects.toThrow(/db error/);
+  });
+});
+
+describe("listGames sheetId", () => {
+  it("maps sheet_id to sheetId and defaults to null", async () => {
+    const order = vi.fn().mockResolvedValue({
+      data: [
+        { id: "g1", name: "A", status: "active", logo_path: null, owner_name: null, created_at: "2026-01-01T00:00:00Z", sheet_id: "abc123" },
+        { id: "g2", name: "B", status: "active", logo_path: null, owner_name: null, created_at: "2026-01-01T00:00:00Z", sheet_id: null },
+      ],
+      error: null,
+    });
+    const select = vi.fn(() => ({ order }));
+    const from = vi.fn(() => ({ select }));
+
+    const games = await listGames({ from } as never);
+
+    expect(games[0].sheetId).toBe("abc123");
+    expect(games[1].sheetId).toBeNull();
   });
 });
 

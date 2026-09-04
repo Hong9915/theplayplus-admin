@@ -8,6 +8,8 @@ export interface GameRow {
   logoPath: string | null;
   ownerName: string | null;
   createdAt: string;
+  /** 운영 시트 어시스턴트가 연결하는 구글 시트 ID. 연결되지 않았으면 null */
+  sheetId: string | null;
 }
 
 export type InquiryTypePriority = "urgent" | "high" | "normal" | "low";
@@ -164,6 +166,7 @@ function mapGameRow(row: {
   logo_path: string | null;
   owner_name: string | null;
   created_at: string;
+  sheet_id?: string | null;
 }): GameRow {
   return {
     id: row.id,
@@ -172,6 +175,7 @@ function mapGameRow(row: {
     logoPath: row.logo_path,
     ownerName: row.owner_name,
     createdAt: row.created_at,
+    sheetId: row.sheet_id ?? null,
   };
 }
 
