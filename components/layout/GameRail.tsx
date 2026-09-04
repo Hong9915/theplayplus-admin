@@ -8,6 +8,45 @@ import type { GameRow } from "@/lib/categories";
 import { getGameLogoPublicUrl } from "@/lib/storage";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import GameForm from "@/components/games/GameForm";
+import { SERVICE_RAIL_KEY, SERVICE_SCOPE_TITLE } from "@/lib/inbox-scope";
+
+const TILE = "relative w-10 h-10 rounded-xl flex items-center justify-center transition-all";
+const TILE_ACTIVE = "ring-2 ring-accent ring-offset-2 ring-offset-panel";
+const TILE_IDLE = "opacity-70 hover:opacity-100 hover:ring-2 hover:ring-line hover:ring-offset-2 hover:ring-offset-panel";
+
+function NewBadge({ pending }: { pending: number }) {
+  if (pending <= 0) return null;
+  return (
+    <span
+      className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-white text-[10px] font-semibold leading-[18px] text-center ring-2 ring-panel"
+      aria-label={`접수 ${pending}건`}
+    >
+      {pending > 99 ? "99+" : pending}
+    </span>
+  );
+}
+
+/** 게임 없이 접수된 서비스 문의(제휴·기타)로 가는 고정 타일. 게임 목록 맨 위에 놓인다. */
+function ServiceTile({ active, pending }: { active: boolean; pending: number }) {
+  const label = `${SERVICE_SCOPE_TITLE} (제휴·기타)`;
+  return (
+    <Link
+      href="/service/inquiries"
+      title={pending > 0 ? `${label} · 접수 ${pending}건` : label}
+      aria-current={active ? "page" : undefined}
+      className={`${TILE} ${active ? TILE_ACTIVE : TILE_IDLE}`}
+    >
+      <span className="w-10 h-10 bg-ground border border-line rounded-xl flex items-center justify-center text-muted">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M3 7l9 6 9-6" />
+        </svg>
+        <span className="sr-only">{SERVICE_SCOPE_TITLE}</span>
+      </span>
+      <NewBadge pending={pending} />
+    </Link>
+  );
+}
 
 export default function GameRail({
   games,
@@ -41,6 +80,10 @@ export default function GameRail({
         <div className="w-8 border-t border-line my-1" />
 
         <nav className="flex-1 w-full overflow-y-auto flex flex-col items-center gap-2" aria-label="게임 목록">
+          <ServiceTile active={pathname.startsWith("/service/")} pending={newCounts[SERVICE_RAIL_KEY] ?? 0} />
+
+          <div className="w-8 border-t border-line my-1" aria-hidden="true" />
+
           {games.map((game) => {
             const active = pathname.startsWith(`/games/${game.id}/`);
             const logoUrl = getGameLogoPublicUrl(game.logoPath);
@@ -51,11 +94,7 @@ export default function GameRail({
                 href={`/games/${game.id}/inquiries`}
                 title={pending > 0 ? `${game.name} · 접수 ${pending}건` : game.name}
                 aria-current={active ? "page" : undefined}
-                className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                  active
-                    ? "ring-2 ring-accent ring-offset-2 ring-offset-panel"
-                    : "opacity-70 hover:opacity-100 hover:ring-2 hover:ring-line hover:ring-offset-2 hover:ring-offset-panel"
-                }`}
+                className={`${TILE} ${active ? TILE_ACTIVE : TILE_IDLE}`}
               >
                 {logoUrl ? (
                   <Image src={logoUrl} alt={game.name} width={40} height={40} className="w-10 h-10 rounded-xl object-cover" unoptimized />
@@ -64,14 +103,7 @@ export default function GameRail({
                     {game.name.charAt(0)}
                   </span>
                 )}
-                {pending > 0 && (
-                  <span
-                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-white text-[10px] font-semibold leading-[18px] text-center ring-2 ring-panel"
-                    aria-label={`접수 ${pending}건`}
-                  >
-                    {pending > 99 ? "99+" : pending}
-                  </span>
-                )}
+                <NewBadge pending={pending} />
               </Link>
             );
           })}
