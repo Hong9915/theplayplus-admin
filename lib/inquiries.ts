@@ -241,23 +241,54 @@ export async function listAttachmentSignedUrls(
   supabase: SupabaseClient,
   inquiryId: string
 ): Promise<AttachmentWithUrl[]> {
+  const byInquiry = await listAttachmentSignedUrlsByInquiryIds(supabase, [inquiryId]);
+  return byInquiry[inquiryId] ?? [];
+}
+
+const SIGNED_URL_TTL_SECONDS = 3600;
+
+/**
+ * 여러 문의의 첨부를 쿼리 한 번, 서명 한 번으로 가져와 문의 id별로 묶는다.
+ * 첨부가 없는 문의는 키가 없다. 서명이 실패하면 파일은 남기고 URL만 null.
+ */
+export async function listAttachmentSignedUrlsByInquiryIds(
+  supabase: SupabaseClient,
+  inquiryIds: string[]
+): Promise<Record<string, AttachmentWithUrl[]>> {
+  if (inquiryIds.length === 0) {
+    return {};
+  }
+
   const { data, error } = await supabase
     .from("inquiry_attachments")
-    .select("id, file_path, file_name")
-    .eq("inquiry_id", inquiryId);
+    .select("id, inquiry_id, file_path, file_name")
+    .in("inquiry_id", inquiryIds);
 
-  if (error || !data) {
-    return [];
+  if (error || !data || data.length === 0) {
+    return {};
   }
 
-  const results: AttachmentWithUrl[] = [];
-  for (const attachment of data) {
-    const { data: signed } = await supabase.storage
-      .from("inquiry-attachments")
-      .createSignedUrl(attachment.file_path, 3600);
-    results.push({ id: attachment.id, fileName: attachment.file_name, signedUrl: signed?.signedUrl ?? null });
+  const rows = data as Array<{ id: string; inquiry_id: string; file_path: string; file_name: string }>;
+  const { data: signed } = await supabase.storage
+    .from("inquiry-attachments")
+    .createSignedUrls(
+      rows.map((row) => row.file_path),
+      SIGNED_URL_TTL_SECONDS
+    );
+  const urlByPath = new Map<string, string | null>();
+  for (const entry of signed ?? []) {
+    if (entry.path) urlByPath.set(entry.path, entry.signedUrl ?? null);
   }
-  return results;
+
+  const grouped: Record<string, AttachmentWithUrl[]> = {};
+  for (const row of rows) {
+    (grouped[row.inquiry_id] ??= []).push({
+      id: row.id,
+      fileName: row.file_name,
+      signedUrl: urlByPath.get(row.file_path) ?? null,
+    });
+  }
+  return grouped;
 }
 
 export interface InquiryFacetCounts {

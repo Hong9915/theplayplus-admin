@@ -10,7 +10,8 @@ import { gameScope } from "@/lib/inbox-scope";
 const push = vi.fn();
 const replace = vi.fn();
 const refresh = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace, refresh }) }));
+const prefetch = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace, refresh, prefetch }) }));
 
 function makeInquiry(overrides: Partial<InquiryRow>): InquiryRow {
   return {
@@ -58,6 +59,7 @@ describe("InboxList", () => {
   beforeEach(() => {
     push.mockReset();
     replace.mockReset();
+    prefetch.mockReset();
     refresh.mockReset();
   });
 
@@ -88,6 +90,21 @@ describe("InboxList", () => {
     renderList(makePage([makeInquiry({})]), { ...DEFAULT_QUERY, status: "new" });
     await userEvent.click(screen.getByText("버그 신고합니다"));
     expect(push).toHaveBeenCalledWith("/games/g1/inquiries/aaaabbbb-0000-0000-0000-000000000000?status=new");
+  });
+
+  it("highlights the clicked row right away while the navigation is pending", async () => {
+    renderList(makePage([makeInquiry({}), makeInquiry({ id: "second", title: "두 번째" })]), DEFAULT_QUERY, "aaaabbbb-0000-0000-0000-000000000000");
+    await userEvent.click(screen.getByText("두 번째"));
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[1]).toHaveAttribute("aria-current", "true");
+    expect(rows[1]).toHaveAttribute("aria-busy", "true");
+    expect(rows[0]).not.toHaveAttribute("aria-current");
+  });
+
+  it("prefetches a row when the pointer enters it", async () => {
+    renderList(makePage([makeInquiry({})]), { ...DEFAULT_QUERY, status: "new" });
+    await userEvent.hover(screen.getByText("버그 신고합니다"));
+    expect(prefetch).toHaveBeenCalledWith("/games/g1/inquiries/aaaabbbb-0000-0000-0000-000000000000?status=new");
   });
 
   it("marks the selected row", () => {

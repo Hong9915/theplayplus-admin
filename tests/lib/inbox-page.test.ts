@@ -12,7 +12,7 @@ import * as messagesModule from "@/lib/messages";
 vi.mock("@/lib/inquiries", () => ({
   getInquiryById: vi.fn(),
   getInquiryFacetCounts: vi.fn(),
-  listAttachmentSignedUrls: vi.fn(),
+  listAttachmentSignedUrlsByInquiryIds: vi.fn(),
   listInquiryIds: vi.fn(),
   queryInquiries: vi.fn(),
 }));
@@ -62,7 +62,7 @@ describe("loadInboxPage", () => {
     vi.mocked(inquiriesModule.getInquiryFacetCounts).mockReset().mockResolvedValue(null);
     vi.mocked(inquiriesModule.queryInquiries).mockReset().mockResolvedValue(emptyPage);
     vi.mocked(inquiriesModule.listInquiryIds).mockReset().mockResolvedValue(["inq-1"]);
-    vi.mocked(inquiriesModule.listAttachmentSignedUrls).mockReset().mockResolvedValue([]);
+    vi.mocked(inquiriesModule.listAttachmentSignedUrlsByInquiryIds).mockReset().mockResolvedValue({});
     vi.mocked(inquiriesModule.getInquiryById).mockReset();
     vi.mocked(historyModule.getAccountHistory).mockReset().mockResolvedValue([]);
     vi.mocked(notesModule.listNotes).mockReset().mockResolvedValue([]);
@@ -128,5 +128,40 @@ describe("loadInboxPage", () => {
     expect(templatesModule.listTemplates).not.toHaveBeenCalled();
     expect(data?.selected).toMatchObject({ history: null, pastThreads: [], templates: [] });
     expect(inquiriesModule.listInquiryIds).toHaveBeenCalledWith({}, { kind: "service" }, expect.anything());
+  });
+
+  it("fetches the selected and past inquiries' attachments in one batched lookup", async () => {
+    vi.mocked(inquiriesModule.getInquiryById).mockResolvedValue(inquiry({}));
+    vi.mocked(historyModule.getAccountHistory).mockResolvedValue([
+      { id: "inq-0", inquiryNo: null, title: "예전", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "bug_report", occurredAt: null, paymentNo: null, deviceInfo: null, createdAt: "2026-08-01T00:00:00.000Z" },
+    ]);
+    vi.mocked(inquiriesModule.listAttachmentSignedUrlsByInquiryIds).mockResolvedValue({
+      "inq-1": [{ id: "att-1", fileName: "now.png", signedUrl: "https://signed.example/now" }],
+      "inq-0": [{ id: "att-0", fileName: "then.png", signedUrl: "https://signed.example/then" }],
+    });
+
+    const data = await loadInboxPage({} as never, gameScope("g1"), "inq-1", {});
+
+    expect(inquiriesModule.listAttachmentSignedUrlsByInquiryIds).toHaveBeenCalledTimes(1);
+    expect(inquiriesModule.listAttachmentSignedUrlsByInquiryIds).toHaveBeenCalledWith({}, ["inq-1", "inq-0"]);
+    expect(data?.selected?.attachments).toEqual([{ id: "att-1", fileName: "now.png", signedUrl: "https://signed.example/now" }]);
+    expect(data?.selected?.pastThreads[0].attachments).toEqual([{ id: "att-0", fileName: "then.png", signedUrl: "https://signed.example/then" }]);
+  });
+
+  it("starts the per-inquiry lookups without waiting for the inquiry row", async () => {
+    let releaseInquiry: (row: inquiriesModule.InquiryRow) => void = () => {};
+    vi.mocked(inquiriesModule.getInquiryById).mockReturnValue(new Promise((resolve) => { releaseInquiry = resolve; }));
+
+    const pending = loadInboxPage({} as never, gameScope("g1"), "inq-1", {});
+    await Promise.resolve();
+
+    expect(messagesModule.listMessages).toHaveBeenCalledWith({}, "inq-1");
+    expect(notesModule.listNotes).toHaveBeenCalledWith({}, "inq-1");
+    expect(eventsModule.listEvents).toHaveBeenCalledWith({}, "inq-1");
+    expect(templatesModule.listTemplates).toHaveBeenCalledWith({}, "g1");
+    expect(inquiriesModule.listInquiryIds).toHaveBeenCalledWith({}, { kind: "game", gameId: "g1" }, expect.anything());
+
+    releaseInquiry(inquiry({}));
+    await expect(pending).resolves.toMatchObject({ selected: { inquiry: { id: "inq-1" } } });
   });
 });

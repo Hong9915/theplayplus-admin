@@ -53,6 +53,8 @@ export default function InboxList({
   const [bulkStatus, setBulkStatus] = useState<InquiryStatus>("resolved");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  // 클릭한 문의를 서버 응답 전에 먼저 강조한다. 서버가 그 문의를 선택으로 돌려주면 지운다.
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   const { rows, total, pageSize } = page;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -63,6 +65,18 @@ export default function InboxList({
   useEffect(() => {
     setChecked(new Set());
   }, [rows]);
+
+  useEffect(() => {
+    setPendingId(null);
+  }, [selectedId]);
+
+  const shownId = pendingId ?? selectedId;
+
+  function open(inquiryId: string) {
+    if (inquiryId === selectedId) return;
+    setPendingId(inquiryId);
+    router.push(inquiryHref(scope, inquiryId, query));
+  }
 
   function navigate(next: Partial<InquiryListQuery>, resetPage = true) {
     const merged: InquiryListQuery = { ...query, ...next, page: resetPage ? 1 : next.page ?? query.page };
@@ -145,14 +159,17 @@ export default function InboxList({
             {rows.map((inquiry) => {
               const elapsed = formatElapsed(inquiry.createdAt);
               const stale = inquiry.status !== "resolved" && elapsed.endsWith("일");
-              const selected = inquiry.id === selectedId;
+              const selected = inquiry.id === shownId;
+              const pending = pendingId !== null && inquiry.id === pendingId;
               const priority = PRIORITY_MARK[inquiry.priority];
               return (
                 <li
                   key={inquiry.id}
-                  onClick={() => router.push(inquiryHref(scope, inquiry.id, query))}
+                  onClick={() => open(inquiry.id)}
+                  onPointerEnter={() => router.prefetch(inquiryHref(scope, inquiry.id, query))}
                   aria-current={selected ? "true" : undefined}
-                  className={`flex gap-2 px-4 py-3 border-b border-line cursor-pointer transition-colors border-l-2 ${
+                  aria-busy={pending ? "true" : undefined}
+                  className={`flex gap-2 px-4 py-3 border-b border-line cursor-pointer transition-colors border-l-2 ${pending ? "cursor-progress" : ""} ${
                     selected || inquiry.status === "new" ? "border-l-accent" : "border-l-transparent"
                   } ${selected || checked.has(inquiry.id) ? "bg-accent/5" : "hover:bg-ground/60"}`}
                 >

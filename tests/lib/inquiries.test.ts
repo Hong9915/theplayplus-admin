@@ -5,6 +5,7 @@ import {
   getInquiryById,
   getInquiryFacetCounts,
   listAttachmentSignedUrls,
+  listAttachmentSignedUrlsByInquiryIds,
   listInquiryIds,
   queryInquiries,
   sanitizeSearch,
@@ -319,29 +320,91 @@ describe("getInquiryById", () => {
   });
 });
 
+function mockAttachments(rows: Array<{ id: string; inquiry_id: string; file_path: string; file_name: string }>, signed: Record<string, string | null> = {}) {
+  const inFn = vi.fn().mockResolvedValue({ data: rows, error: null });
+  const select = vi.fn(() => ({ in: inFn }));
+  const from = vi.fn(() => ({ select }));
+  const createSignedUrls = vi.fn(async (paths: string[]) => ({
+    data: paths.map((path) => ({ path, signedUrl: signed[path] ?? null, signedURL: null, error: null })),
+    error: null,
+  }));
+  const storageFrom = vi.fn(() => ({ createSignedUrls }));
+  return { supabase: { from, storage: { from: storageFrom } } as never, from, select, inFn, createSignedUrls, storageFrom };
+}
+
 describe("listAttachmentSignedUrls", () => {
   it("returns an empty array when there are no attachments", async () => {
-    const eq = vi.fn().mockResolvedValue({ data: [], error: null });
-    const select = vi.fn(() => ({ eq }));
-    const from = vi.fn(() => ({ select }));
+    const { supabase, createSignedUrls } = mockAttachments([]);
 
-    const result = await listAttachmentSignedUrls({ from } as never, "inq-1");
+    const result = await listAttachmentSignedUrls(supabase, "inq-1");
     expect(result).toEqual([]);
+    expect(createSignedUrls).not.toHaveBeenCalled();
   });
 
-  it("signs a URL for each attachment", async () => {
-    const eq = vi.fn().mockResolvedValue({
-      data: [{ id: "att-1", file_path: "inq-1/screenshot.png", file_name: "screenshot.png" }],
-      error: null,
-    });
-    const select = vi.fn(() => ({ eq }));
-    const from = vi.fn(() => ({ select }));
-    const createSignedUrl = vi.fn().mockResolvedValue({ data: { signedUrl: "https://signed.example/x" }, error: null });
-    const storageFrom = vi.fn(() => ({ createSignedUrl }));
+  it("signs every attachment of the inquiry in one storage call", async () => {
+    const { supabase, createSignedUrls, inFn } = mockAttachments(
+      [
+        { id: "att-1", inquiry_id: "inq-1", file_path: "inq-1/screenshot.png", file_name: "screenshot.png" },
+        { id: "att-2", inquiry_id: "inq-1", file_path: "inq-1/log.txt", file_name: "log.txt" },
+      ],
+      { "inq-1/screenshot.png": "https://signed.example/x", "inq-1/log.txt": "https://signed.example/y" }
+    );
 
-    const result = await listAttachmentSignedUrls({ from, storage: { from: storageFrom } } as never, "inq-1");
-    expect(createSignedUrl).toHaveBeenCalledWith("inq-1/screenshot.png", 3600);
-    expect(result).toEqual([{ id: "att-1", fileName: "screenshot.png", signedUrl: "https://signed.example/x" }]);
+    const result = await listAttachmentSignedUrls(supabase, "inq-1");
+    expect(inFn).toHaveBeenCalledWith("inquiry_id", ["inq-1"]);
+    expect(createSignedUrls).toHaveBeenCalledTimes(1);
+    expect(createSignedUrls).toHaveBeenCalledWith(["inq-1/screenshot.png", "inq-1/log.txt"], 3600);
+    expect(result).toEqual([
+      { id: "att-1", fileName: "screenshot.png", signedUrl: "https://signed.example/x" },
+      { id: "att-2", fileName: "log.txt", signedUrl: "https://signed.example/y" },
+    ]);
+  });
+});
+
+describe("listAttachmentSignedUrlsByInquiryIds", () => {
+  it("returns an empty map without querying when no ids are given", async () => {
+    const { supabase, from } = mockAttachments([]);
+    await expect(listAttachmentSignedUrlsByInquiryIds(supabase, [])).resolves.toEqual({});
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("fetches every inquiry's attachments with one query and one signing call, grouped by inquiry", async () => {
+    const { supabase, inFn, createSignedUrls, storageFrom } = mockAttachments(
+      [
+        { id: "att-1", inquiry_id: "inq-1", file_path: "inq-1/a.png", file_name: "a.png" },
+        { id: "att-2", inquiry_id: "inq-2", file_path: "inq-2/b.png", file_name: "b.png" },
+        { id: "att-3", inquiry_id: "inq-2", file_path: "inq-2/c.png", file_name: "c.png" },
+      ],
+      { "inq-1/a.png": "https://signed.example/a", "inq-2/b.png": "https://signed.example/b" }
+    );
+
+    const result = await listAttachmentSignedUrlsByInquiryIds(supabase, ["inq-1", "inq-2", "inq-3"]);
+
+    expect(inFn).toHaveBeenCalledWith("inquiry_id", ["inq-1", "inq-2", "inq-3"]);
+    expect(storageFrom).toHaveBeenCalledWith("inquiry-attachments");
+    expect(createSignedUrls).toHaveBeenCalledTimes(1);
+    expect(createSignedUrls).toHaveBeenCalledWith(["inq-1/a.png", "inq-2/b.png", "inq-2/c.png"], 3600);
+    expect(result).toEqual({
+      "inq-1": [{ id: "att-1", fileName: "a.png", signedUrl: "https://signed.example/a" }],
+      "inq-2": [
+        { id: "att-2", fileName: "b.png", signedUrl: "https://signed.example/b" },
+        { id: "att-3", fileName: "c.png", signedUrl: null },
+      ],
+    });
+  });
+
+  it("leaves signed URLs null when signing fails but still lists the files", async () => {
+    const { supabase, createSignedUrls } = mockAttachments([{ id: "att-1", inquiry_id: "inq-1", file_path: "inq-1/a.png", file_name: "a.png" }]);
+    createSignedUrls.mockResolvedValue({ data: null, error: { message: "boom" } } as never);
+
+    const result = await listAttachmentSignedUrlsByInquiryIds(supabase, ["inq-1"]);
+    expect(result).toEqual({ "inq-1": [{ id: "att-1", fileName: "a.png", signedUrl: null }] });
+  });
+
+  it("returns an empty map when the attachment query fails", async () => {
+    const { supabase, inFn } = mockAttachments([]);
+    inFn.mockResolvedValue({ data: null, error: { message: "boom" } });
+    await expect(listAttachmentSignedUrlsByInquiryIds(supabase, ["inq-1"])).resolves.toEqual({});
   });
 });
 
