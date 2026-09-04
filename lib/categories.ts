@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { InboxScope } from "@/lib/inbox-scope";
 
 export interface GameRow {
   id: string;
@@ -221,6 +222,57 @@ export async function listCategoryLabels(supabase: SupabaseClient, gameId: strin
   }
 
   return { groupLabels, typeLabels, typeOrder };
+}
+
+/**
+ * 서비스 문의(제휴·기타)의 전역 카테고리 라벨. 접수 폼 저장소가 만든
+ * service_groups/service_types(마이그레이션 0013 사본)에서 읽는다. 게임과 무관하게
+ * 하나뿐이라 game_id 조건이 없다. 실패하면 빈 맵 — 라벨은 부가 정보다.
+ */
+export async function listServiceCategoryLabels(supabase: SupabaseClient): Promise<CategoryLabelMaps> {
+  const groupLabels: Record<string, string> = {};
+  const typeLabels: Record<string, string> = {};
+  const typeOrder: string[] = [];
+
+  const { data: groups, error: groupsError } = await supabase
+    .from("service_groups")
+    .select("id, key, label_ko")
+    .order("sort_order", { ascending: true });
+
+  if (groupsError || !groups || groups.length === 0) {
+    return { groupLabels, typeLabels, typeOrder };
+  }
+
+  for (const group of groups) {
+    groupLabels[group.key] = group.label_ko;
+  }
+
+  const { data: types, error: typesError } = await supabase
+    .from("service_types")
+    .select("key, label_ko, group_id")
+    .in(
+      "group_id",
+      groups.map((group) => group.id)
+    )
+    .order("sort_order", { ascending: true });
+
+  if (!typesError && types) {
+    for (const type of types) {
+      typeLabels[type.key] = type.label_ko;
+    }
+    for (const group of groups) {
+      for (const type of types) {
+        if (type.group_id === group.id) typeOrder.push(type.key);
+      }
+    }
+  }
+
+  return { groupLabels, typeLabels, typeOrder };
+}
+
+/** 스코프에 맞는 라벨. 게임이면 그 게임의 카테고리, 서비스면 전역 서비스 카테고리. */
+export async function listCategoryLabelsForScope(supabase: SupabaseClient, scope: InboxScope): Promise<CategoryLabelMaps> {
+  return scope.kind === "game" ? listCategoryLabels(supabase, scope.gameId) : listServiceCategoryLabels(supabase);
 }
 
 export async function listGames(supabase: SupabaseClient): Promise<GameRow[]> {

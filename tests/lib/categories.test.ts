@@ -1,5 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
-import { DEFAULT_CATEGORY_TEMPLATE, createDefaultCategoriesForGame, listCategoryLabels, listGames } from "@/lib/categories";
+import {
+  DEFAULT_CATEGORY_TEMPLATE,
+  createDefaultCategoriesForGame,
+  listCategoryLabels,
+  listCategoryLabelsForScope,
+  listGames,
+  listServiceCategoryLabels,
+} from "@/lib/categories";
+import { SERVICE_SCOPE, gameScope } from "@/lib/inbox-scope";
 
 describe("DEFAULT_CATEGORY_TEMPLATE", () => {
   it("defines three groups in order with the expected type counts", () => {
@@ -217,5 +225,74 @@ describe("listCategoryLabels", () => {
       typeLabels: {},
       typeOrder: [],
     });
+  });
+});
+
+describe("listServiceCategoryLabels", () => {
+  function chain(result: { data: unknown; error: { message: string } | null }) {
+    const builder: Record<string, unknown> = {};
+    for (const name of ["eq", "in", "order"]) {
+      builder[name] = vi.fn(() => builder);
+    }
+    builder.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
+    return builder;
+  }
+
+  it("reads the global service groups and types in sort order", async () => {
+    const groups = chain({
+      data: [
+        { id: "sg-1", key: "business", label_ko: "사업 제휴 문의" },
+        { id: "sg-2", key: "other", label_ko: "기타 문의" },
+      ],
+      error: null,
+    });
+    const types = chain({
+      data: [
+        { key: "publishing", label_ko: "퍼블리싱 제휴", group_id: "sg-1" },
+        { key: "press", label_ko: "언론·보도 문의", group_id: "sg-2" },
+        { key: "marketing", label_ko: "마케팅 제휴", group_id: "sg-1" },
+      ],
+      error: null,
+    });
+    const from = vi.fn((table: string) => ({
+      select: vi.fn(() => (table === "service_groups" ? groups : types)),
+    }));
+
+    const labels = await listServiceCategoryLabels({ from } as never);
+
+    expect(from).toHaveBeenCalledWith("service_groups");
+    expect(from).toHaveBeenCalledWith("service_types");
+    expect(groups.eq).not.toHaveBeenCalled();
+    expect(labels.groupLabels).toEqual({ business: "사업 제휴 문의", other: "기타 문의" });
+    expect(labels.typeLabels.press).toBe("언론·보도 문의");
+    expect(labels.typeOrder).toEqual(["publishing", "marketing", "press"]);
+    expect(types.in).toHaveBeenCalledWith("group_id", ["sg-1", "sg-2"]);
+  });
+
+  it("returns empty maps when the groups query fails", async () => {
+    const groups = chain({ data: null, error: { message: "boom" } });
+    const from = vi.fn(() => ({ select: vi.fn(() => groups) }));
+    await expect(listServiceCategoryLabels({ from } as never)).resolves.toEqual({ groupLabels: {}, typeLabels: {}, typeOrder: [] });
+  });
+});
+
+describe("listCategoryLabelsForScope", () => {
+  it("reads inquiry_groups for a game and service_groups for the service scope", async () => {
+    const tables: string[] = [];
+    const empty = () => {
+      const builder: Record<string, unknown> = {};
+      for (const name of ["eq", "in", "order"]) builder[name] = vi.fn(() => builder);
+      builder.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(resolve);
+      return builder;
+    };
+    const from = vi.fn((table: string) => {
+      tables.push(table);
+      return { select: vi.fn(() => empty()) };
+    });
+
+    await listCategoryLabelsForScope({ from } as never, gameScope("game-1"));
+    await listCategoryLabelsForScope({ from } as never, SERVICE_SCOPE);
+
+    expect(tables).toEqual(["inquiry_groups", "service_groups"]);
   });
 });
