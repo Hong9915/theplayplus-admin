@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseServerClient } from "@/lib/supabase";
-import { listCategoryLabels, type CategoryLabelMaps } from "@/lib/categories";
+import { listCategoryLabelsForScope, type CategoryLabelMaps } from "@/lib/categories";
+import { SERVICE_SCOPE_TITLE, scopeBasePath, scopeForGameId } from "@/lib/inbox-scope";
 import { buildInquirySlackMessage, sendSlackMessage } from "@/lib/slack";
 
 /**
@@ -18,7 +19,7 @@ const payloadSchema = z.object({
   record: z.object({
     id: z.string(),
     inquiry_no: z.string().nullish(),
-    game_id: z.string(),
+    game_id: z.string().nullish(),
     group_key: z.string(),
     type_key: z.string(),
     game_account: z.string().nullish(),
@@ -52,21 +53,31 @@ export async function POST(request: Request) {
 
   const { record } = parsed.data;
   const supabase = getSupabaseServerClient();
+  const scope = scopeForGameId(record.game_id ?? null);
+  const EMPTY: CategoryLabelMaps = { groupLabels: {}, typeLabels: {}, typeOrder: [] };
 
-  // 라벨 조회는 부가 정보다. 실패하면 키를 그대로 보여주고 알림은 계속 보낸다.
-  const [gameResult, labels] = await Promise.all([
-    supabase.from("games").select("name").eq("id", record.game_id).single(),
-    listCategoryLabels(supabase, record.game_id).catch((): CategoryLabelMaps => ({ groupLabels: {}, typeLabels: {}, typeOrder: [] })),
+  // 라벨·게임명 조회는 부가 정보다. 실패하면 키를 그대로 보여주고 알림은 계속 보낸다.
+  // 서비스 문의(game_id null)는 게임이 없으므로 게임명 대신 고정 제목을 쓴다.
+  const [gameName, labels] = await Promise.all([
+    scope.kind === "game"
+      ? supabase
+          .from("games")
+          .select("name")
+          .eq("id", scope.gameId)
+          .single()
+          .then((result) => result.data?.name ?? "알 수 없는 게임")
+      : Promise.resolve(SERVICE_SCOPE_TITLE),
+    listCategoryLabelsForScope(supabase, scope).catch((): CategoryLabelMaps => EMPTY),
   ]);
 
   const message = buildInquirySlackMessage({
-    gameName: gameResult.data?.name ?? "알 수 없는 게임",
+    gameName,
     inquiryNo: record.inquiry_no ?? null,
     groupLabel: labels.groupLabels[record.group_key] ?? record.group_key,
     typeLabel: labels.typeLabels[record.type_key] ?? record.type_key,
     title: record.title,
     gameAccount: record.game_account ?? null,
-    detailUrl: `${new URL(request.url).origin}/games/${record.game_id}/inquiries/${record.id}`,
+    detailUrl: `${new URL(request.url).origin}${scopeBasePath(scope)}/inquiries/${record.id}`,
   });
 
   try {

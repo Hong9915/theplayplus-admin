@@ -5,7 +5,7 @@ import * as categoriesModule from "@/lib/categories";
 import * as slackModule from "@/lib/slack";
 
 vi.mock("@/lib/supabase", () => ({ getSupabaseServerClient: vi.fn() }));
-vi.mock("@/lib/categories", () => ({ listCategoryLabels: vi.fn() }));
+vi.mock("@/lib/categories", () => ({ listCategoryLabelsForScope: vi.fn() }));
 vi.mock("@/lib/slack", async () => {
   const actual = await vi.importActual<typeof import("@/lib/slack")>("@/lib/slack");
   return { ...actual, sendSlackMessage: vi.fn() };
@@ -55,7 +55,7 @@ describe("POST /api/notify/inquiry", () => {
     vi.stubEnv("INQUIRY_WEBHOOK_SECRET", "s3cret");
     vi.stubEnv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/x");
     mockSupabase();
-    vi.mocked(categoriesModule.listCategoryLabels).mockResolvedValue({
+    vi.mocked(categoriesModule.listCategoryLabelsForScope).mockResolvedValue({
       groupLabels: { payment: "결제" },
       typeLabels: { payment_error: "결제 오류" },
       typeOrder: ["payment_error"],
@@ -105,7 +105,7 @@ describe("POST /api/notify/inquiry", () => {
 
   it("falls back to raw keys and a placeholder game name when lookups fail", async () => {
     mockSupabase(null);
-    vi.mocked(categoriesModule.listCategoryLabels).mockResolvedValue({ groupLabels: {}, typeLabels: {}, typeOrder: [] });
+    vi.mocked(categoriesModule.listCategoryLabelsForScope).mockResolvedValue({ groupLabels: {}, typeLabels: {}, typeOrder: [] });
 
     await POST(makeRequest(insertPayload));
 
@@ -129,5 +129,35 @@ describe("POST /api/notify/inquiry", () => {
 
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toEqual({ success: false, error: "slack_failed" });
+  });
+
+  it("notifies service inquiries (game_id null) with a service label and a /service link", async () => {
+    vi.mocked(categoriesModule.listCategoryLabelsForScope).mockResolvedValue({
+      groupLabels: { business: "사업 제휴 문의" },
+      typeLabels: { publishing: "퍼블리싱 제휴" },
+      typeOrder: ["publishing"],
+    });
+    const client = mockSupabase();
+
+    const response = await POST(
+      makeRequest({
+        type: "INSERT",
+        table: "inquiries",
+        record: { ...record, game_id: null, group_key: "business", type_key: "publishing", game_account: null, title: "퍼블리싱 제안" },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(client.from).not.toHaveBeenCalledWith("games");
+    expect(categoriesModule.listCategoryLabelsForScope).toHaveBeenCalledWith(expect.anything(), { kind: "service" });
+    const [, message] = vi.mocked(slackModule.sendSlackMessage).mock.calls[0];
+    expect(message.text).toBe("[서비스 문의] 새 문의 · 사업 제휴 문의 > 퍼블리싱 제휴 · 퍼블리싱 제안");
+    expect(JSON.stringify(message.blocks)).toContain("https://admin.theplayplus.com/service/inquiries/inq-1");
+  });
+
+  it("still accepts payloads that omit game_id entirely", async () => {
+    const { game_id: _omitted, ...withoutGame } = record;
+    const response = await POST(makeRequest({ type: "INSERT", table: "inquiries", record: withoutGame }));
+    expect(response.status).toBe(200);
   });
 });
