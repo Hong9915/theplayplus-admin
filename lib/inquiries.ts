@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PAGE_SIZE, type InquiryListQuery } from "@/lib/inquiry-filters";
+import { SERVICE_RAIL_KEY, scopeGameId, type InboxScope } from "@/lib/inbox-scope";
 
 export type InquiryStatus = "new" | "in_progress" | "resolved";
 export type InquiryPriority = "urgent" | "high" | "normal" | "low";
@@ -109,6 +110,7 @@ export const STALE_AFTER_MS = 72 * 60 * 60 * 1000;
 
 interface FilterBuilder {
   eq(column: string, value: string): FilterBuilder;
+  is(column: string, value: null): FilterBuilder;
   neq(column: string, value: string): FilterBuilder;
   lt(column: string, value: string): FilterBuilder;
   or(filters: string): FilterBuilder;
@@ -117,8 +119,10 @@ interface FilterBuilder {
   limit(count: number): FilterBuilder;
 }
 
-function applyFilters<T extends FilterBuilder>(builder: T, gameId: string, query: InquiryListQuery, now: Date): T {
-  let next = builder.eq("game_id", gameId) as T;
+function applyFilters<T extends FilterBuilder>(builder: T, scope: InboxScope, query: InquiryListQuery, now: Date): T {
+  // 서비스 문의는 game_id가 null이라 eq로는 못 잡는다.
+  const gameId = scopeGameId(scope);
+  let next = (gameId ? builder.eq("game_id", gameId) : builder.is("game_id", null)) as T;
   if (query.group) next = next.eq("group_key", query.group) as T;
   if (query.type) next = next.eq("type_key", query.type) as T;
   if (query.status) next = next.eq("status", query.status) as T;
@@ -154,14 +158,14 @@ function applyOrder<T extends FilterBuilder>(builder: T, query: InquiryListQuery
 /** 목록 한 페이지. 필터·정렬·검색을 DB에서 처리해야 문의가 쌓여도 버틴다. */
 export async function queryInquiries(
   supabase: SupabaseClient,
-  gameId: string,
+  scope: InboxScope,
   query: InquiryListQuery,
   options: { now?: Date } = {}
 ): Promise<InquiryPage> {
   const now = options.now ?? new Date();
   const from = (query.page - 1) * PAGE_SIZE;
   const builder = applyOrder(
-    applyFilters(supabase.from("inquiries").select("*", { count: "exact" }) as unknown as FilterBuilder, gameId, query, now),
+    applyFilters(supabase.from("inquiries").select("*", { count: "exact" }) as unknown as FilterBuilder, scope, query, now),
     query
   ).range(from, from + PAGE_SIZE - 1);
 
@@ -183,14 +187,14 @@ export async function queryInquiries(
  */
 export async function listInquiryIds(
   supabase: SupabaseClient,
-  gameId: string,
+  scope: InboxScope,
   query: InquiryListQuery,
   options: { limit?: number; now?: Date } = {}
 ): Promise<string[]> {
   const limit = options.limit ?? 1000;
   const now = options.now ?? new Date();
   const builder = applyOrder(
-    applyFilters(supabase.from("inquiries").select("id") as unknown as FilterBuilder, gameId, query, now),
+    applyFilters(supabase.from("inquiries").select("id") as unknown as FilterBuilder, scope, query, now),
     query
   ).limit(limit);
 
@@ -210,7 +214,7 @@ export async function countInquiriesByGame(supabase: SupabaseClient, gameId: str
   return count ?? 0;
 }
 
-/** 게임별 미처리(new) 건수. 게임 레일의 배지가 쓴다. */
+/** 게임별 접수(new) 건수. 게임 레일의 배지가 쓴다. 게임 없는 서비스 문의는 SERVICE_RAIL_KEY로 센다. */
 export async function countNewInquiriesByGame(supabase: SupabaseClient): Promise<Record<string, number>> {
   const { data, error } = await supabase.from("inquiries").select("game_id").eq("status", "new");
   if (error || !data) {
@@ -218,8 +222,8 @@ export async function countNewInquiriesByGame(supabase: SupabaseClient): Promise
   }
   const counts: Record<string, number> = {};
   for (const row of data as Array<{ game_id: string | null }>) {
-    if (!row.game_id) continue;
-    counts[row.game_id] = (counts[row.game_id] ?? 0) + 1;
+    const key = row.game_id ?? SERVICE_RAIL_KEY;
+    counts[key] = (counts[key] ?? 0) + 1;
   }
   return counts;
 }
@@ -272,9 +276,9 @@ const PRIORITY_KEYS: InquiryPriority[] = ["urgent", "high", "normal", "low"];
  */
 export async function getInquiryFacetCounts(
   supabase: SupabaseClient,
-  gameId: string
+  scope: InboxScope
 ): Promise<InquiryFacetCounts | null> {
-  const { data, error } = await supabase.rpc("inquiry_facet_counts", { p_game_id: gameId });
+  const { data, error } = await supabase.rpc("inquiry_facet_counts", { p_game_id: scopeGameId(scope) });
   if (error || !data) {
     return null;
   }

@@ -10,6 +10,7 @@ import {
   sanitizeSearch,
 } from "@/lib/inquiries";
 import { DEFAULT_QUERY } from "@/lib/inquiry-filters";
+import { SERVICE_SCOPE, gameScope } from "@/lib/inbox-scope";
 
 const sampleRow = {
   id: "inq-1",
@@ -38,7 +39,7 @@ const sampleRow = {
 function mockBuilder(result: { data?: unknown; error?: { message: string } | null; count?: number | null }) {
   const builder: Record<string, unknown> = {};
   const calls: Record<string, unknown[][]> = {};
-  for (const name of ["eq", "neq", "lt", "or", "order", "range", "limit", "in"]) {
+  for (const name of ["eq", "neq", "lt", "or", "order", "range", "limit", "in", "is"]) {
     calls[name] = [];
     builder[name] = vi.fn((...args: unknown[]) => {
       calls[name].push(args);
@@ -56,7 +57,7 @@ describe("queryInquiries", () => {
   it("filters by game, orders newest first, and pages with an exact count", async () => {
     const { from, select, calls } = mockBuilder({ data: [sampleRow], count: 120 });
 
-    const page = await queryInquiries({ from } as never, "game-1", DEFAULT_QUERY);
+    const page = await queryInquiries({ from } as never, gameScope("game-1"), DEFAULT_QUERY);
 
     expect(select).toHaveBeenCalledWith("*", { count: "exact" });
     expect(calls.eq).toEqual([["game_id", "game-1"]]);
@@ -70,7 +71,7 @@ describe("queryInquiries", () => {
   it("applies group, type, status filters and the page offset", async () => {
     const { from, calls } = mockBuilder({ data: [], count: 0 });
 
-    await queryInquiries({ from } as never, "game-1", {
+    await queryInquiries({ from } as never, gameScope("game-1"), {
       ...DEFAULT_QUERY,
       group: "game_usage",
       type: "bug_report",
@@ -90,7 +91,7 @@ describe("queryInquiries", () => {
   it("searches title, number, account, and body with one or() filter", async () => {
     const { from, calls } = mockBuilder({ data: [], count: 0 });
 
-    await queryInquiries({ from } as never, "game-1", { ...DEFAULT_QUERY, q: "환불" });
+    await queryInquiries({ from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, q: "환불" });
 
     expect(calls.or).toEqual([
       ["title.ilike.%환불%,inquiry_no.ilike.%환불%,game_account.ilike.%환불%,content.ilike.%환불%"],
@@ -99,11 +100,11 @@ describe("queryInquiries", () => {
 
   it("sorts oldest first and by priority rank", async () => {
     const oldest = mockBuilder({ data: [], count: 0 });
-    await queryInquiries({ from: oldest.from } as never, "game-1", { ...DEFAULT_QUERY, sort: "oldest" });
+    await queryInquiries({ from: oldest.from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, sort: "oldest" });
     expect(oldest.calls.order).toEqual([["created_at", { ascending: true }]]);
 
     const priority = mockBuilder({ data: [], count: 0 });
-    await queryInquiries({ from: priority.from } as never, "game-1", { ...DEFAULT_QUERY, sort: "priority" });
+    await queryInquiries({ from: priority.from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, sort: "priority" });
     expect(priority.calls.order).toEqual([
       ["priority_rank", { ascending: true }],
       ["created_at", { ascending: false }],
@@ -112,12 +113,12 @@ describe("queryInquiries", () => {
 
   it("throws when the query errors", async () => {
     const { from } = mockBuilder({ error: { message: "db down" } });
-    await expect(queryInquiries({ from } as never, "game-1", DEFAULT_QUERY)).rejects.toThrow(/db down/);
+    await expect(queryInquiries({ from } as never, gameScope("game-1"), DEFAULT_QUERY)).rejects.toThrow(/db down/);
   });
 
   it("filters by priority", async () => {
     const { from, calls } = mockBuilder({ data: [], count: 0 });
-    await queryInquiries({ from } as never, "game-1", { ...DEFAULT_QUERY, priority: "urgent" });
+    await queryInquiries({ from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, priority: "urgent" });
     expect(calls.eq).toEqual([
       ["game_id", "game-1"],
       ["priority", "urgent"],
@@ -128,7 +129,7 @@ describe("queryInquiries", () => {
     const { from, calls } = mockBuilder({ data: [], count: 0 });
     const now = new Date("2026-09-04T12:00:00.000Z");
 
-    await queryInquiries({ from } as never, "game-1", { ...DEFAULT_QUERY, stale: true }, { now });
+    await queryInquiries({ from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, stale: true }, { now });
 
     expect(calls.neq).toEqual([["status", "resolved"]]);
     expect(calls.lt).toEqual([["created_at", "2026-09-01T12:00:00.000Z"]]);
@@ -136,9 +137,24 @@ describe("queryInquiries", () => {
 
   it("does not add stale conditions by default", async () => {
     const { from, calls } = mockBuilder({ data: [], count: 0 });
-    await queryInquiries({ from } as never, "game-1", DEFAULT_QUERY);
+    await queryInquiries({ from } as never, gameScope("game-1"), DEFAULT_QUERY);
     expect(calls.neq).toEqual([]);
     expect(calls.lt).toEqual([]);
+  });
+
+  it("service scope filters game_id is null instead of eq", async () => {
+    const { from, calls } = mockBuilder({ data: [], count: 0 });
+
+    await queryInquiries({ from } as never, SERVICE_SCOPE, { ...DEFAULT_QUERY, status: "new" });
+
+    expect(calls.is).toEqual([["game_id", null]]);
+    expect(calls.eq).toEqual([["status", "new"]]);
+  });
+
+  it("game scope never calls is()", async () => {
+    const { from, calls } = mockBuilder({ data: [], count: 0 });
+    await queryInquiries({ from } as never, gameScope("game-1"), DEFAULT_QUERY);
+    expect(calls.is).toEqual([]);
   });
 });
 
@@ -153,7 +169,7 @@ describe("listInquiryIds", () => {
   it("returns ids in the same order as the list, without paging", async () => {
     const { from, select, calls } = mockBuilder({ data: [{ id: "a" }, { id: "b" }] });
 
-    const ids = await listInquiryIds({ from } as never, "game-1", { ...DEFAULT_QUERY, status: "new", page: 4 });
+    const ids = await listInquiryIds({ from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, status: "new", page: 4 });
 
     expect(select).toHaveBeenCalledWith("id");
     expect(calls.eq).toEqual([
@@ -167,17 +183,24 @@ describe("listInquiryIds", () => {
 
   it("returns an empty list on error", async () => {
     const { from } = mockBuilder({ error: { message: "x" } });
-    await expect(listInquiryIds({ from } as never, "game-1", DEFAULT_QUERY)).resolves.toEqual([]);
+    await expect(listInquiryIds({ from } as never, gameScope("game-1"), DEFAULT_QUERY)).resolves.toEqual([]);
   });
 
   it("accepts a custom limit and applies stale with the injected now", async () => {
     const { from, calls } = mockBuilder({ data: [] });
-    await listInquiryIds({ from } as never, "game-1", { ...DEFAULT_QUERY, stale: true }, {
+    await listInquiryIds({ from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, stale: true }, {
       limit: 10,
       now: new Date("2026-09-04T12:00:00.000Z"),
     });
     expect(calls.limit).toEqual([[10]]);
     expect(calls.lt).toEqual([["created_at", "2026-09-01T12:00:00.000Z"]]);
+  });
+
+  it("service scope filters game_id is null", async () => {
+    const { from, calls } = mockBuilder({ data: [{ id: "s1" }] });
+    await expect(listInquiryIds({ from } as never, SERVICE_SCOPE, DEFAULT_QUERY)).resolves.toEqual(["s1"]);
+    expect(calls.is).toEqual([["game_id", null]]);
+    expect(calls.eq).toEqual([]);
   });
 });
 
@@ -197,7 +220,7 @@ describe("getInquiryFacetCounts", () => {
       error: null,
     });
 
-    const counts = await getInquiryFacetCounts({ rpc } as never, "game-1");
+    const counts = await getInquiryFacetCounts({ rpc } as never, gameScope("game-1"));
 
     expect(rpc).toHaveBeenCalledWith("inquiry_facet_counts", { p_game_id: "game-1" });
     expect(counts).toEqual({
@@ -218,14 +241,21 @@ describe("getInquiryFacetCounts", () => {
       ],
       error: null,
     });
-    const counts = await getInquiryFacetCounts({ rpc } as never, "game-1");
+    const counts = await getInquiryFacetCounts({ rpc } as never, gameScope("game-1"));
     expect(counts?.total).toBe(12);
     expect(counts?.status).toEqual({ new: 0, in_progress: 0, resolved: 0 });
   });
 
   it("returns null when the RPC fails", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: "boom" } });
-    await expect(getInquiryFacetCounts({ rpc } as never, "game-1")).resolves.toBeNull();
+    await expect(getInquiryFacetCounts({ rpc } as never, gameScope("game-1"))).resolves.toBeNull();
+  });
+
+  it("passes p_game_id null for the service scope", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [{ facet: "total", key: "all", count: 3 }], error: null });
+    const counts = await getInquiryFacetCounts({ rpc } as never, SERVICE_SCOPE);
+    expect(rpc).toHaveBeenCalledWith("inquiry_facet_counts", { p_game_id: null });
+    expect(counts?.total).toBe(3);
   });
 });
 
@@ -242,16 +272,22 @@ describe("countInquiriesByGame", () => {
 });
 
 describe("countNewInquiriesByGame", () => {
-  it("tallies new inquiries per game", async () => {
+  it("tallies new inquiries per game and counts game-less ones under 'service'", async () => {
     const eq = vi.fn().mockResolvedValue({
-      data: [{ game_id: "g1" }, { game_id: "g1" }, { game_id: "g2" }, { game_id: null }],
+      data: [{ game_id: "g1" }, { game_id: "g1" }, { game_id: "g2" }, { game_id: null }, { game_id: null }],
       error: null,
     });
     const select = vi.fn(() => ({ eq }));
     const from = vi.fn(() => ({ select }));
 
-    await expect(countNewInquiriesByGame({ from } as never)).resolves.toEqual({ g1: 2, g2: 1 });
+    await expect(countNewInquiriesByGame({ from } as never)).resolves.toEqual({ g1: 2, g2: 1, service: 2 });
     expect(eq).toHaveBeenCalledWith("status", "new");
+  });
+
+  it("omits the service key when no game-less inquiry is new", async () => {
+    const eq = vi.fn().mockResolvedValue({ data: [{ game_id: "g1" }], error: null });
+    const from = vi.fn(() => ({ select: vi.fn(() => ({ eq })) }));
+    await expect(countNewInquiriesByGame({ from } as never)).resolves.toEqual({ g1: 1 });
   });
 
   it("returns an empty map on error", async () => {

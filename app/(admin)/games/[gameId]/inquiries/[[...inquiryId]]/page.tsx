@@ -8,6 +8,7 @@ import {
   queryInquiries,
 } from "@/lib/inquiries";
 import { parseInquiryListQuery } from "@/lib/inquiry-filters";
+import { gameScope } from "@/lib/inbox-scope";
 import { listCategoryLabels, listGames } from "@/lib/categories";
 import { getAccountHistory } from "@/lib/account-history";
 import { listNotes, listNotesByInquiryIds } from "@/lib/notes";
@@ -37,12 +38,13 @@ export default async function InboxPage({
 
   const supabase = getSupabaseServerClient();
   const query = parseInquiryListQuery(searchParams);
+  const scope = gameScope(params.gameId);
 
   const [games, labels, counts, listPage] = await Promise.all([
     listGames(supabase),
     listCategoryLabels(supabase, params.gameId),
-    getInquiryFacetCounts(supabase, params.gameId),
-    queryInquiries(supabase, params.gameId, query),
+    getInquiryFacetCounts(supabase, scope),
+    queryInquiries(supabase, scope, query),
   ]);
 
   const game = games.find((entry) => entry.id === params.gameId);
@@ -63,7 +65,7 @@ export default async function InboxPage({
       listEvents(supabase, inquiry.id),
       listTemplates(supabase, inquiry.gameId),
       listMessages(supabase, inquiry.id),
-      listInquiryIds(supabase, inquiry.gameId, query),
+      listInquiryIds(supabase, scope, query),
     ]);
 
     // 같은 계정의 다른 문의도 대화 열에 이어 보여준다. 이력 id로 메시지·메모·첨부를 한 번에 가져온다.
