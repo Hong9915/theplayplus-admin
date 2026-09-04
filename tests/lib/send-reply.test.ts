@@ -68,7 +68,7 @@ describe("sendInquiryReply", () => {
     const result = await sendInquiryReply(supabase, { inquiry, body: "환불 처리했습니다", mode: "manual", actor: ADMIN });
 
     expect(gmailModule.sendReplyEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ to: "luna@example.com", subject: "[R-20260903-0001] Re: 중복 결제", threadId: null })
+      expect.objectContaining({ to: "luna@example.com", subject: "[더플레이플러스] 문의사항에 답변드립니다.", threadId: null })
     );
     const sendInput = vi.mocked(gmailModule.sendReplyEmail).mock.calls[0][0];
     expect(sendInput.mailbox).toBe("game");

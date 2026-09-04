@@ -55,6 +55,8 @@ export class ReplySaveError extends Error {
   }
 }
 
+export const REPLY_EMAIL_SUBJECT = "[더플레이플러스] 문의사항에 답변드립니다.";
+
 const EMPTY_LABELS: CategoryLabelMaps = { groupLabels: {}, typeLabels: {}, typeOrder: [] };
 
 async function fetchGameName(supabase: SupabaseClient, gameId: string): Promise<string | null> {
@@ -67,9 +69,9 @@ async function fetchGameName(supabase: SupabaseClient, gameId: string): Promise<
 export async function sendInquiryReply(supabase: SupabaseClient, input: SendReplyInput): Promise<SendReplyResult> {
   const { inquiry, body } = input;
 
-  // 접수번호를 제목에 넣어 사용자가 메일로 다시 문의해도 건을 특정할 수 있게 한다.
-  // 같은 제목이어야 Gmail이 후속 답변을 같은 스레드로 묶는다.
-  const subject = inquiry.inquiry_no ? `[${inquiry.inquiry_no}] Re: ${inquiry.title}` : `Re: ${inquiry.title}`;
+  // 제목은 모든 답변에 같다. 접수번호와 원래 제목은 본문에 들어가고, 후속 답변은
+  // threadId와 References 헤더로 묶이므로 제목에 건별 정보를 넣지 않는다.
+  const subject = REPLY_EMAIL_SUBJECT;
 
   // 이전에 오간 메일이 있으면 그 Message-ID를 참조해 같은 스레드에 붙인다.
   // 게임 이름과 유형 라벨은 메일 꾸밈용이라 못 가져와도 발송은 진행한다.

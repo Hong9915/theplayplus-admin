@@ -128,7 +128,7 @@ describe("POST /api/inquiries/[id]/reply", () => {
     expect(gmailModule.sendReplyEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "user@example.com",
-        subject: "[R-20260723-0005] Re: 제목",
+        subject: "[더플레이플러스] 문의사항에 답변드립니다.",
         threadId: null,
         references: [],
       })
@@ -246,14 +246,14 @@ describe("POST /api/inquiries/[id]/reply", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it("falls back to a bare subject when the inquiry has no number", async () => {
+  it("uses the same fixed subject when the inquiry has no number", async () => {
     mockFetchInquiry({ id: "inq-1", reply_email: "user@example.com", title: "제목", inquiry_no: null });
     vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(SENT);
 
     await POST(jsonRequest({ replyContent: "답변" }), { params: { id: "inq-1" } });
 
     expect(gmailModule.sendReplyEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ subject: "Re: 제목" })
+      expect.objectContaining({ subject: "[더플레이플러스] 문의사항에 답변드립니다." })
     );
   });
 

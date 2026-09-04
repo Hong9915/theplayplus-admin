@@ -222,16 +222,34 @@ export async function sendReplyEmail(input: SendReplyEmailInput): Promise<SentEm
     references: input.references,
   });
 
-  const response = await gmail.users.messages.send({
-    userId: "me",
-    requestBody: { raw, ...(input.threadId ? { threadId: input.threadId } : {}) },
-  });
+  const send = (threadId: string | null | undefined) =>
+    gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw, ...(threadId ? { threadId } : {}) },
+    });
+
+  let response;
+  try {
+    response = await send(input.threadId);
+  } catch (error) {
+    // 저장된 스레드가 이 메일함에 없으면(발신 계정을 바꾼 뒤 예전 계정이 만든
+    // 스레드) Gmail이 404를 낸다. 새 스레드로 다시 보낸다. References 헤더는
+    // 그대로라 사용자 메일함에서는 여전히 같은 대화로 묶이고, 호출부가 새
+    // 스레드 id를 저장하면 그 뒤로는 정상적으로 이어진다.
+    if (!input.threadId || !isNotFound(error)) throw error;
+    console.warn("[gmail] thread not found in this mailbox, starting a new thread", { threadId: input.threadId });
+    response = await send(null);
+  }
 
   return {
     gmailMessageId: response.data.id ?? "",
     gmailThreadId: response.data.threadId ?? "",
     rfcMessageId,
   };
+}
+
+function isNotFound(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === 404;
 }
 
 function decodeBody(data: string | null | undefined): string {

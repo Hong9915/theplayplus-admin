@@ -70,11 +70,8 @@ export default function GameRail({
   return (
     <>
       <aside className="w-16 shrink-0 h-screen sticky top-0 bg-panel border-r border-line flex flex-col items-center py-3 gap-2">
-        <div
-          className="w-10 h-10 rounded-xl bg-ink text-white flex items-center justify-center font-bold text-sm select-none"
-          title="THE PLAY+ Admin"
-        >
-          P+
+        <div className="w-10 h-10 rounded-xl bg-ink flex items-center justify-center select-none" title="THE PLAY+ Admin">
+          <img src="/brand/theplayplus-mark-white.png" alt="THE PLAY+" className="w-7 h-7 object-contain" draggable={false} />
         </div>
 
         <div className="w-8 border-t border-line my-1" />

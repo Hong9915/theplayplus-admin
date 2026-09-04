@@ -40,8 +40,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }));
   } catch (error) {
     if (error instanceof ReplySaveError) {
+      console.error("[reply] inquiry update failed after sending", { inquiryId: params.id });
       return NextResponse.json({ success: false, error: "save_failed" }, { status: 500 });
     }
+    // 원인이 응답에는 안 실리니 서버 로그에 남긴다. Gmail 오류는 message에 사유가 있다.
+    console.error("[reply] send failed", { inquiryId: params.id }, error);
     return NextResponse.json({ success: false, error: "send_failed" }, { status: 500 });
   }
 
