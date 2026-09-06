@@ -9,12 +9,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { gameId?: unknown; firstMessage?: unknown };
+  let parsed: unknown;
   try {
-    body = (await request.json()) as typeof body;
+    parsed = await request.json();
   } catch {
     return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
   }
+  if (typeof parsed !== "object" || parsed === null) {
+    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
+  }
+  const body = parsed as { gameId?: unknown; firstMessage?: unknown };
   if (typeof body.gameId !== "string" || !body.gameId) {
     return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
   }

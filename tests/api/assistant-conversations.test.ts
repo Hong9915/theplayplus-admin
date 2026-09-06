@@ -33,6 +33,12 @@ describe("POST /api/assistant/conversations", () => {
     expect((await POST(request({ firstMessage: "x" }))).status).toBe(400);
   });
 
+  it("rejects a JSON body that is the literal null", async () => {
+    const req = new Request("http://localhost/api/assistant/conversations", { method: "POST", body: "null" });
+    expect((await POST(req)).status).toBe(400);
+    expect(storeModule.createConversation).not.toHaveBeenCalled();
+  });
+
   it("creates a conversation titled from the first message", async () => {
     const response = await POST(request({ gameId: "g1", firstMessage: "  52009 VIP 몇이야  " }));
     expect(await response.json()).toEqual({ success: true, conversationId: "c1" });
