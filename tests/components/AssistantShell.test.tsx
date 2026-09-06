@@ -1,48 +1,47 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import AssistantShell from "@/components/assistant/AssistantShell";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), refresh: vi.fn(), push: vi.fn() }) }));
 
-function ndjson(lines: unknown[]) {
-  const encoder = new TextEncoder();
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const line of lines) controller.enqueue(encoder.encode(JSON.stringify(line) + "\n"));
-      controller.close();
-    },
-  });
-  return { ok: true, body, json: () => Promise.resolve({}) };
-}
-
 const game = { id: "g1", name: "여신 키우기", sheetId: "sheet-1" };
+
+const conversations = [
+  { id: "c3", gameId: "g1", title: "VIP 확인", createdBy: "a@b", createdAt: "", updatedAt: "" },
+];
 
 describe("AssistantShell", () => {
   beforeEach(() => {
     global.fetch = vi.fn() as never;
   });
 
-  it("keeps ChatPane mounted (and its streamed text) across the null → created-conversation re-render", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true, conversationId: "c9" }) } as never)
-      .mockResolvedValueOnce(ndjson([{ type: "text", text: "VIP3입니다" }]) as never);
-
+  it("loads the clicked conversation's messages when switching from a fresh new-chat pane", () => {
     const { rerender } = render(
-      <AssistantShell game={game} conversations={[]} selectedId={null} messages={[]} serviceAccountEmail={null} />
+      <AssistantShell game={game} conversations={conversations} selectedId={null} messages={[]} serviceAccountEmail={null} />
     );
 
-    await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "52009 VIP?");
-    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    // 서버 렌더가 서로 다른 selectedId·messages로 다시 그린 것을 흉내낸다 — 사이드바에서
+    // 다른(이미 존재하는) 대화를 고른 경우다. 페인이 리마운트돼야 그 대화의 initialMessages가
+    // 반영된다.
+    rerender(
+      <AssistantShell
+        game={game}
+        conversations={conversations}
+        selectedId="c3"
+        messages={[{ id: "m1", role: "assistant", content: "c3의 답변", proposal: null, status: null, failureReason: null, appliedBy: null, appliedAt: null }]}
+        serviceAccountEmail={null}
+      />
+    );
 
-    await waitFor(() => expect(screen.getByText("VIP3입니다")).toBeInTheDocument());
+    expect(screen.getByText("c3의 답변")).toBeInTheDocument();
+  });
 
-    // 서버가 ?c=c9로 다시 렌더한 것을 흉내낸다 — 페인이 리마운트됐다면 스트리밍된
-    // 텍스트(클라이언트 state)가 사라지고 initialMessages([])만 남는다.
-    rerender(<AssistantShell game={game} conversations={[]} selectedId="c9" messages={[]} serviceAccountEmail={null} />);
+  it("marks the selected conversation as current in the sidebar", () => {
+    render(
+      <AssistantShell game={game} conversations={conversations} selectedId="c3" messages={[]} serviceAccountEmail={null} />
+    );
 
-    expect(screen.getByText("VIP3입니다")).toBeInTheDocument();
-    expect(screen.getByText("52009 VIP?")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "VIP 확인" })).toHaveAttribute("aria-current", "true");
   });
 });
