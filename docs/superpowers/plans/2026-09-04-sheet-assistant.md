@@ -617,7 +617,7 @@ describe("readSpreadsheet", () => {
       data: {
         valueRanges: [
           { values: [["이메일", "ID"], ["a@x.com", 52009]] },
-          { values: [["코드 목록"], ["m6fu5sj"]] },
+          { values: [["코드 목록", ""], ["m6fu5sj"]] },
         ],
       },
     });
@@ -628,7 +628,7 @@ describe("readSpreadsheet", () => {
     expect(batchGetMock).toHaveBeenCalledWith({ spreadsheetId: "s1", ranges: ["'VIP'", "'메모'"] });
     expect(tabs).toEqual([
       { title: "VIP", header: ["이메일", "ID"], rows: [["이메일", "ID"], ["a@x.com", "52009"]] },
-      { title: "메모", header: null, rows: [["코드 목록"], ["m6fu5sj"]] },
+      { title: "메모", header: null, rows: [["코드 목록", ""], ["m6fu5sj"]] },
     ]);
   });
 
