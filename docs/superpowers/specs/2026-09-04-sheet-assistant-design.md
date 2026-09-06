@@ -106,7 +106,17 @@ create table if not exists assistant_messages (
   created_at       timestamptz not null default now()
 );
 create index on assistant_messages (conversation_id, created_at);
+
+-- 관리자 앱은 service role로 접근한다. anon(접수 폼)은 이 표를 볼 이유가 없다.
+alter table assistant_conversations enable row level security;
+alter table assistant_messages enable row level security;
+
+-- 접수 폼(anon)은 게임 목록만 필요하다. 시트 ID는 관리자만 본다.
+revoke select on games from anon;
+grant select (id, name, status, logo_path, owner_name, created_at) on games to anon;
 ```
+
+RLS: 두 새 표는 정책 없이 RLS만 켠다 — service role이 우회하므로 관리자 앱은 그대로 접근하고, anon은 완전히 막힌다. `games.sheet_id`는 기존 "Public read active games" 행 단위 정책이 열까지는 가리지 않으므로, anon에는 열 단위 grant로 `id/name/status/logo_path/owner_name/created_at`만 허용하고 `sheet_id`를 뺀다(접수 폼이 실제로 쓰는 열만 확인됨).
 
 `proposal` JSON 형태:
 

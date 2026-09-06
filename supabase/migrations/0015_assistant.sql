@@ -27,3 +27,11 @@ create table if not exists assistant_messages (
 );
 create index if not exists assistant_messages_conversation_idx
   on assistant_messages (conversation_id, created_at);
+
+-- 관리자 앱은 service role로 접근한다. anon(접수 폼)은 이 표를 볼 이유가 없다.
+alter table assistant_conversations enable row level security;
+alter table assistant_messages enable row level security;
+
+-- 접수 폼(anon)은 게임 목록만 필요하다. 시트 ID는 관리자만 본다.
+revoke select on games from anon;
+grant select (id, name, status, logo_path, owner_name, created_at) on games to anon;
