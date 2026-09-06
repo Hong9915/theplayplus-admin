@@ -241,6 +241,12 @@
 | POST | `/api/inquiries/[id]/notes` | 내부 메모 추가 |
 | POST | `/api/inquiries/[id]/suggest` | AI 답변 추천 (스트리밍) |
 | POST | `/api/inquiries/bulk-status` | 상태 일괄 변경 |
+| PATCH | `/api/games/[gameId]` | 운영 시트 URL 저장 (`sheet_id`) |
+| POST | `/api/assistant/conversations` | 어시스턴트 대화 생성 |
+| DELETE | `/api/assistant/conversations/[id]` | 어시스턴트 대화 삭제 |
+| POST | `/api/assistant/conversations/[id]/messages` | 메시지 전송, 답변 스트리밍 |
+| POST | `/api/assistant/messages/[id]/apply` | 수정 제안 적용 |
+| POST | `/api/assistant/messages/[id]/cancel` | 수정 제안 취소 |
 
 ### 5.10 운영 시트 어시스턴트
 
@@ -266,6 +272,9 @@ Supabase(Postgres)에 저장하며 `theplayplus-contact`와 **동일한 프로�
 | `inquiry_events` | 변경 이력 (감사 로그) | 0003 |
 | `reply_templates` | 답변 템플릿 | 0004 |
 | `inquiry_messages` | 답변·회신 대화 기록 | 0005 |
+| `games.sheet_id` | 게임별 운영 시트 연결 (games에 추가된 컬럼) | 0015 |
+| `assistant_conversations` | 운영 시트 어시스턴트 대화 | 0015 |
+| `assistant_messages` | 어시스턴트 메시지·수정 제안 | 0015 |
 
 ### `inquiries` 주요 컬럼
 
