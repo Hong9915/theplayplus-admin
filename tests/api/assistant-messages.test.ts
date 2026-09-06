@@ -82,6 +82,12 @@ describe("POST /api/assistant/conversations/[id]/messages", () => {
     expect(storeModule.insertMessage).not.toHaveBeenCalled();
   });
 
+  it("rejects a JSON body that is the literal null", async () => {
+    const req = new Request("http://localhost/api/assistant/conversations/c1/messages", { method: "POST", body: "null" });
+    expect((await POST(req, { params: { id: "c1" } })).status).toBe(400);
+    expect(storeModule.insertMessage).not.toHaveBeenCalled();
+  });
+
   it("returns 404 for an unknown conversation or game", async () => {
     vi.mocked(storeModule.getConversation).mockResolvedValue(null);
     expect((await POST(request({ content: "x" }), { params: { id: "c1" } })).status).toBe(404);
@@ -115,14 +121,19 @@ describe("POST /api/assistant/conversations/[id]/messages", () => {
   });
 
   it("stores proposals as pending and streams their message id", async () => {
-    vi.mocked(assistantModule.streamAssistant).mockReturnValue(stream({ type: "proposal", proposal }));
+    vi.mocked(assistantModule.streamAssistant).mockReturnValue(stream({ type: "text", text: "바꿀게요" }, { type: "proposal", proposal }));
 
     const response = await POST(request({ content: "VIP4로 올려줘" }), { params: { id: "c1" } });
 
-    expect(await events(response)).toEqual([{ type: "proposal", messageId: "m2", proposal }]);
-    expect(storeModule.insertMessage).toHaveBeenNthCalledWith(2, expect.anything(), { conversationId: "c1", role: "proposal", proposal, status: "pending" });
-    // 본문이 비었으니 assistant 행은 만들지 않는다.
-    expect(storeModule.insertMessage).toHaveBeenCalledTimes(2);
+    expect(await events(response)).toEqual([
+      { type: "text", text: "바꿀게요" },
+      { type: "proposal", messageId: "m3", proposal },
+    ]);
+    // 스트림 순서(본문 먼저, 그다음 제안)대로 저장한다: user → assistant → proposal.
+    expect(storeModule.insertMessage).toHaveBeenNthCalledWith(1, expect.anything(), { conversationId: "c1", role: "user", content: "VIP4로 올려줘" });
+    expect(storeModule.insertMessage).toHaveBeenNthCalledWith(2, expect.anything(), { conversationId: "c1", role: "assistant", content: "바꿀게요" });
+    expect(storeModule.insertMessage).toHaveBeenNthCalledWith(3, expect.anything(), { conversationId: "c1", role: "proposal", proposal, status: "pending" });
+    expect(storeModule.insertMessage).toHaveBeenCalledTimes(3);
   });
 
   it("streams a sheet read failure as one error event and keeps the user message", async () => {

@@ -21,12 +21,16 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { content?: unknown };
+  let parsed: unknown;
   try {
-    body = (await request.json()) as typeof body;
+    parsed = await request.json();
   } catch {
     return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
   }
+  if (typeof parsed !== "object" || parsed === null) {
+    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
+  }
+  const body = parsed as { content?: unknown };
   const content = typeof body.content === "string" ? body.content.trim() : "";
   if (!content) {
     return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
@@ -73,6 +77,17 @@ export async function POST(request: Request, { params }: { params: { id: string 
         text += event.text;
         yield event;
       } else if (event.type === "proposal") {
+        // 실제 발송 순서(본문 먼저, 그다음 제안)로 DB에도 남긴다 — 본문을 뒤로
+        // 미루면 화면과 달리 proposal이 assistant 텍스트보다 먼저 저장된다.
+        if (text.trim()) {
+          const savedText = await insertMessage(supabase, { conversationId, role: "assistant", content: text });
+          if (!savedText) {
+            yield { type: "error", reason: "save_failed" };
+            failed = true;
+            break;
+          }
+          text = "";
+        }
         const saved = await insertMessage(supabase, {
           conversationId,
           role: "proposal",

@@ -39,6 +39,11 @@ describe("formatToday", () => {
   it("formats as MM.DD", () => {
     expect(formatToday(new Date(2026, 8, 4))).toBe("09.04");
   });
+
+  it("uses Asia/Seoul regardless of server-local time", () => {
+    expect(formatToday(new Date("2026-09-03T16:00:00Z"))).toBe("09.04");
+    expect(formatToday(new Date("2026-09-03T14:59:00Z"))).toBe("09.03");
+  });
 });
 
 describe("buildAssistantPrompt", () => {

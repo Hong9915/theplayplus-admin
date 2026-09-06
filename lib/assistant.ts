@@ -28,10 +28,11 @@ export const HISTORY_LIMIT = 20;
 
 const DEFAULT_MODEL = "gpt-5-mini";
 
-/** 시트의 날짜 열 관습("08.27")에 맞춘다. */
+/** 시트의 날짜 열 관습("08.27")에 맞춘다. 서버가 Vercel(UTC)에서 돌아도 KST 기준 날짜를 쓴다. */
 export function formatToday(date: Date = new Date()): string {
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const mm = parts.find((part) => part.type === "month")?.value ?? "01";
+  const dd = parts.find((part) => part.type === "day")?.value ?? "01";
   return `${mm}.${dd}`;
 }
 
