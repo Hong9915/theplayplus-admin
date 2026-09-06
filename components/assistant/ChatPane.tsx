@@ -58,7 +58,11 @@ export default function ChatPane({
     });
     const json = (await response.json()) as { success: boolean; conversationId?: string };
     if (!json.success || !json.conversationId) return null;
-    router.replace(`/games/${gameId}/assistant?c=${json.conversationId}`);
+    // router.replace soft-navigates on Next 14.2 and re-renders this page with the new
+    // selectedId, which (if the pane's key changed) unmounts it mid-stream. history.replaceState
+    // updates the URL/back-stack the same way without triggering that re-render; Next >=14.1
+    // keeps its router in sync with it.
+    window.history.replaceState(null, "", `/games/${gameId}/assistant?c=${json.conversationId}`);
     return json.conversationId;
   }
 

@@ -92,6 +92,7 @@ describe("ChatPane", () => {
   });
 
   it("creates a conversation first when there is none", async () => {
+    const replaceState = vi.spyOn(window.history, "replaceState");
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true, conversationId: "c9" }) } as never)
       .mockResolvedValueOnce(ndjson([{ type: "text", text: "네" }]) as never);
@@ -100,7 +101,9 @@ describe("ChatPane", () => {
     await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "안녕");
     await userEvent.keyboard("{Meta>}{Enter}{/Meta}");
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/games/g1/assistant?c=c9"));
+    // history.replaceState (not router.replace) keeps the URL in sync without a re-render
+    // that would unmount ChatPane mid-stream. See F2 in the final fix review.
+    await waitFor(() => expect(replaceState).toHaveBeenCalledWith(null, "", "/games/g1/assistant?c=c9"));
     expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe("/api/assistant/conversations");
     expect(JSON.parse(vi.mocked(global.fetch).mock.calls[0][1]!.body as string)).toEqual({ gameId: "g1", firstMessage: "안녕" });
     expect(vi.mocked(global.fetch).mock.calls[1][0]).toBe("/api/assistant/conversations/c9/messages");
