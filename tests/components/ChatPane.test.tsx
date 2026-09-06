@@ -59,6 +59,38 @@ describe("ChatPane", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it("keeps the streaming cursor only on the message currently streaming", async () => {
+    const firstBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({ type: "text", text: "첫 번째" }) + "\n"));
+        controller.close();
+      },
+    });
+    // 두 번째 스트림은 절대 닫히지 않는다 — 전송 중 상태를 계속 붙잡아 둔다.
+    const secondBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({ type: "text", text: "두 번째" }) + "\n"));
+      },
+    });
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({ ok: true, body: firstBody, json: () => Promise.resolve({}) } as never)
+      .mockResolvedValueOnce({ ok: true, body: secondBody, json: () => Promise.resolve({}) } as never);
+
+    render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
+
+    await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "1");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(screen.getByText("첫 번째")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "메시지" })).not.toBeDisabled());
+
+    await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "2");
+    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(screen.getByText("두 번째")).toBeInTheDocument());
+
+    expect(document.querySelectorAll(".animate-pulse")).toHaveLength(1);
+  });
+
   it("creates a conversation first when there is none", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true, conversationId: "c9" }) } as never)

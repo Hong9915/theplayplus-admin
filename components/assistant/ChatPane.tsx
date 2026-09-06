@@ -38,6 +38,7 @@ export default function ChatPane({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [streamingId, setStreamingId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,6 +71,7 @@ export default function ChatPane({
 
     const localUserId = `local-user-${Date.now()}`;
     const localAssistantId = `local-assistant-${Date.now()}`;
+    setStreamingId(localAssistantId);
     setMessages((current) => [...current, textMessage(localUserId, "user", content)]);
 
     let failure: string | null = null;
@@ -117,6 +119,7 @@ export default function ChatPane({
     }
 
     setSending(false);
+    setStreamingId(null);
     if (failure) {
       setError(STREAM_ERROR_MESSAGES[failure] ?? GENERIC_ERROR);
     }
@@ -156,7 +159,7 @@ export default function ChatPane({
             return (
               <div key={message.id} className="self-start max-w-[90%] text-sm leading-relaxed whitespace-pre-wrap">
                 {message.content}
-                {sending && message.id.startsWith("local-assistant-") && <span className="inline-block w-2 h-4 ml-0.5 bg-ink/60 animate-pulse align-text-bottom" aria-hidden="true" />}
+                {message.id === streamingId && <span className="inline-block w-2 h-4 ml-0.5 bg-ink/60 animate-pulse align-text-bottom" aria-hidden="true" />}
               </div>
             );
           })}
