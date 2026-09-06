@@ -103,6 +103,19 @@ describe("InboxNav", () => {
     expect(screen.getByRole("button", { name: /삭제/ })).toBeInTheDocument();
   });
 
+  it("links to the operations assistant in a new tab for a game", () => {
+    renderNav();
+    const link = screen.getByRole("link", { name: /운영 어시스턴트/ });
+    expect(link).toHaveAttribute("href", "/games/g1/assistant");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener");
+  });
+
+  it("does not show the assistant link for service inquiries", () => {
+    renderServiceNav();
+    expect(screen.queryByRole("link", { name: /운영 어시스턴트/ })).not.toBeInTheDocument();
+  });
+
   describe("service scope", () => {
     it("shows the service title without a game status badge", () => {
       renderServiceNav();

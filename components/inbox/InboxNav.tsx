@@ -74,6 +74,21 @@ export default function InboxNav({
 
       <InboxSearch scope={scope} query={query} selectedId={selectedId} />
 
+      {game && (
+        <Link
+          href={`/games/${game.id}/assistant`}
+          target="_blank"
+          rel="noopener"
+          className={`${ITEM} h-8 ${ITEM_IDLE} border border-line`}
+        >
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden="true">✦</span>
+            <span>운영 어시스턴트</span>
+          </span>
+          <span className="text-xs text-muted" aria-hidden="true">↗</span>
+        </Link>
+      )}
+
       <ul className="flex flex-col gap-0.5" aria-label="보기">
         {VIEWS.map((view) => {
           const active = isViewActive(view.key, query);
