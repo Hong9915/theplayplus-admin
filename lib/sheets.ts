@@ -52,9 +52,9 @@ export function parseSheetUrl(input: string): string | null {
   return SHEET_ID_PATTERN.test(trimmed) ? trimmed : null;
 }
 
-/** 첫 행이 두 칸 이상이고 모두 비어 있지 않으며 서로 다르면 열 이름으로 본다. 한 칸뿐이면 표 제목 같은 자유 텍스트일 뿐 열 이름으로 보지 않는다. */
+/** 첫 행의 모든 칸이 비어 있지 않고 서로 다르면 열 이름으로 본다. */
 export function detectHeader(firstRow: string[] | undefined): string[] | null {
-  if (!firstRow || firstRow.length < 2) return null;
+  if (!firstRow || firstRow.length === 0) return null;
   const cells = firstRow.map((cell) => cell.trim());
   if (cells.some((cell) => cell === "")) return null;
   if (new Set(cells).size !== cells.length) return null;

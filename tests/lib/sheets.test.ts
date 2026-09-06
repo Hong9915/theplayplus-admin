@@ -66,6 +66,9 @@ describe("detectHeader", () => {
   it("uses the first row when every cell is non-empty and unique", () => {
     expect(detectHeader(["이메일", "ID"])).toEqual(["이메일", "ID"]);
   });
+  it("treats a single non-empty cell as a header", () => {
+    expect(detectHeader(["코드 목록"])).toEqual(["코드 목록"]);
+  });
   it("returns null for empty, blank, or duplicate cells", () => {
     expect(detectHeader(undefined)).toBeNull();
     expect(detectHeader([])).toBeNull();
@@ -194,7 +197,7 @@ describe("readSpreadsheet", () => {
       data: {
         valueRanges: [
           { values: [["이메일", "ID"], ["a@x.com", 52009]] },
-          { values: [["코드 목록"], ["m6fu5sj"]] },
+          { values: [["코드 목록", ""], ["m6fu5sj"]] },
         ],
       },
     });
@@ -205,7 +208,7 @@ describe("readSpreadsheet", () => {
     expect(batchGetMock).toHaveBeenCalledWith({ spreadsheetId: "s1", ranges: ["'VIP'", "'메모'"] });
     expect(tabs).toEqual([
       { title: "VIP", header: ["이메일", "ID"], rows: [["이메일", "ID"], ["a@x.com", "52009"]] },
-      { title: "메모", header: null, rows: [["코드 목록"], ["m6fu5sj"]] },
+      { title: "메모", header: null, rows: [["코드 목록", ""], ["m6fu5sj"]] },
     ]);
   });
 
