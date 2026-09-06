@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   parseSheetUrl,
   detectHeader,
@@ -6,8 +6,31 @@ import {
   columnToA1,
   prepareProposal,
   validateProposal,
+  readSpreadsheet,
+  applyProposal,
+  serviceAccountEmail,
+  SheetError,
   type SheetTab,
 } from "@/lib/sheets";
+
+const getMock = vi.fn();
+const batchGetMock = vi.fn();
+const batchUpdateMock = vi.fn();
+const appendMock = vi.fn();
+
+vi.mock("googleapis", () => ({
+  google: {
+    auth: { JWT: vi.fn(function () { return {}; }) },
+    sheets: vi.fn(() => ({
+      spreadsheets: {
+        get: getMock,
+        values: { batchGet: batchGetMock, batchUpdate: batchUpdateMock, append: appendMock },
+      },
+    })),
+  },
+}));
+
+const CREDS = JSON.stringify({ client_email: "bot@proj.iam.gserviceaccount.com", private_key: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n" });
 
 const vip: SheetTab = {
   title: "VIP",
@@ -136,5 +159,139 @@ describe("validateProposal", () => {
   });
   it("reports invalid_proposal for structural problems", () => {
     expect(validateProposal([vip], { kind: "append", sheet: "메모", values: { a: "b" } })).toEqual({ ok: false, reason: "invalid_proposal" });
+  });
+});
+
+describe("service account", () => {
+  afterEach(() => {
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  });
+  it("returns the client_email, or null when unset or malformed", () => {
+    expect(serviceAccountEmail()).toBeNull();
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON = "{not json";
+    expect(serviceAccountEmail()).toBeNull();
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON = CREDS;
+    expect(serviceAccountEmail()).toBe("bot@proj.iam.gserviceaccount.com");
+  });
+  it("readSpreadsheet throws not_configured without credentials", async () => {
+    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "not_configured" });
+  });
+});
+
+describe("readSpreadsheet", () => {
+  beforeEach(() => {
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON = CREDS;
+    getMock.mockReset();
+    batchGetMock.mockReset();
+  });
+  afterEach(() => {
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  });
+
+  it("reads every tab in one batchGet and detects headers", async () => {
+    getMock.mockResolvedValue({ data: { sheets: [{ properties: { title: "VIP" } }, { properties: { title: "메모" } }] } });
+    batchGetMock.mockResolvedValue({
+      data: {
+        valueRanges: [
+          { values: [["이메일", "ID"], ["a@x.com", 52009]] },
+          { values: [["코드 목록"], ["m6fu5sj"]] },
+        ],
+      },
+    });
+
+    const tabs = await readSpreadsheet("s1");
+
+    expect(getMock).toHaveBeenCalledWith({ spreadsheetId: "s1", fields: "sheets.properties.title" });
+    expect(batchGetMock).toHaveBeenCalledWith({ spreadsheetId: "s1", ranges: ["'VIP'", "'메모'"] });
+    expect(tabs).toEqual([
+      { title: "VIP", header: ["이메일", "ID"], rows: [["이메일", "ID"], ["a@x.com", "52009"]] },
+      { title: "메모", header: null, rows: [["코드 목록"], ["m6fu5sj"]] },
+    ]);
+  });
+
+  it("returns an empty list for a spreadsheet without tabs", async () => {
+    getMock.mockResolvedValue({ data: { sheets: [] } });
+    expect(await readSpreadsheet("s1")).toEqual([]);
+    expect(batchGetMock).not.toHaveBeenCalled();
+  });
+
+  it("maps 403/404 and other failures to reasons", async () => {
+    getMock.mockRejectedValueOnce({ code: 403 });
+    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "sheet_forbidden" });
+    getMock.mockRejectedValueOnce({ code: 404 });
+    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "sheet_not_found" });
+    getMock.mockRejectedValueOnce(new Error("boom"));
+    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "sheet_read_failed" });
+  });
+
+  it("throws sheet_too_large past the cap", async () => {
+    getMock.mockResolvedValue({ data: { sheets: [{ properties: { title: "T" } }] } });
+    batchGetMock.mockResolvedValue({ data: { valueRanges: [{ values: [["x".repeat(300_001)]] }] } });
+    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "sheet_too_large" });
+  });
+});
+
+describe("applyProposal", () => {
+  beforeEach(() => {
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON = CREDS;
+    getMock.mockReset().mockResolvedValue({ data: { sheets: [{ properties: { title: "VIP" } }] } });
+    batchGetMock.mockReset().mockResolvedValue({
+      data: { valueRanges: [{ values: [["이메일", "ID", "VIP 단계", "갱신일"], ["a@x.com", "52009", "VIP5", "08.27"]] }] },
+    });
+    batchUpdateMock.mockReset().mockResolvedValue({});
+    appendMock.mockReset().mockResolvedValue({});
+  });
+  afterEach(() => {
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  });
+
+  it("writes each updated cell by A1 range", async () => {
+    await applyProposal("s1", {
+      kind: "update",
+      sheet: "VIP",
+      row: 2,
+      updates: [
+        { column: "VIP 단계", before: "VIP5", after: "VIP6" },
+        { column: "갱신일", before: "08.27", after: "09.04" },
+      ],
+    });
+    expect(batchUpdateMock).toHaveBeenCalledWith({
+      spreadsheetId: "s1",
+      requestBody: {
+        valueInputOption: "RAW",
+        data: [
+          { range: "'VIP'!C2", values: [["VIP6"]] },
+          { range: "'VIP'!D2", values: [["09.04"]] },
+        ],
+      },
+    });
+  });
+
+  it("appends a row ordered by the header, blank for missing columns", async () => {
+    await applyProposal("s1", { kind: "append", sheet: "VIP", values: { ID: "1", 이메일: "c@x.com" } });
+    expect(appendMock).toHaveBeenCalledWith({
+      spreadsheetId: "s1",
+      range: "'VIP'!A1",
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: [["c@x.com", "1", "", ""]] },
+    });
+  });
+
+  it("throws conflict when the sheet changed since the proposal", async () => {
+    await expect(
+      applyProposal("s1", { kind: "update", sheet: "VIP", row: 2, updates: [{ column: "VIP 단계", before: "VIP4", after: "VIP6" }] })
+    ).rejects.toMatchObject({ reason: "conflict" });
+    expect(batchUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("throws sheet_write_failed when the API rejects", async () => {
+    batchUpdateMock.mockRejectedValue(new Error("quota"));
+    await expect(
+      applyProposal("s1", { kind: "update", sheet: "VIP", row: 2, updates: [{ column: "VIP 단계", before: "VIP5", after: "VIP6" }] })
+    ).rejects.toBeInstanceOf(SheetError);
+    await expect(
+      applyProposal("s1", { kind: "update", sheet: "VIP", row: 2, updates: [{ column: "VIP 단계", before: "VIP5", after: "VIP6" }] })
+    ).rejects.toMatchObject({ reason: "sheet_write_failed" });
   });
 });

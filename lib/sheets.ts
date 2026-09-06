@@ -52,9 +52,9 @@ export function parseSheetUrl(input: string): string | null {
   return SHEET_ID_PATTERN.test(trimmed) ? trimmed : null;
 }
 
-/** 첫 행의 모든 칸이 비어 있지 않고 서로 다르면 열 이름으로 본다. */
+/** 첫 행이 두 칸 이상이고 모두 비어 있지 않으며 서로 다르면 열 이름으로 본다. 한 칸뿐이면 표 제목 같은 자유 텍스트일 뿐 열 이름으로 보지 않는다. */
 export function detectHeader(firstRow: string[] | undefined): string[] | null {
-  if (!firstRow || firstRow.length === 0) return null;
+  if (!firstRow || firstRow.length < 2) return null;
   const cells = firstRow.map((cell) => cell.trim());
   if (cells.some((cell) => cell === "")) return null;
   if (new Set(cells).size !== cells.length) return null;
@@ -183,5 +183,121 @@ export function validateProposal(tabs: SheetTab[], proposal: Proposal): { ok: tr
   return { ok: true };
 }
 
-// ---- Sheets API (Task 3에서 채운다) ----
-export type SheetsClient = sheets_v4.Sheets;
+// ---- Sheets API ----
+
+interface ServiceAccount {
+  client_email: string;
+  private_key: string;
+}
+
+function loadServiceAccount(): ServiceAccount | null {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<ServiceAccount>;
+    if (typeof parsed.client_email !== "string" || typeof parsed.private_key !== "string") return null;
+    return { client_email: parsed.client_email, private_key: parsed.private_key };
+  } catch {
+    return null;
+  }
+}
+
+/** 설정 안내용. 관리자가 이 주소에 시트를 편집자로 공유해야 한다. */
+export function serviceAccountEmail(): string | null {
+  return loadServiceAccount()?.client_email ?? null;
+}
+
+function sheetsClient(): sheets_v4.Sheets {
+  const account = loadServiceAccount();
+  if (!account) throw new SheetError("not_configured");
+  const auth = new google.auth.JWT({
+    email: account.client_email,
+    key: account.private_key,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+  return google.sheets({ version: "v4", auth });
+}
+
+function quoteTab(title: string): string {
+  return `'${title.replace(/'/g, "''")}'`;
+}
+
+function statusOf(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const { code, status } = error as { code?: unknown; status?: unknown };
+  if (typeof code === "number") return code;
+  if (typeof status === "number") return status;
+  return undefined;
+}
+
+/** 모든 탭을 한 번의 batchGet으로 읽는다. 캐시 없음 — 항상 최신 시트 기준. */
+export async function readSpreadsheet(sheetId: string): Promise<SheetTab[]> {
+  const sheets = sheetsClient();
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: "sheets.properties.title" });
+    const titles = (meta.data.sheets ?? [])
+      .map((sheet) => sheet.properties?.title)
+      .filter((title): title is string => typeof title === "string" && title.length > 0);
+    if (titles.length === 0) return [];
+
+    const values = await sheets.spreadsheets.values.batchGet({ spreadsheetId: sheetId, ranges: titles.map(quoteTab) });
+    const ranges = values.data.valueRanges ?? [];
+
+    let total = 0;
+    const tabs = titles.map((title, index) => {
+      const rows = (ranges[index]?.values ?? []).map((row) =>
+        (row as unknown[]).map((cell) => {
+          const text = cell === null || cell === undefined ? "" : String(cell);
+          total += text.length;
+          return text;
+        })
+      );
+      return { title, header: detectHeader(rows[0]), rows };
+    });
+
+    if (total > MAX_SHEET_CHARS) throw new SheetError("sheet_too_large");
+    return tabs;
+  } catch (error) {
+    if (error instanceof SheetError) throw error;
+    const status = statusOf(error);
+    if (status === 403) throw new SheetError("sheet_forbidden");
+    if (status === 404) throw new SheetError("sheet_not_found");
+    console.warn("[sheets] read failed", error);
+    throw new SheetError("sheet_read_failed");
+  }
+}
+
+/** 적용 직전에 다시 읽어 충돌을 확인한 뒤 쓴다. */
+export async function applyProposal(sheetId: string, proposal: Proposal): Promise<void> {
+  const tabs = await readSpreadsheet(sheetId);
+  const verdict = validateProposal(tabs, proposal);
+  if (!verdict.ok) throw new SheetError(verdict.reason);
+
+  const tab = tabs.find((entry) => entry.title === proposal.sheet) as SheetTab & { header: string[] };
+  const sheets = sheetsClient();
+  try {
+    if (proposal.kind === "update") {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: sheetId,
+        requestBody: {
+          valueInputOption: "RAW",
+          data: proposal.updates.map((update) => ({
+            range: `${quoteTab(tab.title)}!${columnToA1(tab.header.indexOf(update.column))}${proposal.row}`,
+            values: [[update.after]],
+          })),
+        },
+      });
+    } else {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: sheetId,
+        range: `${quoteTab(tab.title)}!A1`,
+        valueInputOption: "RAW",
+        insertDataOption: "INSERT_ROWS",
+        requestBody: { values: [tab.header.map((column) => proposal.values[column] ?? "")] },
+      });
+    }
+  } catch (error) {
+    console.warn("[sheets] write failed", error);
+    throw new SheetError("sheet_write_failed");
+  }
+}
