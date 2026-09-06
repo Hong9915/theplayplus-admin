@@ -1,0 +1,26 @@
+import type { MessageRow } from "@/lib/assistant-store";
+
+/** 화면이 들고 있는 메시지. 서버 행에서 대화 id·시각을 뺀 것. */
+export type ChatMessage = Pick<MessageRow, "id" | "role" | "content" | "proposal" | "status" | "failureReason" | "appliedBy" | "appliedAt">;
+
+/** 스트림 error 사유 → 안내. 무엇을 고쳐야 하는지 알려줘야 한다. */
+export const STREAM_ERROR_MESSAGES: Record<string, string> = {
+  not_configured: "OpenAI API 키 또는 서비스 계정이 설정되지 않았습니다.",
+  sheet_forbidden: "시트를 읽을 권한이 없습니다. 시트 설정에 표시된 서비스 계정에 편집자로 공유했는지 확인하세요.",
+  sheet_not_found: "시트를 찾을 수 없습니다. 시트 설정의 URL을 확인하세요.",
+  sheet_too_large: "시트가 너무 큽니다(300,000자 초과).",
+  sheet_read_failed: "시트를 읽지 못했습니다. 잠시 후 다시 시도하세요.",
+  model_failed: "응답을 받지 못했습니다. 다시 시도하세요.",
+  invalid_proposal: "수정 제안을 만들지 못했습니다. 탭·열 이름을 정확히 알려주고 다시 시도하세요.",
+  save_failed: "메시지를 저장하지 못했습니다.",
+};
+
+export const APPLY_FAILURE_MESSAGES: Record<string, string> = {
+  conflict: "시트가 그 사이 바뀌었습니다. 다시 물어봐 주세요.",
+  sheet_write_failed: "시트에 쓰지 못했습니다.",
+  invalid_proposal: "제안이 시트 구조와 맞지 않습니다.",
+  not_configured: "시트 연결 또는 서비스 계정 설정이 없습니다.",
+  sheet_forbidden: "시트를 쓸 권한이 없습니다. 서비스 계정을 편집자로 공유했는지 확인하세요.",
+};
+
+export const GENERIC_ERROR = "요청에 실패했습니다.";
