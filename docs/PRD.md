@@ -242,6 +242,12 @@
 | POST | `/api/inquiries/[id]/suggest` | AI 답변 추천 (스트리밍) |
 | POST | `/api/inquiries/bulk-status` | 상태 일괄 변경 |
 
+### 5.10 운영 시트 어시스턴트
+
+| ID | 요구사항 |
+|---|---|
+| FR-10.1 | 운영 시트 어시스턴트 — 게임별 구글 시트를 근거로 자연어 질의에 답하고, 관리자가 확인한 뒤 시트를 수정한다(`/games/{gameId}/assistant`). 시트 전체를 프롬프트에 싣는 방식이며 임베딩 검색은 쓰지 않는다. |
+
 ## 6. 데이터 모델
 
 Supabase(Postgres)에 저장하며 `theplayplus-contact`와 **동일한 프로젝트를 공유**한다. **이 저장소가 스키마의 소유자**다 — 마이그레이션은 여기서만 작성하고, `theplayplus-contact`는 정해진 테이블을 읽고 문의를 넣기만 한다.
@@ -336,6 +342,8 @@ GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET                       # 공용 OAuth 클�
 GMAIL_REFRESH_TOKEN / GMAIL_SENDER                          # 게임 문의 발신 계정 (help@)
 GMAIL_SERVICE_REFRESH_TOKEN / GMAIL_SERVICE_SENDER          # 서비스 문의 발신 계정 (info@), 둘 다 비우면 게임 계정으로 대체
 GEMINI_API_KEY / GEMINI_MODEL
+OPENAI_API_KEY / OPENAI_MODEL                               # 운영 시트 어시스턴트 (기본 모델 gpt-5-mini)
+GOOGLE_SERVICE_ACCOUNT_JSON                                  # 운영 시트 어시스턴트가 구글 시트를 읽고 쓰는 서비스 계정 키(JSON 한 줄)
 ```
 
 **이 값들은 어떤 문서나 커밋에도 평문으로 남기지 않는다.** `.env`로만 관리하며, 저장소에는 빈 `.env.example`만 둔다.
