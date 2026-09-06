@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { requireAdminSession } from "@/lib/require-admin-session";
+import { parseSheetUrl, serviceAccountEmail } from "@/lib/sheets";
 
 export async function DELETE(_request: Request, { params }: { params: { gameId: string } }) {
   if (!(await requireAdminSession())) {
@@ -50,4 +51,35 @@ export async function DELETE(_request: Request, { params }: { params: { gameId: 
   }
 
   return NextResponse.json({ success: true });
+}
+
+/** 운영 시트 연결. URL이나 ID를 받아 games.sheet_id에 저장한다. */
+export async function PATCH(request: Request, { params }: { params: { gameId: string } }) {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
+  }
+
+  let body: { sheetUrl?: unknown };
+  try {
+    body = (await request.json()) as { sheetUrl?: unknown };
+  } catch {
+    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
+  }
+
+  const sheetId = typeof body.sheetUrl === "string" ? parseSheetUrl(body.sheetUrl) : null;
+  if (!sheetId) {
+    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
+  }
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.from("games").update({ sheet_id: sheetId }).eq("id", params.gameId).select("id").single();
+
+  if (error?.code === "PGRST116" || (!error && !data)) {
+    return NextResponse.json({ success: false, error: "not_found" }, { status: 404 });
+  }
+  if (error) {
+    return NextResponse.json({ success: false, error: "save_failed" }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, sheetId, serviceAccountEmail: serviceAccountEmail() });
 }
