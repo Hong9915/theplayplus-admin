@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { listGames } from "@/lib/categories";
 import { listConversations, listMessages } from "@/lib/assistant-store";
+import { listSources } from "@/lib/assistant-sources";
 import { serviceAccountEmail } from "@/lib/sheets";
 import AssistantShell from "@/components/assistant/AssistantShell";
 
@@ -25,14 +26,15 @@ export default async function AssistantPage({
     notFound();
   }
 
-  const conversations = await listConversations(supabase, game.id);
+  const [conversations, sources] = await Promise.all([listConversations(supabase, game.id), listSources(supabase, game.id)]);
   const requested = typeof searchParams.c === "string" ? searchParams.c : null;
   const selected = requested ? conversations.find((entry) => entry.id === requested) ?? null : null;
   const messages = selected ? await listMessages(supabase, selected.id) : [];
 
   return (
     <AssistantShell
-      game={{ id: game.id, name: game.name, sheetId: game.sheetId }}
+      game={{ id: game.id, name: game.name }}
+      sources={sources}
       conversations={conversations}
       selectedId={selected?.id ?? null}
       messages={messages.map(({ id, role, content, proposal, status, failureReason, appliedBy, appliedAt, attachments }) => ({

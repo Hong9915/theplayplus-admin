@@ -43,6 +43,8 @@ export default function ProposalCard({ message, onChange }: { message: ChatMessa
       <div className="px-4 py-2.5 border-b border-line flex items-center gap-2">
         <span className="font-semibold">시트 수정 제안</span>
         <span className="text-muted">·</span>
+        <span className="text-muted">{proposal.sourceTitle}</span>
+        <span className="text-muted">·</span>
         <span className="text-muted">{proposal.sheet}</span>
         {proposal.kind === "update" ? (
           <span className="text-muted">

@@ -9,7 +9,7 @@ const pending: ChatMessage = {
   id: "m1",
   role: "proposal",
   content: "",
-  proposal: { kind: "update", sheet: "VIP", row: 7, updates: [{ column: "VIP 단계", before: "VIP3", after: "VIP4" }] },
+  proposal: { kind: "update", sheet: "VIP", row: 7, updates: [{ column: "VIP 단계", before: "VIP3", after: "VIP4" }], sourceId: "s1", sourceTitle: "VIP 원장" },
   status: "pending",
   failureReason: null,
   appliedBy: null,
@@ -37,7 +37,7 @@ describe("ProposalCard", () => {
   it("renders append proposals as column/value rows", () => {
     render(
       <ProposalCard
-        message={{ ...pending, proposal: { kind: "append", sheet: "VIP", values: { 이메일: "c@x.com", "VIP 단계": "VIP1" } } }}
+        message={{ ...pending, proposal: { kind: "append", sheet: "VIP", values: { 이메일: "c@x.com", "VIP 단계": "VIP1" }, sourceId: "s1", sourceTitle: "VIP 원장" } }}
         onChange={vi.fn()}
       />
     );

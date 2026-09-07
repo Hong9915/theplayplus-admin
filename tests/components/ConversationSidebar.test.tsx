@@ -1,44 +1,60 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ConversationSidebar from "@/components/assistant/ConversationSidebar";
 
-const push = vi.fn();
 const refresh = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh, replace: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn() }) }));
 
-const conversations = [
-  { id: "c1", gameId: "g1", title: "VIP 확인", createdBy: "a@b", createdAt: "", updatedAt: "" },
-  { id: "c2", gameId: "g1", title: "보상 코드", createdBy: "a@b", createdAt: "", updatedAt: "" },
+const sources = [
+  { id: "s1", gameId: "g1", kind: "sheet" as const, externalId: "1AbC", title: "VIP 원장", createdAt: "" },
+  { id: "s2", gameId: "g1", kind: "doc" as const, externalId: "1DoC", title: "운영 가이드", createdAt: "" },
 ];
 
-describe("ConversationSidebar", () => {
+function renderSidebar(overrides: Partial<React.ComponentProps<typeof ConversationSidebar>> = {}) {
+  return render(
+    <ConversationSidebar gameId="g1" gameName="여신 키우기" conversations={[]} selectedId={null} sources={sources} onAddSource={vi.fn()} {...overrides} />
+  );
+}
+
+describe("ConversationSidebar sources", () => {
   beforeEach(() => {
-    push.mockReset();
     refresh.mockReset();
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) }) as never;
   });
 
-  it("lists conversations linking to ?c= and marks the selected one", () => {
-    render(<ConversationSidebar gameId="g1" gameName="여신 키우기" conversations={conversations} selectedId="c2" onOpenSettings={vi.fn()} />);
-    expect(screen.getByText("여신 키우기")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "VIP 확인" })).toHaveAttribute("href", "/games/g1/assistant?c=c1");
-    expect(screen.getByRole("link", { name: "보상 코드" })).toHaveAttribute("aria-current", "true");
-    expect(screen.getByRole("link", { name: /새 대화/ })).toHaveAttribute("href", "/games/g1/assistant");
+  it("lists each source as a new-tab link with its kind", () => {
+    renderSidebar();
+    const sheet = screen.getByRole("link", { name: /VIP 원장/ });
+    expect(sheet).toHaveAttribute("href", "https://docs.google.com/spreadsheets/d/1AbC/edit");
+    expect(sheet).toHaveAttribute("target", "_blank");
+    expect(screen.getByRole("link", { name: /운영 가이드/ })).toHaveAttribute("href", "https://docs.google.com/document/d/1DoC/edit");
+    expect(screen.getByLabelText("시트")).toBeInTheDocument();
+    expect(screen.getByLabelText("문서")).toBeInTheDocument();
   });
 
-  it("deletes a conversation and navigates away when it was selected", async () => {
-    render(<ConversationSidebar gameId="g1" gameName="G" conversations={conversations} selectedId="c1" onOpenSettings={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: "VIP 확인 삭제" }));
-    expect(global.fetch).toHaveBeenCalledWith("/api/assistant/conversations/c1", { method: "DELETE" });
-    expect(push).toHaveBeenCalledWith("/games/g1/assistant");
+  it("shows an empty note when nothing is linked", () => {
+    renderSidebar({ sources: [] });
+    expect(screen.getByText("연결된 자료가 없습니다")).toBeInTheDocument();
   });
 
-  it("opens settings", async () => {
-    const onOpenSettings = vi.fn();
-    render(<ConversationSidebar gameId="g1" gameName="G" conversations={[]} selectedId={null} onOpenSettings={onOpenSettings} />);
-    await userEvent.click(screen.getByRole("button", { name: /시트 설정/ }));
-    expect(onOpenSettings).toHaveBeenCalled();
+  it("opens the add dialog from the add button", async () => {
+    const onAddSource = vi.fn();
+    renderSidebar({ onAddSource });
+    await userEvent.click(screen.getByRole("button", { name: "+ 자료 추가" }));
+    expect(onAddSource).toHaveBeenCalled();
+  });
+
+  it("unlinks a source and refreshes", async () => {
+    renderSidebar();
+    await userEvent.click(screen.getByRole("button", { name: "운영 가이드 연결 해제" }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/games/g1/sources/s2", { method: "DELETE" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it("no longer offers the old sheet settings button", () => {
+    renderSidebar();
+    expect(screen.queryByText(/시트 설정/)).toBeNull();
   });
 });
