@@ -3,6 +3,7 @@ import { ReplySaveError, sendInquiryReply, type ReplyableInquiry } from "@/lib/s
 import * as gmailModule from "@/lib/gmail";
 import * as eventsModule from "@/lib/events";
 import * as messagesModule from "@/lib/messages";
+import * as embeddingsModule from "@/lib/embeddings";
 
 vi.mock("@/lib/gmail", () => ({
   sendReplyEmail: vi.fn(),
@@ -13,6 +14,7 @@ vi.mock("@/lib/events", async () => {
   return { ...actual, recordEvent: vi.fn() };
 });
 vi.mock("@/lib/messages", () => ({ createOutboundMessage: vi.fn(), listRfcMessageIds: vi.fn() }));
+vi.mock("@/lib/embeddings", () => ({ ensureInquiryEmbedding: vi.fn() }));
 
 const SENT = { gmailMessageId: "gm-1", gmailThreadId: "thread-1", rfcMessageId: "<abc@theplayplus.com>" };
 const ADMIN = { id: "user-1", email: "hong@theplayplus.com" };
@@ -60,6 +62,7 @@ describe("sendInquiryReply", () => {
     vi.mocked(eventsModule.recordEvent).mockReset().mockResolvedValue(undefined);
     vi.mocked(messagesModule.createOutboundMessage).mockReset().mockResolvedValue(true);
     vi.mocked(messagesModule.listRfcMessageIds).mockReset().mockResolvedValue([]);
+    vi.mocked(embeddingsModule.ensureInquiryEmbedding).mockReset().mockResolvedValue([0.1]);
   });
 
   it("manual: sends the branded email, marks in_progress, and records the admin", async () => {
@@ -153,5 +156,34 @@ describe("sendInquiryReply", () => {
     const result = await sendInquiryReply(supabase, { inquiry, body: "x", mode: "auto" });
 
     expect(result.recorded).toBe(false);
+  });
+
+  it("manual: makes sure the inquiry has an embedding after the reply is recorded", async () => {
+    const { supabase } = mockSupabase();
+
+    await sendInquiryReply(supabase, { inquiry, body: "환불 처리했습니다", mode: "manual", actor: ADMIN });
+
+    expect(embeddingsModule.ensureInquiryEmbedding).toHaveBeenCalledWith(supabase, {
+      id: "inq-1",
+      title: "중복 결제",
+      content: "두 번 결제됐어요",
+    });
+  });
+
+  it("auto: does not touch the embedding", async () => {
+    const { supabase } = mockSupabase();
+
+    await sendInquiryReply(supabase, { inquiry, body: "접수됐습니다", mode: "auto" });
+
+    expect(embeddingsModule.ensureInquiryEmbedding).not.toHaveBeenCalled();
+  });
+
+  it("manual: an embedding failure does not change the result", async () => {
+    vi.mocked(embeddingsModule.ensureInquiryEmbedding).mockRejectedValue(new Error("boom"));
+    const { supabase } = mockSupabase();
+
+    const result = await sendInquiryReply(supabase, { inquiry, body: "환불 처리했습니다", mode: "manual", actor: ADMIN });
+
+    expect(result.recorded).toBe(true);
   });
 });

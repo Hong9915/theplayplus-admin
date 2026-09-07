@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { mailboxSender, sendReplyEmail, type SentEmail } from "@/lib/gmail";
 import { AUTO_REPLY_ACTOR, recordEvent } from "@/lib/events";
 import { createOutboundMessage, listRfcMessageIds } from "@/lib/messages";
+import { ensureInquiryEmbedding } from "@/lib/embeddings";
 import { listCategoryLabelsForScope, type CategoryLabelMaps } from "@/lib/categories";
 import { scopeForGameId } from "@/lib/inbox-scope";
 import { COMPANY, renderReplyEmailHtml, renderReplyEmailText } from "@/lib/email-template";
@@ -154,6 +155,12 @@ export async function sendInquiryReply(supabase: SupabaseClient, input: SendRepl
     actor: actor ?? AUTO_REPLY_ACTOR,
     kind: input.mode === "manual" ? "reply_sent" : "auto_reply_sent",
   }).catch(() => {});
+
+  // 답변이 붙은 문의는 다음 추천의 근거가 된다. 임베딩이 없으면 여기서 만든다.
+  // 부가 작업이라 실패해도 발송 결과에는 영향이 없다.
+  if (input.mode === "manual") {
+    await ensureInquiryEmbedding(supabase, { id: inquiry.id, title: inquiry.title, content: inquiry.content }).catch(() => null);
+  }
 
   return { sent, recorded };
 }
