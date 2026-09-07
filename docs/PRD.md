@@ -223,7 +223,7 @@
 | FR-8.5 | 프롬프트는 확인되지 않은 사실(보상 지급, 환불 승인, 수정 일정)을 약속하지 않도록 제약한다. 그런 사항은 "확인 후 안내드리겠습니다"로 남긴다. |
 | FR-8.6 | API 키 미설정(`not_configured`), 안전 필터 차단(`refused`), 호출 실패(`failed`)를 구분해 안내한다. 오류 전에 이미 흘러나온 텍스트는 유효하게 두고 관리자가 살릴지 판단한다. |
 
-**모델**: `gemini-3.5-flash-lite` (환경변수 `GEMINI_MODEL`로 교체 가능). 답변 초안 작성은 정형화된 글쓰기 작업이고 관리자가 결과를 읽고 고친 뒤 발송하므로 최상위 모델이 필요 없다. `temperature: 0.4`, thinking level은 최소.
+**모델**: `gpt-5-mini` (환경변수 `OPENAI_MODEL`로 교체 가능). 답변 초안 작성은 정형화된 글쓰기 작업이고 관리자가 결과를 읽고 고친 뒤 발송하므로 최상위 모델이 필요 없다. `reasoning_effort: "minimal"`, temperature는 지정하지 않는다(gpt-5 계열은 기본값만 허용).
 
 ### 5.9 API 목록
 
@@ -334,10 +334,10 @@ Supabase(Postgres)에 저장하며 `theplayplus-contact`와 **동일한 프로�
 - 메일은 RFC 2822 형식으로 직접 조립해 base64url로 인코딩한다. `Message-ID`도 직접 생성한다 — Gmail이 붙여주는 값을 다시 읽으려면 발송 후 조회를 한 번 더 해야 하는데, 직접 넣으면 Gmail이 그대로 보존한다.
 - refresh token은 **계정마다 최초 1회 계정 소유자가 OAuth 동의 화면에서 직접 발급**해야 한다. 코드로 자동화되지 않는 수동 준비 단계이며 `scripts/get-gmail-refresh-token.js`가 이를 돕는다(계정마다 한 번씩 실행).
 
-### Gemini API (`@google/genai`)
+### OpenAI API (`openai`)
 
-- 답변 추천에만 쓴다. 모델은 `GEMINI_MODEL` 환경변수로 교체 가능하다 (기본 `gemini-3.5-flash-lite`).
-- 구버전 SDK `@google/generative-ai`는 쓰지 않는다.
+- 답변 추천·운영 시트 어시스턴트는 채팅 완성(chat completions) 스트리밍을 쓴다. 모델은 `OPENAI_MODEL` 환경변수로 교체 가능하다 (기본 `gpt-5-mini`).
+- 문의 임베딩은 `text-embedding-3-small`(1536차원)을 쓴다. 답변이 붙은 과거 문의를 벡터로 저장해 두고, 새 문의와 코사인 거리가 가까운 것을 답변 추천의 근거로 찾는다.
 
 ### Supabase
 
@@ -353,8 +353,7 @@ SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY                    # 서버 (RLS 우회
 GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET                       # 공용 OAuth 클라이언트
 GMAIL_REFRESH_TOKEN / GMAIL_SENDER                          # 게임 문의 발신 계정 (help@)
 GMAIL_SERVICE_REFRESH_TOKEN / GMAIL_SERVICE_SENDER          # 서비스 문의 발신 계정 (info@), 둘 다 비우면 게임 계정으로 대체
-GEMINI_API_KEY / GEMINI_MODEL
-OPENAI_API_KEY / OPENAI_MODEL                               # 운영 시트 어시스턴트 (기본 모델 gpt-5-mini)
+OPENAI_API_KEY / OPENAI_MODEL                               # 답변 추천·운영 시트 어시스턴트·임베딩 (기본 모델 gpt-5-mini)
 GOOGLE_SERVICE_ACCOUNT_JSON                                  # 운영 시트 어시스턴트가 구글 시트를 읽고 쓰는 서비스 계정 키(JSON 한 줄)
 ```
 

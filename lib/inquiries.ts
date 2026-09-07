@@ -34,6 +34,11 @@ export interface InquiryRow {
   createdAt: string;
 }
 
+// 임베딩 벡터(1536 float)를 목록·상세에서 끌어오지 않도록 열을 명시한다.
+// mapInquiryRow가 읽는 열과 정확히 맞춘다(embedding, embedding_model은 제외).
+export const INQUIRY_COLUMNS =
+  "id, inquiry_no, game_id, group_key, type_key, game_account, company_name, reply_email, title, content, status, priority, meta, draft_reply, reply_content, replied_at, gmail_thread_id, locale, payment_no, occurred_at, device_info, created_at";
+
 export interface AttachmentWithUrl {
   id: string;
   fileName: string;
@@ -166,7 +171,7 @@ export async function queryInquiries(
   const now = options.now ?? new Date();
   const from = (query.page - 1) * PAGE_SIZE;
   const builder = applyOrder(
-    applyFilters(supabase.from("inquiries").select("*", { count: "exact" }) as unknown as FilterBuilder, scope, query, now),
+    applyFilters(supabase.from("inquiries").select(INQUIRY_COLUMNS, { count: "exact" }) as unknown as FilterBuilder, scope, query, now),
     query
   ).range(from, from + PAGE_SIZE - 1);
 
@@ -230,7 +235,7 @@ export async function countNewInquiriesByGame(supabase: SupabaseClient): Promise
 }
 
 export async function getInquiryById(supabase: SupabaseClient, id: string): Promise<InquiryRow | null> {
-  const { data, error } = await supabase.from("inquiries").select("*").eq("id", id).single();
+  const { data, error } = await supabase.from("inquiries").select(INQUIRY_COLUMNS).eq("id", id).single();
   if (error || !data) {
     return null;
   }

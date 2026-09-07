@@ -26,6 +26,24 @@ export async function POST(_request: Request, { params }: { params: { id: string
     return NextResponse.json({ success: false, error: "not_found" }, { status: 404 });
   }
 
+  // 키가 없으면 시트·템플릿·임베딩을 읽을 필요가 없다. 바로 같은 NDJSON 형태의
+  // error 이벤트 하나로 끝낸다 — 화면이 다른 오류와 똑같이 처리할 수 있게.
+  if (!process.env.OPENAI_API_KEY) {
+    return new Response(
+      toNdjsonStream(
+        (async function* (): AsyncGenerator<SuggestEvent> {
+          yield { type: "error", reason: "not_configured" };
+        })()
+      ),
+      {
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+        },
+      }
+    );
+  }
+
   // 서비스 문의(game_id null)는 게임·템플릿·운영 자료가 없다. 라벨과 과거 답변은 서비스 스코프로 찾는다.
   const scope = scopeForGameId(inquiry.gameId);
   const [labels, games, templates, sources, embedding] = await Promise.all([
@@ -99,7 +117,10 @@ export async function POST(_request: Request, { params }: { params: { id: string
   });
 }
 
-/** SheetError의 sourceTitle. 클래스를 import하면 googleapis가 딸려오므로 모양만 본다. */
+/**
+ * SheetError의 sourceTitle. 클래스를 import하지 않고 모양만 보는 이유는 라우트
+ * 테스트가 assistant-sources를 통째로 모킹해 실제 클래스를 쓸 수 없어서다.
+ */
 function sourceTitleOf(error: unknown): string | undefined {
   if (typeof error === "object" && error !== null && "sourceTitle" in error) {
     const title = (error as { sourceTitle?: unknown }).sourceTitle;

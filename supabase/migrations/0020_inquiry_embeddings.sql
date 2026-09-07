@@ -66,3 +66,10 @@ as $$
   where ranked.similarity >= p_min_similarity
   order by ranked.similarity desc;
 $$;
+
+-- HNSW는 상위 후보(ef_search, 기본 40)를 고른 뒤 game_id 조건을 거르므로 문의가 적은 게임은
+-- 결과가 비기 쉽다. 후보 폭을 넓힌다. pgvector 0.8+면 hnsw.iterative_scan = relaxed_order도 검토.
+alter function match_answered_inquiries(uuid, extensions.vector, uuid, int, float) set hnsw.ef_search = 200;
+
+revoke execute on function match_answered_inquiries(uuid, extensions.vector, uuid, int, float) from public, anon, authenticated;
+grant execute on function match_answered_inquiries(uuid, extensions.vector, uuid, int, float) to service_role;

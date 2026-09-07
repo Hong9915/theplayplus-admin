@@ -4,6 +4,7 @@ import {
   countNewInquiriesByGame,
   getInquiryById,
   getInquiryFacetCounts,
+  INQUIRY_COLUMNS,
   listAttachmentSignedUrls,
   listAttachmentSignedUrlsByInquiryIds,
   listInquiryIds,
@@ -60,7 +61,7 @@ describe("queryInquiries", () => {
 
     const page = await queryInquiries({ from } as never, gameScope("game-1"), DEFAULT_QUERY);
 
-    expect(select).toHaveBeenCalledWith("*", { count: "exact" });
+    expect(select).toHaveBeenCalledWith(INQUIRY_COLUMNS, { count: "exact" });
     expect(calls.eq).toEqual([["game_id", "game-1"]]);
     expect(calls.or).toEqual([]);
     expect(calls.order).toEqual([["created_at", { ascending: false }]]);

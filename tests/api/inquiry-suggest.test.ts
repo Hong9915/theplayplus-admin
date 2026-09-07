@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "@/app/api/inquiries/[id]/suggest/route";
 import * as supabaseModule from "@/lib/supabase";
 import * as inquiriesModule from "@/lib/inquiries";
@@ -82,7 +82,10 @@ async function readLines(response: Response): Promise<unknown[]> {
 }
 
 describe("POST /api/inquiries/[id]/suggest", () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+
   beforeEach(() => {
+    if (!process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = "test-key";
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReset().mockReturnValue({} as never);
     vi.mocked(sessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
     vi.mocked(inquiriesModule.getInquiryById).mockReset().mockResolvedValue(inquiry);
@@ -106,6 +109,11 @@ describe("POST /api/inquiries/[id]/suggest", () => {
       .mockImplementation(() => events({ type: "text", text: "추천 " }, { type: "text", text: "본문" }));
   });
 
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+  });
+
   it("returns 401 when there is no admin session", async () => {
     vi.mocked(sessionModule.requireAdminSession).mockResolvedValue(false);
 
@@ -121,6 +129,18 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     const response = await POST(suggestRequest(), { params: { id: "missing" } });
 
     expect(response.status).toBe(404);
+    expect(suggestModule.streamSuggestion).not.toHaveBeenCalled();
+  });
+
+  it("short-circuits with a not_configured error and reads nothing else when the key is missing", async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
+
+    expect(response.status).toBe(200);
+    await expect(readLines(response)).resolves.toEqual([{ type: "error", reason: "not_configured" }]);
+    expect(sourcesModule.listSources).not.toHaveBeenCalled();
+    expect(embeddingsModule.ensureInquiryEmbedding).not.toHaveBeenCalled();
     expect(suggestModule.streamSuggestion).not.toHaveBeenCalled();
   });
 

@@ -10,8 +10,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
-/** 임베딩 입력 상한(글자). 모델 상한 8191토큰 아래에 넉넉히 둔다. 백필 스크립트도 같은 값을 쓴다. */
-export const EMBEDDING_MAX_CHARS = 8000;
+/** 임베딩 입력 상한(글자). 한국어는 글자당 1토큰 가까이 쓰므로 8191토큰 상한의 절반 아래로 둔다. 백필 스크립트도 같은 값을 쓴다. */
+export const EMBEDDING_MAX_CHARS = 4000;
 
 export type EmbeddingErrorReason = "not_configured" | "failed";
 

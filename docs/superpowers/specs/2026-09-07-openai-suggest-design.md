@@ -95,8 +95,8 @@ $$;
 ```ts
 export const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
-/** 임베딩 입력 상한(글자). 모델 상한 8191토큰 아래에 넉넉히 둔다. */
-export const EMBEDDING_MAX_CHARS = 8000;
+/** 임베딩 입력 상한(글자). 한국어는 글자당 1토큰 가까이 쓰므로 8191토큰 상한의 절반 아래로 둔다. */
+export const EMBEDDING_MAX_CHARS = 4000;
 
 /** 제목 + 빈 줄 + 본문. 상한을 넘으면 뒤를 자른다. 순수 함수. */
 export function inquiryEmbeddingText(inquiry: { title: string; content: string }): string;
@@ -229,10 +229,10 @@ export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<Sug
 
 `scripts/get-gmail-refresh-token.js`처럼 의존성 없이 Node로 돈다. `.env.local`을 직접 읽어(`dotenv` 없이 줄 단위 파싱, 이미 설정된 환경변수가 우선) `SUPABASE_URL`·`SUPABASE_SERVICE_ROLE_KEY`·`OPENAI_API_KEY`를 쓴다.
 
-- 대상: `reply_content is not null and (embedding is null or embedding_model <> 'text-embedding-3-small')`. 100건씩 페이지.
-- 페이지마다 `inquiryEmbeddingText`와 같은 규칙으로 입력을 만들어 embeddings API에 **한 번에 100개** 보내고, 행마다 `embedding`·`embedding_model`을 갱신한다.
+- 대상: `reply_content is not null and (embedding is null or embedding_model <> 'text-embedding-3-small')`. 50건씩 페이지(한 요청의 토큰 합계 상한 약 30만 아래로 머물기 위해).
+- 페이지마다 `inquiryEmbeddingText`와 같은 규칙으로 입력을 만들어 embeddings API에 **한 번에 50개** 보내고, 행마다 `embedding`·`embedding_model`을 갱신한다. 페이지 전체가 실패해도 그 페이지의 id를 모두 실패로 기록하고 커서를 넘겨 계속한다.
 - 진행 로그(처리/남은 건수)와 실패한 문의 id를 stderr에 낸다. 실패해도 계속 돌고, 다시 실행하면 남은 것만 한다.
-- `lib/embeddings.ts`를 import하지 않는다(TS·경로 별칭 때문). 텍스트 규칙(제목+빈 줄+본문, 8000자)이 둘에 중복되므로 테스트에서 같은 상수를 쓰는지 확인한다.
+- `lib/embeddings.ts`를 import하지 않는다(TS·경로 별칭 때문). 텍스트 규칙(제목+빈 줄+본문, 4000자)이 둘에 중복되므로 테스트에서 같은 상수를 쓰는지 확인한다.
 
 ## Gemini 제거
 
