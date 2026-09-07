@@ -19,12 +19,12 @@ import {
   isSupportedAttachment,
 } from "@/lib/attachment-rules";
 import ProposalCard from "@/components/assistant/ProposalCard";
-import { GENERIC_ERROR, STREAM_ERROR_MESSAGES, formatFileSize, type ChatAttachment, type ChatMessage } from "@/components/assistant/messages";
+import { STREAM_ERROR_MESSAGES, formatFileSize, streamErrorMessage, type ChatAttachment, type ChatMessage } from "@/components/assistant/messages";
 
 type StreamEvent =
   | { type: "text"; text: string }
   | { type: "proposal"; messageId: string; proposal: Proposal }
-  | { type: "error"; reason: string };
+  | { type: "error"; reason: string; sourceTitle?: string };
 
 function isStreamEvent(value: unknown): value is StreamEvent {
   return typeof value === "object" && value !== null && "type" in value;
@@ -198,6 +198,7 @@ export default function ChatPane({
     ]);
 
     let failure: string | null = null;
+    let failureTitle: string | undefined;
     let text = "";
 
     try {
@@ -229,6 +230,7 @@ export default function ChatPane({
               ]);
             } else {
               failure = event.reason;
+              failureTitle = event.sourceTitle;
             }
           }
         }
@@ -240,7 +242,7 @@ export default function ChatPane({
     setSending(false);
     setStreamingId(null);
     if (failure) {
-      setError(STREAM_ERROR_MESSAGES[failure] ?? GENERIC_ERROR);
+      setError(streamErrorMessage(failure, failureTitle));
     }
     // 사이드바의 대화 제목·순서는 서버가 안다.
     router.refresh();
@@ -258,7 +260,7 @@ export default function ChatPane({
       <div className="flex-1 overflow-y-auto px-6 py-6">
         <div className="max-w-3xl mx-auto flex flex-col gap-4">
           {messages.length === 0 && (
-            <p className="text-center text-muted text-sm py-16">시트에 대해 물어보거나 수정을 요청하세요. 예: “52009 VIP 몇이야”, “52009 VIP4로 올려줘”</p>
+            <p className="text-center text-muted text-sm py-16">연결된 시트·문서에 대해 물어보거나 시트 수정을 요청하세요. 예: “52009 VIP 몇이야”, “52009 VIP4로 올려줘”</p>
           )}
           {messages.map((message) => {
             if (message.role === "user") {

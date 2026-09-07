@@ -123,13 +123,23 @@ describe("ChatPane", () => {
   });
 
   it("shows the reason when the stream ends in error", async () => {
-    vi.mocked(global.fetch).mockResolvedValue(ndjson([{ type: "error", reason: "sheet_forbidden" }]) as never);
+    vi.mocked(global.fetch).mockResolvedValue(ndjson([{ type: "error", reason: "source_forbidden", sourceTitle: "VIP 원장" }]) as never);
 
     render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
     await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "x");
     await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
 
-    await waitFor(() => expect(screen.getByText(/시트를 읽을 권한이 없습니다/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("'VIP 원장'을(를) 읽을 권한이 없습니다. 서비스 계정에 공유했는지 확인하세요.")).toBeInTheDocument());
+  });
+
+  it("shows the generic source-size reason when the stream ends in error with no source title", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(ndjson([{ type: "error", reason: "sources_too_large" }]) as never);
+
+    render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "x");
+    await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
+
+    await waitFor(() => expect(screen.getByText("연결된 자료가 너무 큽니다(합계 300,000자 초과).")).toBeInTheDocument());
   });
 
   it("renders attachment chips under stored user messages", () => {
