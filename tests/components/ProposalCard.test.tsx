@@ -14,6 +14,7 @@ const pending: ChatMessage = {
   failureReason: null,
   appliedBy: null,
   appliedAt: null,
+attachments: [],
 };
 
 describe("ProposalCard", () => {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { requireAdminSession } from "@/lib/require-admin-session";
 import { listGames } from "@/lib/categories";
-import { getConversation, insertMessage, listMessages, touchConversation, toHistory } from "@/lib/assistant-store";
+import { getConversation, insertMessage, listMessages, touchConversation, toHistory, type MessageRow } from "@/lib/assistant-store";
 import { readSpreadsheet, serializeSheets, SheetError, type Proposal } from "@/lib/sheets";
 import { buildAssistantPrompt, formatToday, streamAssistant, type AssistantErrorReason } from "@/lib/assistant";
 import {
@@ -74,15 +74,16 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({ success: false, error: "attachments_too_large" }, { status: 400 });
   }
 
-  const userMessage = await insertMessage(supabase, {
+  const inserted = await insertMessage(supabase, {
     conversationId,
     role: "user",
     content,
     ...(attachments.length > 0 ? { attachments } : {}),
   });
-  if (!userMessage) {
+  if (!inserted) {
     return NextResponse.json({ success: false, error: "save_failed" }, { status: 500 });
   }
+  const userMessage: MessageRow = inserted;
   await touchConversation(supabase, conversationId);
 
   async function* run(): AsyncGenerator<StreamEvent> {

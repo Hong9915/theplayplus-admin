@@ -29,7 +29,7 @@ describe("AssistantShell", () => {
         game={game}
         conversations={conversations}
         selectedId="c3"
-        messages={[{ id: "m1", role: "assistant", content: "c3의 답변", proposal: null, status: null, failureReason: null, appliedBy: null, appliedAt: null }]}
+        messages={[{ id: "m1", role: "assistant", content: "c3의 답변", proposal: null, status: null, failureReason: null, appliedBy: null, appliedAt: null, attachments: [] }]}
         serviceAccountEmail={null}
       />
     );

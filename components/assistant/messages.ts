@@ -1,7 +1,21 @@
 import type { MessageRow } from "@/lib/assistant-store";
 
-/** 화면이 들고 있는 메시지. 서버 행에서 대화 id·시각을 뺀 것. */
-export type ChatMessage = Pick<MessageRow, "id" | "role" | "content" | "proposal" | "status" | "failureReason" | "appliedBy" | "appliedAt">;
+/** 화면에 보이는 첨부. 뽑아낸 텍스트는 서버에만 두고 이름·크기만 내려온다. */
+export interface ChatAttachment {
+  name: string;
+  size: number;
+}
+
+/** 화면이 들고 있는 메시지. 서버 행에서 대화 id·시각·첨부 본문을 뺀 것. */
+export type ChatMessage = Pick<MessageRow, "id" | "role" | "content" | "proposal" | "status" | "failureReason" | "appliedBy" | "appliedAt"> & {
+  attachments: ChatAttachment[];
+};
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /** 스트림 error 사유 → 안내. 무엇을 고쳐야 하는지 알려줘야 한다. */
 export const STREAM_ERROR_MESSAGES: Record<string, string> = {
@@ -13,6 +27,11 @@ export const STREAM_ERROR_MESSAGES: Record<string, string> = {
   model_failed: "응답을 받지 못했습니다. 다시 시도하세요.",
   invalid_proposal: "수정 제안을 만들지 못했습니다. 탭·열 이름을 정확히 알려주고 다시 시도하세요.",
   save_failed: "메시지를 저장하지 못했습니다.",
+  unsupported_type: "지원하지 않는 형식입니다. txt, md, csv, tsv, json, xlsx만 붙일 수 있습니다.",
+  file_too_large: "파일이 너무 큽니다. 파일당 2MB까지 붙일 수 있습니다.",
+  too_many_files: "파일은 한 번에 5개까지 붙일 수 있습니다.",
+  attachments_too_large: "이 대화의 첨부 파일이 너무 많습니다. 새 대화에서 다시 올려 주세요.",
+  file_unreadable: "파일을 읽지 못했습니다. 손상되지 않았는지 확인하세요.",
 };
 
 export const APPLY_FAILURE_MESSAGES: Record<string, string> = {

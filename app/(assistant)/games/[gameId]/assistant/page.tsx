@@ -35,7 +35,18 @@ export default async function AssistantPage({
       game={{ id: game.id, name: game.name, sheetId: game.sheetId }}
       conversations={conversations}
       selectedId={selected?.id ?? null}
-      messages={messages.map(({ id, role, content, proposal, status, failureReason, appliedBy, appliedAt }) => ({ id, role, content, proposal, status, failureReason, appliedBy, appliedAt }))}
+      messages={messages.map(({ id, role, content, proposal, status, failureReason, appliedBy, appliedAt, attachments }) => ({
+        id,
+        role,
+        content,
+        proposal,
+        status,
+        failureReason,
+        appliedBy,
+        appliedAt,
+        // 첨부 텍스트는 프롬프트용이라 화면에 내리지 않는다.
+        attachments: attachments.map(({ name, size }) => ({ name, size })),
+      }))}
       serviceAccountEmail={serviceAccountEmail()}
     />
   );

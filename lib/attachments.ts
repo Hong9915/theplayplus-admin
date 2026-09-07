@@ -6,6 +6,7 @@
  */
 import ExcelJS from "exceljs";
 import { detectHeader, serializeSheets, type SheetTab } from "@/lib/sheets";
+import { MAX_ATTACHMENT_BYTES, TABLE_EXTENSIONS, extensionOf, isSupportedAttachment } from "@/lib/attachment-rules";
 
 export type AttachmentErrorReason = "unsupported_type" | "file_too_large" | "too_many_files" | "attachments_too_large" | "file_unreadable";
 
@@ -25,25 +26,13 @@ export interface Attachment {
   text: string;
 }
 
-export const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
-export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
-/** 대화 하나에 딸린 첨부 텍스트 합계. 시트(300,000자)와 함께 프롬프트에 들어간다. */
-export const MAX_ATTACHMENT_TEXT_CHARS = 200_000;
-
-const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "tsv", "json"]);
-const TABLE_EXTENSIONS = new Set(["xlsx"]);
-
-export const SUPPORTED_ATTACHMENT_ACCEPT = [...TEXT_EXTENSIONS, ...TABLE_EXTENSIONS].map((ext) => `.${ext}`).join(",");
-
-function extensionOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-}
-
-export function isSupportedAttachment(name: string): boolean {
-  const ext = extensionOf(name);
-  return TEXT_EXTENSIONS.has(ext) || TABLE_EXTENSIONS.has(ext);
-}
+export {
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_ATTACHMENT_TEXT_CHARS,
+  SUPPORTED_ATTACHMENT_ACCEPT,
+  isSupportedAttachment,
+} from "@/lib/attachment-rules";
 
 /** utf-8이 아니면 EUC-KR로 본다. 오래된 운영 원장 txt는 윈도우 기본 인코딩인 경우가 있다. */
 function decodeText(bytes: ArrayBuffer): string {

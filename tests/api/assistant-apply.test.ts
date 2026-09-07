@@ -16,7 +16,7 @@ vi.mock("@/lib/sheets", async (importOriginal) => {
 });
 
 const proposal = { kind: "update" as const, sheet: "VIP", row: 2, updates: [{ column: "VIP 단계", before: "VIP3", after: "VIP4" }] };
-const message = { id: "m1", conversationId: "c1", role: "proposal" as const, content: "", proposal, status: "pending" as const, failureReason: null, appliedBy: null, appliedAt: null, createdAt: "" };
+const message = { id: "m1", conversationId: "c1", role: "proposal" as const, content: "", proposal, status: "pending" as const, failureReason: null, appliedBy: null, appliedAt: null, attachments: [], createdAt: "" };
 const conversation = { id: "c1", gameId: "g1", title: "t", createdBy: "a@b", createdAt: "", updatedAt: "" };
 const game = { id: "g1", name: "G", status: "active", logoPath: null, ownerName: null, createdAt: "", sheetId: "sheet-1" };
 
