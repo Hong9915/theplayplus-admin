@@ -5,26 +5,9 @@
  * 없이 테스트한다. 검색 방식을 임베딩으로 바꾸게 되더라도 이 파일만 바꾼다.
  */
 import { google, type sheets_v4 } from "googleapis";
+import { googleAuth, serviceAccountEmail, SheetError, type SheetErrorReason } from "@/lib/google-auth";
 
-export type SheetErrorReason =
-  | "not_configured"
-  | "sheet_forbidden"
-  | "sheet_not_found"
-  | "sheet_too_large"
-  | "sheet_read_failed"
-  | "sheet_write_failed"
-  | "invalid_proposal"
-  | "conflict";
-
-export class SheetError extends Error {
-  constructor(
-    public readonly reason: SheetErrorReason,
-    message?: string
-  ) {
-    super(message ?? reason);
-    this.name = "SheetError";
-  }
-}
+export { SheetError, serviceAccountEmail, type SheetErrorReason };
 
 /** rows[i]는 시트의 i+1행. 헤더가 있으면 rows[0]이 헤더다. */
 export interface SheetTab {
@@ -35,9 +18,13 @@ export interface SheetTab {
 
 export type ProposalUpdate = { column: string; before: string; after: string };
 
-export type Proposal =
+/** 한 스프레드시트 안에서의 수정 내용. 어느 스프레드시트인지는 Proposal이 붙인다. */
+export type SheetProposal =
   | { kind: "update"; sheet: string; row: number; updates: ProposalUpdate[] }
   | { kind: "append"; sheet: string; values: Record<string, string> };
+
+/** 저장·적용되는 제안. sourceId는 assistant_sources.id, sourceTitle은 표시용. */
+export type Proposal = SheetProposal & { sourceId: string; sourceTitle: string };
 
 export const MAX_SHEET_CHARS = 300_000;
 
@@ -121,7 +108,7 @@ function toCellString(value: unknown): string | null {
  * 하고, update의 before는 모델이 적은 값 대신 시트의 현재 값으로 채운다(모델이
  * 잘못 옮겨 적어도 적용 시점의 충돌 검사가 의미 있게).
  */
-export function prepareProposal(tabs: SheetTab[], raw: unknown): Proposal | null {
+export function prepareProposal(tabs: SheetTab[], raw: unknown): SheetProposal | null {
   if (typeof raw !== "object" || raw === null) return null;
   const input = raw as Record<string, unknown>;
   const tab = findEditableTab(tabs, input.sheet);
@@ -159,7 +146,7 @@ export function prepareProposal(tabs: SheetTab[], raw: unknown): Proposal | null
 }
 
 /** 적용 직전 검사. 구조가 어긋나면 invalid_proposal, 셀 값이 그 사이 바뀌었으면 conflict. */
-export function validateProposal(tabs: SheetTab[], proposal: Proposal): { ok: true } | { ok: false; reason: "invalid_proposal" | "conflict" } {
+export function validateProposal(tabs: SheetTab[], proposal: SheetProposal): { ok: true } | { ok: false; reason: "invalid_proposal" | "conflict" } {
   const tab = findEditableTab(tabs, proposal.sheet);
   if (!tab) return { ok: false, reason: "invalid_proposal" };
 
@@ -185,37 +172,8 @@ export function validateProposal(tabs: SheetTab[], proposal: Proposal): { ok: tr
 
 // ---- Sheets API ----
 
-interface ServiceAccount {
-  client_email: string;
-  private_key: string;
-}
-
-function loadServiceAccount(): ServiceAccount | null {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as Partial<ServiceAccount>;
-    if (typeof parsed.client_email !== "string" || typeof parsed.private_key !== "string") return null;
-    return { client_email: parsed.client_email, private_key: parsed.private_key };
-  } catch {
-    return null;
-  }
-}
-
-/** 설정 안내용. 관리자가 이 주소에 시트를 편집자로 공유해야 한다. */
-export function serviceAccountEmail(): string | null {
-  return loadServiceAccount()?.client_email ?? null;
-}
-
 function sheetsClient(): sheets_v4.Sheets {
-  const account = loadServiceAccount();
-  if (!account) throw new SheetError("not_configured");
-  const auth = new google.auth.JWT({
-    email: account.client_email,
-    key: account.private_key,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-  });
-  return google.sheets({ version: "v4", auth });
+  return google.sheets({ version: "v4", auth: googleAuth() });
 }
 
 function quoteTab(title: string): string {
@@ -228,6 +186,27 @@ function statusOf(error: unknown): number | undefined {
   if (typeof code === "number") return code;
   if (typeof status === "number") return status;
   return undefined;
+}
+
+/** 등록 시 저장할 제목. 제목이 비어 있으면 ID를 쓴다. */
+export async function readSpreadsheetTitle(sheetId: string): Promise<string> {
+  const sheets = sheetsClient();
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: "properties.title" });
+    const title = meta.data.properties?.title?.trim();
+    return title || sheetId;
+  } catch (error) {
+    throw mapReadError(error);
+  }
+}
+
+function mapReadError(error: unknown): SheetError {
+  if (error instanceof SheetError) return error;
+  const status = statusOf(error);
+  if (status === 403) return new SheetError("source_forbidden");
+  if (status === 404) return new SheetError("source_not_found");
+  console.warn("[sheets] read failed", error);
+  return new SheetError("source_read_failed");
 }
 
 /** 모든 탭을 한 번의 batchGet으로 읽는다. 캐시 없음 — 항상 최신 시트 기준. */
@@ -255,20 +234,15 @@ export async function readSpreadsheet(sheetId: string): Promise<SheetTab[]> {
       return { title, header: detectHeader(rows[0]), rows };
     });
 
-    if (total > MAX_SHEET_CHARS) throw new SheetError("sheet_too_large");
+    if (total > MAX_SHEET_CHARS) throw new SheetError("sources_too_large");
     return tabs;
   } catch (error) {
-    if (error instanceof SheetError) throw error;
-    const status = statusOf(error);
-    if (status === 403) throw new SheetError("sheet_forbidden");
-    if (status === 404) throw new SheetError("sheet_not_found");
-    console.warn("[sheets] read failed", error);
-    throw new SheetError("sheet_read_failed");
+    throw mapReadError(error);
   }
 }
 
 /** 적용 직전에 다시 읽어 충돌을 확인한 뒤 쓴다. */
-export async function applyProposal(sheetId: string, proposal: Proposal): Promise<void> {
+export async function applyProposal(sheetId: string, proposal: SheetProposal): Promise<void> {
   const tabs = await readSpreadsheet(sheetId);
   const verdict = validateProposal(tabs, proposal);
   if (!verdict.ok) throw new SheetError(verdict.reason);

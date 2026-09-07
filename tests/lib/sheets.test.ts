@@ -7,6 +7,7 @@ import {
   prepareProposal,
   validateProposal,
   readSpreadsheet,
+  readSpreadsheetTitle,
   applyProposal,
   serviceAccountEmail,
   SheetError,
@@ -220,17 +221,49 @@ describe("readSpreadsheet", () => {
 
   it("maps 403/404 and other failures to reasons", async () => {
     getMock.mockRejectedValueOnce({ code: 403 });
-    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "sheet_forbidden" });
+    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "source_forbidden" });
     getMock.mockRejectedValueOnce({ code: 404 });
-    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "sheet_not_found" });
+    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "source_not_found" });
     getMock.mockRejectedValueOnce(new Error("boom"));
-    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "sheet_read_failed" });
+    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "source_read_failed" });
   });
 
-  it("throws sheet_too_large past the cap", async () => {
+  it("throws sources_too_large past the cap", async () => {
     getMock.mockResolvedValue({ data: { sheets: [{ properties: { title: "T" } }] } });
     batchGetMock.mockResolvedValue({ data: { valueRanges: [{ values: [["x".repeat(300_001)]] }] } });
-    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "sheet_too_large" });
+    await expect(readSpreadsheet("s1")).rejects.toMatchObject({ reason: "sources_too_large" });
+  });
+});
+
+describe("readSpreadsheetTitle", () => {
+  beforeEach(() => {
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON = CREDS;
+    getMock.mockReset();
+  });
+  afterEach(() => {
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  });
+
+  it("asks only for the title", async () => {
+    getMock.mockResolvedValue({ data: { properties: { title: "VIP 원장" } } });
+    expect(await readSpreadsheetTitle("s1")).toBe("VIP 원장");
+    expect(getMock).toHaveBeenCalledWith({ spreadsheetId: "s1", fields: "properties.title" });
+  });
+
+  it("falls back to the id when the title is empty and maps failures", async () => {
+    getMock.mockResolvedValue({ data: { properties: {} } });
+    expect(await readSpreadsheetTitle("s1")).toBe("s1");
+    getMock.mockRejectedValueOnce({ code: 403 });
+    await expect(readSpreadsheetTitle("s1")).rejects.toMatchObject({ reason: "source_forbidden" });
+  });
+});
+
+describe("SheetError", () => {
+  it("carries an optional source title", () => {
+    const error = new SheetError("source_forbidden");
+    expect(error.sourceTitle).toBeUndefined();
+    error.sourceTitle = "VIP 원장";
+    expect(error.sourceTitle).toBe("VIP 원장");
   });
 });
 
