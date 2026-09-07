@@ -6,7 +6,8 @@
  *
  * 대상은 reply_content가 있고 임베딩이 없거나 다른 모델로 만든 문의다. 100건씩
  * 읽어 embeddings API에 한 번에 보내고 행마다 저장한다. 실패한 문의는 id를 stderr에
- * 남기고 계속 진행하며, 다시 실행하면 남은 것만 처리한다.
+ * 남기고 계속 진행하며, 다시 실행하면 남은 것만 처리한다. 키셋 커서를 써 페이지를 넘기므로
+ * 실패한 행이 진행을 막지 않는다.
  *
  * lib/embeddings.ts를 import하지 않는다(TS·경로 별칭). 텍스트 규칙(제목+빈 줄+본문,
  * 8000자)은 그 파일과 같아야 하며 tests/scripts/backfill-embeddings.test.ts가 확인한다.
@@ -36,14 +37,20 @@ function loadEnvLocal() {
   }
 }
 
-async function fetchPage(supabase) {
-  const { data, error } = await supabase
+async function fetchPage(supabase, cursor) {
+  let query = supabase
     .from("inquiries")
-    .select("id, title, content")
+    .select("id, title, content, created_at")
     .not("reply_content", "is", null)
     .or(`embedding.is.null,embedding_model.neq.${EMBEDDING_MODEL}`)
     .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
     .limit(PAGE_SIZE);
+  // 키셋 커서: 마지막으로 본 (created_at, id) 뒤부터. 실패한 행이 앞을 막지 않는다.
+  if (cursor) {
+    query = query.or(`created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.gt.${cursor.id})`);
+  }
+  const { data, error } = await query;
   if (error) throw new Error(`inquiries 조회 실패: ${error.message}`);
   return data ?? [];
 }
@@ -67,21 +74,20 @@ async function main() {
 
   let done = 0;
   const failed = [];
+  let cursor = null;
 
   while (true) {
-    const rows = await fetchPage(supabase);
-    // 저장에 실패한 행은 다음 페이지에도 다시 나온다. 전부 실패면 멈춘다.
-    const pending = rows.filter((row) => !failed.includes(row.id));
-    if (pending.length === 0) break;
+    const rows = await fetchPage(supabase, cursor);
+    if (rows.length === 0) break;
 
     const response = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
-      input: pending.map((row) => embeddingText(row.title ?? "", row.content ?? "")),
+      input: rows.map((row) => embeddingText(row.title ?? "", row.content ?? "")),
       dimensions: EMBEDDING_DIMENSIONS,
     });
 
     for (const item of response.data) {
-      const row = pending[item.index];
+      const row = rows[item.index];
       const { error } = await supabase
         .from("inquiries")
         .update({ embedding: item.embedding, embedding_model: EMBEDDING_MODEL })
@@ -94,6 +100,7 @@ async function main() {
       }
     }
 
+    cursor = { createdAt: rows[rows.length - 1].created_at, id: rows[rows.length - 1].id };
     console.log(`처리 ${done}건, 실패 ${failed.length}건`);
   }
 
