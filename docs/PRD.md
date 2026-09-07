@@ -239,7 +239,7 @@
 | POST | `/api/inquiries/[id]/sync-replies` | 사용자 회신 동기화 |
 | PUT | `/api/inquiries/[id]/draft` | 답변 초안 저장 |
 | POST | `/api/inquiries/[id]/notes` | 내부 메모 추가 |
-| POST | `/api/inquiries/[id]/suggest` | AI 답변 추천 (스트리밍) |
+| POST | `/api/inquiries/[id]/suggest` | AI 답변 추천 (OpenAI 스트리밍, 유사 답변·운영 자료 근거) |
 | POST | `/api/inquiries/bulk-status` | 상태 일괄 변경 |
 | POST | `/api/assistant/conversations` | 어시스턴트 대화 생성 |
 | DELETE | `/api/assistant/conversations/[id]` | 어시스턴트 대화 삭제 |
@@ -409,6 +409,9 @@ GOOGLE_SERVICE_ACCOUNT_JSON                                  # 운영 시트 어
 - `resolveAdminAuthRedirect()` — 인증 리다이렉트 규칙
 - `parseInquiryListQuery()` / `toInquiryListSearch()` — URL 쿼리 파싱·직렬화
 - `buildSuggestPrompt()` — AI 프롬프트 조립
+- `splitSuggestion()` — 본문/근거 분리
+- `ensureInquiryEmbedding()` — 문의 임베딩 보장
+- `mergePastReplies()` — 유사/최근 답변 병합
 - `encodeRfc2822Message()` / `stripQuotedReply()` / `extractPlainText()` — 메일 조립·파싱
 - `describeEvent()` — 이력 문구 생성
 - `sanitizeSearch()` — 검색어 정제
