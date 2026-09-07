@@ -30,25 +30,25 @@
 
 문의마다 스레드를 여는 대신, 메일함 하나당 "마지막 확인 시각 이후 받은 메일"을 한 번에 가져온다.
 
-- `lib/gmail.ts`에 `listInboundSince(mailbox, since: Date): Promise<InboundEmailWithThread[]>` 추가.
-  - `users.messages.list({ q: "after:<epoch초> -from:<발신주소>", maxResults: 100 })`로 id 목록을 얻고,
-    `nextPageToken`이 있으면 이어서 받는다(상한 500건, 넘으면 다음 실행에서 이어간다).
-  - 각 id를 `users.messages.get({ format: "full" })`로 읽어 `threadId`, From, Message-ID, 본문,
-    internalDate를 뽑는다. 본문 정리는 기존 `extractPlainText` + `stripQuotedReply`를 그대로 쓴다.
-  - From이 발신 주소와 같으면(검색어를 뚫고 온 경우) 건너뛴다.
-  - 반환 타입은 기존 `InboundEmail`에 `threadId: string`을 더한 것.
+- `lib/gmail.ts`에 `openMailbox(mailbox): MailboxReader` 추가. OAuth 클라이언트를 한 번만 만든 핸들로,
+  `sender`(발신 주소)와 두 메서드를 가진다.
+  - `listInboundIdsSince(since)`: `users.messages.list({ q: "after:<epoch초> -from:<발신주소>", maxResults: 100 })`로
+    메일 id와 스레드 id만 받는다(`nextPageToken` 이어받기, 상한 500건). 본문은 읽지 않는다.
+  - `getInboundMessage(id)`: `users.messages.get({ format: "full" })`로 From, Message-ID, 본문, internalDate를 뽑는다.
+    본문 정리는 기존 `extractPlainText` + `stripQuotedReply`. From이 발신 주소면 null.
+  - 반환 타입은 기존 `InboundEmail`에 `threadId: string`을 더한 `InboundEmailWithThread`.
 - `lib/reply-sync.ts`의 `syncMailbox(supabase, mailbox, now)`:
   1. `gmail_sync_state`에서 그 메일함의 `synced_through`를 읽는다. 없으면 `now - 24시간`.
-  2. `since = synced_through - 10분` 여유를 두고 `listInboundSince`를 부른다. 겹치는 구간의
-     메일은 `gmail_message_id`로 걸러지므로 중복이 없다.
-  3. 받은 메일의 `threadId` 집합으로 `inquiries`를 `gmail_thread_id in (...)`로 한 번에 조회해
-     `threadId → inquiry` 맵을 만든다. 맵에 없는 메일(새 문의 안내, 광고 등)은 무시한다.
-  4. 각 메일을 `createInboundMessage`로 넣는다. 본문이 비면 건너뛴다(지금 버튼과 같음).
+  2. `since = synced_through - 10분` 여유를 두고 `listInboundIdsSince`를 부른다.
+  3. 받은 id의 `threadId` 집합으로 `inquiries`를 `gmail_thread_id in (...)`로 한 번에 조회해
+     `threadId → inquiry` 맵을 만든다. 맵에 없는 메일(새 문의 안내, 광고 등)은 본문을 읽지 않고 무시한다.
+     맞은 메일 중 `inquiry_messages.gmail_message_id`에 이미 있는 것도 건너뛴다(겹침 구간 처리).
+  4. 남은 메일만 `getInboundMessage`로 본문을 읽어 `createInboundMessage`로 넣는다. 본문이 비면 건너뛴다(지금 버튼과 같음).
      새로 들어간 문의는 `inquiries.unread_reply_at = 메일 sent_at`(이미 값이 있으면 더 이른 값 유지)로 갱신한다.
   5. 모두 처리하면 `synced_through = now`로 저장한다. Gmail 조회가 실패하면 저장하지 않고
      오류를 던져 다음 실행이 같은 구간을 다시 본다. 메일 한 건의 DB 저장 실패는 로그만 남기고 계속한다.
   6. 결과 `{ mailbox, fetched, matched, added }`를 돌려준다.
-- `syncAllMailboxes(supabase)`: `game`, `service` 두 메일함을 돌되 `mailboxSender()`가 같은 주소면
+- `syncAllMailboxes(supabase)`: `game`, `service` 두 메일함을 돌되 `openMailbox().sender`가 같은 주소면
   (서비스 계정 미설정으로 게임 계정 대체) 한 번만 돈다. 한 메일함 실패가 다른 메일함을 막지 않는다.
 
 ### 2. DB (마이그레이션 `0017_reply_sync.sql`)
@@ -112,7 +112,7 @@ create table if not exists gmail_sync_state (
   - 본문이 비면 건너뛴다
   - Gmail 실패 시 `synced_through`를 갱신하지 않는다
   - 게임·서비스 발신 주소가 같으면 한 번만 돈다
-- `tests/lib/gmail.test.ts`: `listInboundSince`의 검색어 조립과 페이지 이어받기(googleapis 목킹).
+- `tests/lib/gmail-list.test.ts`: `openMailbox`의 검색어 조립, 페이지 이어받기, 본문 파싱(googleapis 목킹).
 - `tests/lib/inquiry-filters.test.ts`(없으면 신설): `unread=1` 파싱과 링크 생성.
 - 컴포넌트: `InboxNav`에 "회신 도착" 보기와 건수, `InboxList`에 "회신 옴" 배지, `MarkReadOnOpen`이
   마운트 시 fetch를 부른다.

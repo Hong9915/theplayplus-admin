@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { listInboundSince, mailboxSender } = vi.hoisted(() => ({
-  listInboundSince: vi.fn(),
-  mailboxSender: vi.fn(),
+const { listInboundIdsSince, getInboundMessage, openMailbox } = vi.hoisted(() => ({
+  listInboundIdsSince: vi.fn(),
+  getInboundMessage: vi.fn(),
+  openMailbox: vi.fn(),
 }));
-vi.mock("@/lib/gmail", () => ({ listInboundSince, mailboxSender }));
+vi.mock("@/lib/gmail", () => ({ openMailbox }));
+
+/** 메일함에 있는 메일. list는 id/threadId만, get은 본문까지 준다. */
+function mailboxHas(emails: ReturnType<typeof email>[]) {
+  listInboundIdsSince.mockResolvedValue(emails.map((entry) => ({ id: entry.gmailMessageId, threadId: entry.threadId })));
+  getInboundMessage.mockImplementation(async (id: string) => emails.find((entry) => entry.gmailMessageId === id) ?? null);
+}
 
 import { syncMailbox, syncAllMailboxes } from "@/lib/reply-sync";
 
@@ -61,6 +68,12 @@ function fakeSupabase(options: FakeOptions = {}) {
       }
       if (table === "inquiry_messages") {
         return {
+          select: () => ({
+            in: async (_column: string, ids: string[]) => ({
+              data: ids.filter((id) => known.has(id)).map((id) => ({ gmail_message_id: id })),
+              error: null,
+            }),
+          }),
           insert: async (row: Record<string, unknown>) => {
             inserts.push(row);
             return { error: known.has(row.gmail_message_id as string) ? { message: "duplicate" } : null };
@@ -86,16 +99,19 @@ function email(id: string, threadId: string, body = "회신 본문", sentAt = "2
 
 beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
-  listInboundSince.mockReset();
-  mailboxSender.mockReset();
-  mailboxSender.mockImplementation((mailbox: string) =>
-    mailbox === "game" ? "help@theplayplus.com" : "info@theplayplus.com"
-  );
+  listInboundIdsSince.mockReset();
+  getInboundMessage.mockReset();
+  openMailbox.mockReset();
+  openMailbox.mockImplementation((mailbox: string) => ({
+    sender: mailbox === "game" ? "help@theplayplus.com" : "info@theplayplus.com",
+    listInboundIdsSince,
+    getInboundMessage,
+  }));
 });
 
 describe("syncMailbox", () => {
   it("stores replies whose thread belongs to an inquiry and marks it unread", async () => {
-    listInboundSince.mockResolvedValue([email("m1", "t1")]);
+    mailboxHas([email("m1", "t1")]);
     const db = fakeSupabase({
       syncedThrough: "2026-09-07T09:55:00.000Z",
       inquiries: [{ id: "inq-1", gmail_thread_id: "t1", unread_reply_at: null }],
@@ -120,37 +136,40 @@ describe("syncMailbox", () => {
   });
 
   it("looks back 10 minutes before the last synced time", async () => {
-    listInboundSince.mockResolvedValue([]);
+    mailboxHas([]);
     const db = fakeSupabase({ syncedThrough: "2026-09-07T09:55:00.000Z" });
 
     await syncMailbox(db.client, "game", { now: NOW });
 
-    expect(listInboundSince).toHaveBeenCalledWith("game", new Date("2026-09-07T09:45:00.000Z"));
+    expect(openMailbox).toHaveBeenCalledWith("game");
+    expect(listInboundIdsSince).toHaveBeenCalledWith(new Date("2026-09-07T09:45:00.000Z"));
   });
 
   it("starts 24 hours back on the first run", async () => {
-    listInboundSince.mockResolvedValue([]);
+    mailboxHas([]);
     const db = fakeSupabase({ syncedThrough: null });
 
     await syncMailbox(db.client, "service", { now: NOW });
 
-    expect(listInboundSince).toHaveBeenCalledWith("service", new Date("2026-09-06T10:00:00.000Z"));
+    expect(openMailbox).toHaveBeenCalledWith("service");
+    expect(listInboundIdsSince).toHaveBeenCalledWith(new Date("2026-09-06T10:00:00.000Z"));
   });
 
   it("ignores mail whose thread matches no inquiry", async () => {
-    listInboundSince.mockResolvedValue([email("m1", "unknown")]);
+    mailboxHas([email("m1", "unknown")]);
     const db = fakeSupabase({ syncedThrough: "2026-09-07T09:55:00.000Z", inquiries: [] });
 
     const result = await syncMailbox(db.client, "game", { now: NOW });
 
+    expect(getInboundMessage).not.toHaveBeenCalled();
     expect(db.inserts).toEqual([]);
     expect(db.updates).toEqual([]);
     expect(db.upserts).toHaveLength(1);
     expect(result).toEqual({ mailbox: "game", fetched: 1, matched: 0, added: 0 });
   });
 
-  it("does not mark unread when the message was already stored", async () => {
-    listInboundSince.mockResolvedValue([email("m1", "t1")]);
+  it("does not fetch or mark messages that are already stored", async () => {
+    mailboxHas([email("m1", "t1")]);
     const db = fakeSupabase({
       syncedThrough: "2026-09-07T09:55:00.000Z",
       inquiries: [{ id: "inq-1", gmail_thread_id: "t1", unread_reply_at: null }],
@@ -159,12 +178,14 @@ describe("syncMailbox", () => {
 
     const result = await syncMailbox(db.client, "game", { now: NOW });
 
+    expect(getInboundMessage).not.toHaveBeenCalled();
+    expect(db.inserts).toEqual([]);
     expect(db.updates).toEqual([]);
     expect(result.added).toBe(0);
   });
 
   it("skips replies with an empty body", async () => {
-    listInboundSince.mockResolvedValue([email("m1", "t1", "   ")]);
+    mailboxHas([email("m1", "t1", "   ")]);
     const db = fakeSupabase({
       syncedThrough: "2026-09-07T09:55:00.000Z",
       inquiries: [{ id: "inq-1", gmail_thread_id: "t1", unread_reply_at: null }],
@@ -177,7 +198,7 @@ describe("syncMailbox", () => {
   });
 
   it("keeps an earlier unread mark instead of overwriting it", async () => {
-    listInboundSince.mockResolvedValue([email("m1", "t1", "본문", "2026-09-07T09:50:00.000Z")]);
+    mailboxHas([email("m1", "t1", "본문", "2026-09-07T09:50:00.000Z")]);
     const db = fakeSupabase({
       syncedThrough: "2026-09-07T09:55:00.000Z",
       inquiries: [{ id: "inq-1", gmail_thread_id: "t1", unread_reply_at: "2026-09-07T09:00:00.000Z" }],
@@ -189,7 +210,7 @@ describe("syncMailbox", () => {
   });
 
   it("leaves the synced time alone when Gmail fails", async () => {
-    listInboundSince.mockRejectedValue(new Error("insufficient scope"));
+    listInboundIdsSince.mockRejectedValue(new Error("insufficient scope"));
     const db = fakeSupabase({ syncedThrough: "2026-09-07T09:55:00.000Z" });
 
     const result = await syncMailbox(db.client, "game", { now: NOW });
@@ -201,7 +222,7 @@ describe("syncMailbox", () => {
 
 describe("syncAllMailboxes", () => {
   it("syncs game and service mailboxes when they are different accounts", async () => {
-    listInboundSince.mockResolvedValue([]);
+    mailboxHas([]);
     const db = fakeSupabase({ syncedThrough: "2026-09-07T09:55:00.000Z" });
 
     const results = await syncAllMailboxes(db.client, { now: NOW });
@@ -210,18 +231,18 @@ describe("syncAllMailboxes", () => {
   });
 
   it("syncs once when the service mailbox falls back to the game account", async () => {
-    mailboxSender.mockReturnValue("help@theplayplus.com");
-    listInboundSince.mockResolvedValue([]);
+    openMailbox.mockImplementation(() => ({ sender: "help@theplayplus.com", listInboundIdsSince, getInboundMessage }));
+    mailboxHas([]);
     const db = fakeSupabase({ syncedThrough: "2026-09-07T09:55:00.000Z" });
 
     const results = await syncAllMailboxes(db.client, { now: NOW });
 
     expect(results.map((result) => result.mailbox)).toEqual(["game"]);
-    expect(listInboundSince).toHaveBeenCalledTimes(1);
+    expect(listInboundIdsSince).toHaveBeenCalledTimes(1);
   });
 
   it("still syncs the service mailbox when the game mailbox fails", async () => {
-    listInboundSince.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce([]);
+    listInboundIdsSince.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce([]);
     const db = fakeSupabase({ syncedThrough: "2026-09-07T09:55:00.000Z" });
 
     const results = await syncAllMailboxes(db.client, { now: NOW });

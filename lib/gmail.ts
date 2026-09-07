@@ -366,42 +366,61 @@ function parseInboundMessage(message: gmail_v1.Schema$Message, senderAddress: st
   };
 }
 
-/** 한 번의 동기화에서 읽는 메일 상한. 넘치면 다음 실행이 이어서 본다. */
+/** 한 번의 동기화에서 훑는 메일 상한. 넘치면 다음 실행이 이어서 본다. */
 const LIST_INBOUND_LIMIT = 500;
 const LIST_PAGE_SIZE = 100;
 
+export interface InboundMessageRef {
+  id: string;
+  threadId: string;
+}
+
 /**
- * 메일함에서 `since` 이후 받은 메일을 전부 가져온다. 문의마다 스레드를 여는 대신
- * 계정당 한 번에 훑기 위한 것으로, 회신 자동 동기화가 쓴다. Gmail 검색의
- * after:는 초 단위 epoch만 받는다. gmail.readonly 스코프가 필요하다.
+ * 메일함 하나를 읽는 핸들. 회신 자동 동기화가 쓴다. OAuth 클라이언트를 한 번만
+ * 만들어 메시지마다 토큰을 새로 받지 않는다. gmail.readonly 스코프가 필요하다.
  */
-export async function listInboundSince(mailbox: Mailbox, since: Date): Promise<InboundEmailWithThread[]> {
+export interface MailboxReader {
+  /** 이 메일함의 발신 주소. 서비스 계정이 게임 계정으로 대체되면 같은 값이 나온다. */
+  sender: string;
+  /**
+   * `since` 이후 받은 메일의 id와 스레드 id만 가져온다. 본문은 안 읽으므로
+   * 호출부가 스레드로 문의를 먼저 맞춰 보고 필요한 것만 getInboundMessage로 연다.
+   * Gmail 검색의 after:는 초 단위 epoch만 받는다.
+   */
+  listInboundIdsSince(since: Date): Promise<InboundMessageRef[]>;
+  /** 메일 하나를 본문까지 읽는다. 우리 발신 주소에서 나간 메일이면 null. */
+  getInboundMessage(id: string): Promise<InboundEmailWithThread | null>;
+}
+
+export function openMailbox(mailbox: Mailbox): MailboxReader {
   const { gmail, sender } = getGmailClient(mailbox);
   const senderAddress = sender.trim().toLowerCase();
-  const q = `after:${Math.floor(since.getTime() / 1000)} -from:${senderAddress}`;
 
-  const ids: string[] = [];
-  let pageToken: string | undefined;
-  do {
-    const response = await gmail.users.messages.list({
-      userId: "me",
-      q,
-      maxResults: LIST_PAGE_SIZE,
-      ...(pageToken ? { pageToken } : {}),
-    });
-    for (const entry of response.data.messages ?? []) {
-      if (entry.id) ids.push(entry.id);
-    }
-    pageToken = response.data.nextPageToken ?? undefined;
-  } while (pageToken && ids.length < LIST_INBOUND_LIMIT);
-
-  const inbound: InboundEmailWithThread[] = [];
-  for (const id of ids) {
-    const response = await gmail.users.messages.get({ userId: "me", id, format: "full" });
-    const parsed = parseInboundMessage(response.data, senderAddress);
-    if (parsed && response.data.threadId) {
-      inbound.push({ ...parsed, threadId: response.data.threadId });
-    }
-  }
-  return inbound;
+  return {
+    sender,
+    async listInboundIdsSince(since) {
+      const q = `after:${Math.floor(since.getTime() / 1000)} -from:${senderAddress}`;
+      const refs: InboundMessageRef[] = [];
+      let pageToken: string | undefined;
+      do {
+        const response = await gmail.users.messages.list({
+          userId: "me",
+          q,
+          maxResults: LIST_PAGE_SIZE,
+          ...(pageToken ? { pageToken } : {}),
+        });
+        for (const entry of response.data.messages ?? []) {
+          if (entry.id && entry.threadId) refs.push({ id: entry.id, threadId: entry.threadId });
+        }
+        pageToken = response.data.nextPageToken ?? undefined;
+      } while (pageToken && refs.length < LIST_INBOUND_LIMIT);
+      return refs;
+    },
+    async getInboundMessage(id) {
+      const response = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+      const parsed = parseInboundMessage(response.data, senderAddress);
+      if (!parsed || !response.data.threadId) return null;
+      return { ...parsed, threadId: response.data.threadId };
+    },
+  };
 }

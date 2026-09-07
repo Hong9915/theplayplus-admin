@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { listInboundSince, mailboxSender, type InboundEmailWithThread, type Mailbox } from "@/lib/gmail";
+import { openMailbox, type InboundMessageRef, type Mailbox, type MailboxReader } from "@/lib/gmail";
 import { createInboundMessage } from "@/lib/messages";
 
 /**
  * 사용자 회신 자동 동기화. pg_cron이 5분마다 /api/replies/sync를 부르면
- * 발신 메일함마다 "마지막 확인 이후 받은 메일"을 한 번에 가져와 스레드 id로
- * 문의에 맞추고 inquiry_messages에 inbound로 넣는다(마이그레이션 0017).
+ * 발신 메일함마다 "마지막 확인 이후 받은 메일"의 id·스레드 id를 한 번에 가져와
+ * 스레드 id로 문의에 맞추고, 맞은 메일만 본문을 읽어 inquiry_messages에
+ * inbound로 넣는다(마이그레이션 0017). info@처럼 무관한 메일이 많은 계정에서도
+ * 본문 조회는 문의 회신 수만큼만 일어난다.
  *
  * 마지막 확인 시각은 gmail_sync_state에 메일함별로 저장한다. 조회는 그보다
  * 10분 앞에서 시작해 경계에 걸친 메일을 놓치지 않는데, 겹치는 구간의 메일은
@@ -70,6 +72,16 @@ async function mapThreadsToInquiries(
   return map;
 }
 
+/** 이미 저장된 메일은 본문을 다시 읽지 않는다. 10분 겹침 구간이 매번 걸린다. */
+async function listKnownMessageIds(supabase: SupabaseClient, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const { data, error } = await supabase.from("inquiry_messages").select("gmail_message_id").in("gmail_message_id", ids);
+  if (error) {
+    throw new Error(`Failed to list known messages: ${error.message}`);
+  }
+  return new Set(((data ?? []) as Array<{ gmail_message_id: string }>).map((row) => row.gmail_message_id));
+}
+
 /** 이미 더 이른 읽지 않은 회신이 있으면 그대로 둔다. 배지는 가장 오래된 회신 기준. */
 function earlierUnread(current: string | null, candidate: string): string | null {
   if (current && new Date(current).getTime() <= new Date(candidate).getTime()) return null;
@@ -87,23 +99,37 @@ export async function syncMailbox(
     ? new Date(syncedThrough.getTime() - LOOKBACK_MS)
     : new Date(now.getTime() - FIRST_RUN_LOOKBACK_MS);
 
-  let inbound: InboundEmailWithThread[];
+  let reader: MailboxReader;
+  let refs: InboundMessageRef[];
   try {
-    inbound = await listInboundSince(mailbox, since);
+    reader = openMailbox(mailbox);
+    refs = await reader.listInboundIdsSince(since);
   } catch (error) {
     console.warn(`[reply-sync] ${mailbox} 메일함 조회 실패`, error);
     return { mailbox, fetched: 0, matched: 0, added: 0, error: "fetch_failed" };
   }
 
-  const threadIds = Array.from(new Set(inbound.map((email) => email.threadId)));
+  const threadIds = Array.from(new Set(refs.map((ref) => ref.threadId)));
   const inquiriesByThread = await mapThreadsToInquiries(supabase, threadIds);
+  const matchedRefs = refs.filter((ref) => inquiriesByThread.has(ref.threadId));
+  const known = await listKnownMessageIds(
+    supabase,
+    matchedRefs.map((ref) => ref.id)
+  );
 
-  let matched = 0;
   let added = 0;
-  for (const email of inbound) {
-    const inquiry = inquiriesByThread.get(email.threadId);
-    if (!inquiry) continue;
-    matched += 1;
+  for (const ref of matchedRefs) {
+    if (known.has(ref.id)) continue;
+    const inquiry = inquiriesByThread.get(ref.threadId)!;
+
+    let email;
+    try {
+      email = await reader.getInboundMessage(ref.id);
+    } catch (error) {
+      console.warn("[reply-sync] 메일 조회 실패", ref.id, error);
+      continue;
+    }
+    if (!email) continue;
     // 첨부만 있거나 인용문뿐이면 보여줄 게 없다. 버튼 동기화와 같은 기준.
     if (!email.body.trim()) continue;
 
@@ -138,7 +164,7 @@ export async function syncMailbox(
     console.warn(`[reply-sync] ${mailbox} 동기화 시각 저장 실패`, stateError);
   }
 
-  return { mailbox, fetched: inbound.length, matched, added };
+  return { mailbox, fetched: refs.length, matched: matchedRefs.length, added };
 }
 
 /**
@@ -150,10 +176,19 @@ export async function syncAllMailboxes(supabase: SupabaseClient, options: SyncOp
   const seen = new Set<string>();
   const results: MailboxSyncResult[] = [];
   for (const mailbox of mailboxes) {
-    const sender = mailboxSender(mailbox).trim().toLowerCase();
-    if (seen.has(sender)) continue;
-    seen.add(sender);
+    const sender = mailboxSenderAddress(mailbox);
+    if (sender && seen.has(sender)) continue;
+    if (sender) seen.add(sender);
     results.push(await syncMailbox(supabase, mailbox, options));
   }
   return results;
+}
+
+/** 자격 증명이 없어 열지 못하면 null. syncMailbox가 같은 오류를 fetch_failed로 보고한다. */
+function mailboxSenderAddress(mailbox: Mailbox): string | null {
+  try {
+    return openMailbox(mailbox).sender.trim().toLowerCase();
+  } catch {
+    return null;
+  }
 }
