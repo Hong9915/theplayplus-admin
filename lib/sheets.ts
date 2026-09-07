@@ -28,17 +28,6 @@ export type Proposal = SheetProposal & { sourceId: string; sourceTitle: string }
 
 export const MAX_SHEET_CHARS = 300_000;
 
-const SHEET_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
-
-/** 전체 URL이든 ID만이든 스프레드시트 ID를 돌려준다. 못 찾으면 null. */
-export function parseSheetUrl(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-  const match = trimmed.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
-  if (match) return match[1];
-  return SHEET_ID_PATTERN.test(trimmed) ? trimmed : null;
-}
-
 /** 첫 행의 모든 칸이 비어 있지 않고 서로 다르면 열 이름으로 본다. */
 export function detectHeader(firstRow: string[] | undefined): string[] | null {
   if (!firstRow || firstRow.length === 0) return null;

@@ -6,7 +6,17 @@ import * as sourcesModule from "@/lib/assistant-sources";
 import * as sheetsModule from "@/lib/sheets";
 import * as docsModule from "@/lib/docs";
 
-vi.mock("@/lib/supabase", () => ({ getSupabaseServerClient: vi.fn(() => ({ from: vi.fn() })) }));
+const gamesSingleMock = vi.fn();
+vi.mock("@/lib/supabase", () => ({
+  getSupabaseServerClient: vi.fn(() => ({
+    from: vi.fn((table: string) => {
+      if (table === "games") {
+        return { select: () => ({ eq: () => ({ maybeSingle: gamesSingleMock }) }) };
+      }
+      return {};
+    }),
+  })),
+}));
 vi.mock("@/lib/require-admin-session", () => ({ requireAdminSession: vi.fn(), getAdminSession: vi.fn() }));
 vi.mock("@/lib/assistant-sources", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/assistant-sources")>();
@@ -30,6 +40,16 @@ describe("POST /api/games/[gameId]/sources", () => {
     vi.mocked(sourcesModule.insertSource).mockReset().mockResolvedValue(saved);
     vi.mocked(sheetsModule.readSpreadsheetTitle).mockReset().mockResolvedValue("VIP 원장");
     vi.mocked(docsModule.readDocument).mockReset().mockResolvedValue({ title: "운영 가이드", text: "" });
+    gamesSingleMock.mockReset().mockResolvedValue({ data: { id: "g1" }, error: null });
+  });
+
+  it("returns 404 for an unknown game without reading the title or saving", async () => {
+    gamesSingleMock.mockResolvedValue({ data: null, error: null });
+    const response = await POST(post({ url: "https://docs.google.com/spreadsheets/d/1AbC/edit" }), { params: { gameId: "g1" } });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ success: false, error: "not_found" });
+    expect(sheetsModule.readSpreadsheetTitle).not.toHaveBeenCalled();
+    expect(sourcesModule.insertSource).not.toHaveBeenCalled();
   });
 
   it("returns 401 without a session", async () => {

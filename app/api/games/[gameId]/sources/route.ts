@@ -26,6 +26,12 @@ export async function POST(request: Request, { params }: { params: { gameId: str
     return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
   }
 
+  const supabase = getSupabaseServerClient();
+  const { data: game } = await supabase.from("games").select("id").eq("id", params.gameId).maybeSingle();
+  if (!game) {
+    return NextResponse.json({ success: false, error: "not_found" }, { status: 404 });
+  }
+
   let title: string;
   try {
     title = target.kind === "sheet" ? await readSpreadsheetTitle(target.externalId) : (await readDocument(target.externalId)).title;
@@ -34,7 +40,7 @@ export async function POST(request: Request, { params }: { params: { gameId: str
     return NextResponse.json({ success: false, error: reason });
   }
 
-  const source = await insertSource(getSupabaseServerClient(), { gameId: params.gameId, kind: target.kind, externalId: target.externalId, title });
+  const source = await insertSource(supabase, { gameId: params.gameId, kind: target.kind, externalId: target.externalId, title });
   if (source === "duplicate") {
     return NextResponse.json({ success: false, error: "duplicate" }, { status: 409 });
   }

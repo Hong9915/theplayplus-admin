@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  parseSheetUrl,
   detectHeader,
   serializeSheets,
   columnToA1,
@@ -48,20 +47,6 @@ const notes: SheetTab = {
   header: null,
   rows: [["코드 목록"], [], ["m6fu5sj", "사용"]],
 };
-
-describe("parseSheetUrl", () => {
-  it("extracts the id from a full url", () => {
-    expect(parseSheetUrl("https://docs.google.com/spreadsheets/d/1AbC-_9/edit#gid=0")).toBe("1AbC-_9");
-  });
-  it("accepts a bare id", () => {
-    expect(parseSheetUrl("  1AbC-_9 ")).toBe("1AbC-_9");
-  });
-  it("rejects other urls and empty input", () => {
-    expect(parseSheetUrl("https://example.com/x")).toBeNull();
-    expect(parseSheetUrl("")).toBeNull();
-    expect(parseSheetUrl("a b")).toBeNull();
-  });
-});
 
 describe("detectHeader", () => {
   it("uses the first row when every cell is non-empty and unique", () => {
