@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { readNdjson } from "@/lib/ndjson";
 import type { Proposal } from "@/lib/sheets";
@@ -64,6 +71,7 @@ export default function ChatPane({
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamingId, setStreamingId] = useState<string | null>(null);
@@ -94,10 +102,9 @@ export default function ChatPane({
     return json.conversationId;
   }
 
-  function pickFiles(event: ChangeEvent<HTMLInputElement>) {
-    const picked = Array.from(event.target.files ?? []);
-    event.target.value = "";
+  function addFiles(picked: File[]) {
     setError(null);
+
     for (const file of picked) {
       if (!isSupportedAttachment(file.name)) {
         setError(STREAM_ERROR_MESSAGES.unsupported_type);
@@ -108,18 +115,58 @@ export default function ChatPane({
         return;
       }
     }
+
     setFiles((current) => {
       const next = [...current, ...picked];
+
       if (next.length > MAX_ATTACHMENTS_PER_MESSAGE) {
         setError(STREAM_ERROR_MESSAGES.too_many_files);
         return current;
       }
+
       if (next.reduce((sum, file) => sum + file.size, 0) > MAX_MESSAGE_ATTACHMENT_BYTES) {
         setError(STREAM_ERROR_MESSAGES.message_too_large);
         return current;
       }
       return next;
     });
+  }
+
+  function pickFiles(event: ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    addFiles(picked);
+  }
+
+  function onDragEnter(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!sending) setIsDragging(true);
+  }
+
+  function onDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function onDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsDragging(false);
+  }
+
+  function onDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+
+    if (sending) return;
+
+    const dropped = Array.from(event.dataTransfer.files);
+    if (dropped.length > 0) addFiles(dropped);
   }
 
   /** 파일이 있으면 multipart, 없으면 JSON. 서버는 둘 다 받는다. */
@@ -245,33 +292,72 @@ export default function ChatPane({
 
       <div className="border-t border-line bg-panel px-6 py-4">
         <div className="max-w-3xl mx-auto flex flex-col gap-2">
-          <AttachmentChips attachments={files.map((file) => ({ name: file.name, size: file.size }))} onRemove={(index) => setFiles((current) => current.filter((_, i) => i !== index))} />
-          <div className="flex items-end gap-2">
-          <label
-            className={`shrink-0 cursor-pointer rounded-xl border border-line px-3 py-3 text-sm text-muted hover:text-ink hover:bg-ground ${sending ? "pointer-events-none opacity-50" : ""}`}
-            title="파일 첨부 (txt, md, csv, tsv, json, xlsx · 파일당 4MB · 합계 4MB · 5개까지)"
+          <div
+            onDragEnter={onDragEnter}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            className={`relative rounded-2xl border bg-panel transition-colors ${
+              isDragging
+                ? "border-accent bg-accent/5 ring-2 ring-accent/20"
+                : "border-line"
+            } ${sending ? "opacity-60" : ""}`}
           >
-            <span aria-hidden="true">📎</span>
-            <input type="file" aria-label="파일 첨부" multiple accept={SUPPORTED_ATTACHMENT_ACCEPT} onChange={pickFiles} disabled={sending} className="sr-only" />
-          </label>
-          <textarea
-            aria-label="메시지"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={onKeyDown}
-            disabled={sending}
-            rows={2}
-            placeholder={files.length > 0 ? "파일에 대해 물어보세요 (비워도 보낼 수 있음)" : "메시지를 입력하세요 (Cmd/Ctrl+Enter 전송)"}
-            className="flex-1 resize-none rounded-xl border border-line bg-panel px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:opacity-60"
-          />
-          <button
-            type="button"
-            onClick={() => void send()}
-            disabled={sending || (!draft.trim() && files.length === 0)}
-            className="rounded-xl bg-accent text-white px-4 py-3 text-sm font-medium hover:opacity-90 disabled:opacity-50"
-          >
-            {sending ? "전송 중…" : "보내기"}
-          </button>
+            {isDragging && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-panel/90">
+                <p className="text-sm font-medium text-accent">여기에 파일을 놓아 첨부하세요</p>
+              </div>
+            )}
+
+            <div className="px-3 pt-3">
+              <AttachmentChips
+                attachments={files.map((file) => ({ name: file.name, size: file.size }))}
+                onRemove={(index) =>
+                  setFiles((current) => current.filter((_, i) => i !== index))
+                }
+              />
+            </div>
+
+            <textarea
+              aria-label="메시지"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={onKeyDown}
+              disabled={sending}
+              rows={2}
+              placeholder={files.length > 0 ? "파일에 대해 물어보세요" : "메시지를 입력하세요"}
+              className="min-h-[76px] w-full resize-none bg-transparent px-4 pb-12 pt-3 text-sm outline-none disabled:opacity-60"
+            />
+
+            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+              <label
+                className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-line bg-panel text-xl text-ink transition-colors hover:bg-ground ${
+                  sending ? "pointer-events-none opacity-50" : ""
+                }`}
+                title="파일 첨부 (txt, md, csv, tsv, json, xlsx · 파일당 4MB · 합계 4MB · 5개까지)"
+              >
+                <span aria-hidden="true">+</span>
+                <input
+                  type="file"
+                  aria-label="파일 첨부"
+                  multiple
+                  accept={SUPPORTED_ATTACHMENT_ACCEPT}
+                  onChange={pickFiles}
+                  disabled={sending}
+                  className="sr-only"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => void send()}
+                disabled={sending || (!draft.trim() && files.length === 0)}
+                aria-label={sending ? "전송 중" : "메시지 보내기"}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                {sending ? <span className="text-xs">•••</span> : <span aria-hidden="true">↑</span>}
+              </button>
+            </div>
           </div>
           <p className="text-xs text-muted">첨부 파일은 txt · md · csv · tsv · json · xlsx, 파일당 4MB 이하 · 한 번에 5개(합계 4MB)까지</p>
         </div>

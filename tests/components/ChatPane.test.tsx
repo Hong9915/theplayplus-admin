@@ -46,7 +46,7 @@ describe("ChatPane", () => {
 
     render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
     await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "52009 VIP?");
-    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
 
     expect(global.fetch).toHaveBeenCalledWith("/api/assistant/conversations/c1/messages", {
       method: "POST",
@@ -80,12 +80,12 @@ describe("ChatPane", () => {
     render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
 
     await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "1");
-    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
     await waitFor(() => expect(screen.getByText("첫 번째")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole("textbox", { name: "메시지" })).not.toBeDisabled());
 
     await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "2");
-    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
     await waitFor(() => expect(screen.getByText("두 번째")).toBeInTheDocument());
 
     expect(document.querySelectorAll(".animate-pulse")).toHaveLength(1);
@@ -116,7 +116,7 @@ describe("ChatPane", () => {
 
     render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
     await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "올려줘");
-    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
 
     await waitFor(() => expect(screen.getByText("시트 수정 제안")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "적용" })).toBeInTheDocument();
@@ -127,7 +127,7 @@ describe("ChatPane", () => {
 
     render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
     await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "x");
-    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
 
     await waitFor(() => expect(screen.getByText(/시트를 읽을 권한이 없습니다/)).toBeInTheDocument());
   });
@@ -200,7 +200,7 @@ describe("ChatPane", () => {
     render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
     await userEvent.upload(screen.getByLabelText("파일 첨부"), new File(["52009 VIP3"], "보상.txt", { type: "text/plain" }));
     await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "이 파일 봐줘");
-    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
 
     const [url, init] = vi.mocked(global.fetch).mock.calls[0];
     expect(url).toBe("/api/assistant/conversations/c1/messages");
@@ -221,10 +221,10 @@ describe("ChatPane", () => {
       .mockResolvedValueOnce(ndjson([{ type: "text", text: "네" }]) as never);
 
     render(<ChatPane gameId="g1" conversationId={null} initialMessages={[]} />);
-    expect(screen.getByRole("button", { name: "보내기" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "메시지 보내기" })).toBeDisabled();
     await userEvent.upload(screen.getByLabelText("파일 첨부"), new File(["x"], "vip.xlsx"));
-    expect(screen.getByRole("button", { name: "보내기" })).toBeEnabled();
-    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    expect(screen.getByRole("button", { name: "메시지 보내기" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
 
     await waitFor(() => expect(vi.mocked(global.fetch).mock.calls).toHaveLength(2));
     expect(JSON.parse(vi.mocked(global.fetch).mock.calls[0][1]!.body as string)).toEqual({ gameId: "g1", firstMessage: "vip.xlsx" });
@@ -235,7 +235,7 @@ describe("ChatPane", () => {
 
     render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
     await userEvent.upload(screen.getByLabelText("파일 첨부"), new File(["x"], "a.txt"));
-    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
 
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/첨부 파일이 너무 많습니다/));
   });
@@ -245,7 +245,7 @@ describe("ChatPane", () => {
 
     render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
     await userEvent.type(screen.getByRole("textbox", { name: "메시지" }), "x");
-    await userEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await userEvent.click(screen.getByRole("button", { name: "메시지 보내기" }));
 
     await waitFor(() => expect(screen.getByText(/설정되지 않았습니다/)).toBeInTheDocument());
   });
