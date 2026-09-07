@@ -40,6 +40,11 @@ export interface InboundEmail {
   sentAt: string;
 }
 
+/** 메일함 전체에서 찾은 회신. 어느 문의인지 스레드 id로 맞춘다. */
+export interface InboundEmailWithThread extends InboundEmail {
+  threadId: string;
+}
+
 /**
  * 답변이 나가는 메일함. 게임 문의는 help@, 서비스 문의는 info@처럼 계정이
  * 다르므로 스코프 종류(InboxScope.kind)와 같은 값으로 고른다.
@@ -332,22 +337,71 @@ export async function fetchInboundReplies(threadId: string, mailbox: Mailbox): P
 
   const inbound: InboundEmail[] = [];
   for (const message of messages) {
-    const headers = message.payload?.headers;
-    const fromEmail = extractAddress(header(headers, "From"));
-    if (fromEmail === senderAddress) continue;
-    if (!message.id) continue;
+    const parsed = parseInboundMessage(message, senderAddress);
+    if (parsed) inbound.push(parsed);
+  }
+  return inbound;
+}
 
-    const body = stripQuotedReply(extractPlainText(message.payload));
-    const internalDate = message.internalDate ? Number(message.internalDate) : NaN;
-    const sentAt = Number.isFinite(internalDate) ? new Date(internalDate).toISOString() : new Date().toISOString();
+/**
+ * Gmail 메시지 하나를 InboundEmail로 바꾼다. 우리 발신 주소에서 나간 메일이거나
+ * id가 없으면 null.
+ */
+function parseInboundMessage(message: gmail_v1.Schema$Message, senderAddress: string): InboundEmail | null {
+  const headers = message.payload?.headers;
+  const fromEmail = extractAddress(header(headers, "From"));
+  if (fromEmail === senderAddress) return null;
+  if (!message.id) return null;
 
-    inbound.push({
-      gmailMessageId: message.id,
-      rfcMessageId: header(headers, "Message-ID"),
-      fromEmail,
-      body,
-      sentAt,
+  const body = stripQuotedReply(extractPlainText(message.payload));
+  const internalDate = message.internalDate ? Number(message.internalDate) : NaN;
+  const sentAt = Number.isFinite(internalDate) ? new Date(internalDate).toISOString() : new Date().toISOString();
+
+  return {
+    gmailMessageId: message.id,
+    rfcMessageId: header(headers, "Message-ID"),
+    fromEmail,
+    body,
+    sentAt,
+  };
+}
+
+/** 한 번의 동기화에서 읽는 메일 상한. 넘치면 다음 실행이 이어서 본다. */
+const LIST_INBOUND_LIMIT = 500;
+const LIST_PAGE_SIZE = 100;
+
+/**
+ * 메일함에서 `since` 이후 받은 메일을 전부 가져온다. 문의마다 스레드를 여는 대신
+ * 계정당 한 번에 훑기 위한 것으로, 회신 자동 동기화가 쓴다. Gmail 검색의
+ * after:는 초 단위 epoch만 받는다. gmail.readonly 스코프가 필요하다.
+ */
+export async function listInboundSince(mailbox: Mailbox, since: Date): Promise<InboundEmailWithThread[]> {
+  const { gmail, sender } = getGmailClient(mailbox);
+  const senderAddress = sender.trim().toLowerCase();
+  const q = `after:${Math.floor(since.getTime() / 1000)} -from:${senderAddress}`;
+
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const response = await gmail.users.messages.list({
+      userId: "me",
+      q,
+      maxResults: LIST_PAGE_SIZE,
+      ...(pageToken ? { pageToken } : {}),
     });
+    for (const entry of response.data.messages ?? []) {
+      if (entry.id) ids.push(entry.id);
+    }
+    pageToken = response.data.nextPageToken ?? undefined;
+  } while (pageToken && ids.length < LIST_INBOUND_LIMIT);
+
+  const inbound: InboundEmailWithThread[] = [];
+  for (const id of ids) {
+    const response = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+    const parsed = parseInboundMessage(response.data, senderAddress);
+    if (parsed && response.data.threadId) {
+      inbound.push({ ...parsed, threadId: response.data.threadId });
+    }
   }
   return inbound;
 }
