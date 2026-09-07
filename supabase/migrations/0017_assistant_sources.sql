@@ -15,8 +15,13 @@ create index if not exists assistant_sources_game_idx on assistant_sources (game
 alter table assistant_sources enable row level security;
 
 -- 기존 시트 연결을 옮긴다. 실제 제목은 모르므로 '운영 시트'로 두고, 화면에서 해제 후 다시 등록하면 실제 제목이 들어간다.
-insert into assistant_sources (game_id, kind, external_id, title)
-select id, 'sheet', sheet_id, '운영 시트' from games where sheet_id is not null
-on conflict do nothing;
-
-alter table games drop column if exists sheet_id;
+-- 컬럼 존재 여부로 감싸 재실행해도 42703(컬럼 없음) 없이 그냥 넘어가게 한다.
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_name = 'games' and column_name = 'sheet_id') then
+    insert into assistant_sources (game_id, kind, external_id, title)
+    select id, 'sheet', sheet_id, '운영 시트' from games where sheet_id is not null
+    on conflict do nothing;
+    alter table games drop column sheet_id;
+  end if;
+end $$;

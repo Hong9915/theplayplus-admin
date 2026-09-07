@@ -45,6 +45,14 @@ describe("ConversationSidebar conversations", () => {
     expect(global.fetch).toHaveBeenCalledWith("/api/assistant/conversations/c1", { method: "DELETE" });
     expect(push).toHaveBeenCalledWith("/games/g1/assistant");
   });
+
+  it("deletes a non-selected conversation and refreshes instead of navigating away", async () => {
+    renderSidebar({ conversations, selectedId: "c2" });
+    await userEvent.click(screen.getByRole("button", { name: "VIP 확인 삭제" }));
+    expect(global.fetch).toHaveBeenCalledWith("/api/assistant/conversations/c1", { method: "DELETE" });
+    expect(refresh).toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+  });
 });
 
 describe("ConversationSidebar sources", () => {
