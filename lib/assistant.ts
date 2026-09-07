@@ -21,6 +21,8 @@ export interface HistoryMessage {
   content: string;
   proposal: Proposal | null;
   status: ProposalStatus | null;
+  /** 사용자 메시지에 딸린 파일 이름. 어느 메시지가 어떤 파일을 가져왔는지 모델에 알린다. */
+  attachmentNames?: string[];
 }
 
 /** 모델에 넘기는 이력 길이. 시트가 프롬프트 대부분을 차지하므로 이력은 짧게. */
@@ -36,7 +38,8 @@ export function formatToday(date: Date = new Date()): string {
   return `${mm}.${dd}`;
 }
 
-export function buildAssistantPrompt(input: { gameName: string; today: string; sheetText: string }): string {
+export function buildAssistantPrompt(input: { gameName: string; today: string; sheetText: string; attachmentsText?: string }): string {
+  const attachmentsText = input.attachmentsText?.trim() ?? "";
   return [
     `당신은 게임 "${input.gameName}"의 운영 담당자를 돕는 어시스턴트입니다.`,
     "아래 시트 내용만 근거로 한국어로 답하세요.",
@@ -49,12 +52,18 @@ export function buildAssistantPrompt(input: { gameName: string; today: string; s
     `- 갱신일·날짜 같은 열이 있으면 오늘 날짜(${input.today})도 함께 넣으세요.`,
     "- 대상 행이 여럿이거나 특정할 수 없으면 도구를 부르지 말고 어느 것인지 되묻으세요.",
     "- 표의 행 번호는 시트의 실제 행 번호입니다(1행이 열 이름).",
+    ...(attachmentsText
+      ? [
+          "- 사용자가 대화에 올린 첨부 파일도 근거로 쓰세요. 파일 이름을 밝히되, 파일은 수정할 수 없으니 파일 내용을 바꾸자는 요청에는 도구를 부르지 마세요.",
+        ]
+      : []),
     "",
     `오늘 날짜: ${input.today}`,
     "",
     "# 시트 내용",
     "",
     input.sheetText,
+    ...(attachmentsText ? ["", "# 첨부 파일", "", attachmentsText] : []),
   ].join("\n");
 }
 
@@ -82,6 +91,10 @@ export function historyToMessages(history: HistoryMessage[]): Array<{ role: "use
   return history.map((message) => {
     if (message.role === "proposal" && message.proposal) {
       return { role: "assistant" as const, content: describeProposal(message.proposal, message.status) };
+    }
+    if (message.role === "user" && message.attachmentNames?.length) {
+      const tag = `[첨부: ${message.attachmentNames.join(", ")}]`;
+      return { role: "user" as const, content: message.content ? `${message.content}\n${tag}` : tag };
     }
     return { role: message.role === "user" ? ("user" as const) : ("assistant" as const), content: message.content };
   });

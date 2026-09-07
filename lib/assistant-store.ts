@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Proposal } from "@/lib/sheets";
+import type { Attachment } from "@/lib/attachments";
 import { HISTORY_LIMIT, type HistoryMessage, type ProposalStatus } from "@/lib/assistant";
 
 export interface ConversationRow {
@@ -23,6 +24,8 @@ export interface MessageRow {
   failureReason: string | null;
   appliedBy: string | null;
   appliedAt: string | null;
+  /** 사용자 메시지에 딸린 파일. 원본은 없고 뽑아낸 텍스트만 있다. */
+  attachments: Attachment[];
   createdAt: string;
 }
 
@@ -55,6 +58,7 @@ function mapMessage(row: {
   failure_reason: string | null;
   applied_by: string | null;
   applied_at: string | null;
+  attachments?: Attachment[] | null;
   created_at: string;
 }): MessageRow {
   return {
@@ -67,6 +71,7 @@ function mapMessage(row: {
     failureReason: row.failure_reason,
     appliedBy: row.applied_by,
     appliedAt: row.applied_at,
+    attachments: row.attachments ?? [],
     createdAt: row.created_at,
   };
 }
@@ -128,7 +133,7 @@ export async function getMessage(supabase: SupabaseClient, id: string): Promise<
 
 export async function insertMessage(
   supabase: SupabaseClient,
-  input: { conversationId: string; role: MessageRole; content?: string; proposal?: Proposal; status?: ProposalStatus }
+  input: { conversationId: string; role: MessageRole; content?: string; proposal?: Proposal; status?: ProposalStatus; attachments?: Attachment[] }
 ): Promise<MessageRow | null> {
   const { data, error } = await supabase
     .from("assistant_messages")
@@ -138,6 +143,7 @@ export async function insertMessage(
       content: input.content ?? "",
       proposal: input.proposal ?? null,
       status: input.status ?? null,
+      attachments: input.attachments ?? null,
     })
     .select("*")
     .single();
@@ -169,5 +175,6 @@ export function toHistory(messages: MessageRow[]): HistoryMessage[] {
     content: message.content,
     proposal: message.proposal,
     status: message.status,
+    attachmentNames: message.attachments.map((attachment) => attachment.name),
   }));
 }

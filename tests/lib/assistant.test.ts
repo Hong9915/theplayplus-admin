@@ -58,6 +58,15 @@ describe("buildAssistantPrompt", () => {
     expect(system).toContain("되묻");
     expect(system).toContain("# 시트 내용");
     expect(system).toContain("## VIP");
+    expect(system).not.toContain("# 첨부 파일");
+  });
+
+  it("adds an attachments section and rule when files are attached", () => {
+    const system = buildAssistantPrompt({ gameName: "여신 키우기", today: "09.04", sheetText: "## VIP", attachmentsText: "## 보상.txt\n52009 VIP3" });
+    expect(system).toContain("# 첨부 파일");
+    expect(system).toContain("## 보상.txt\n52009 VIP3");
+    expect(system.indexOf("# 시트 내용")).toBeLessThan(system.indexOf("# 첨부 파일"));
+    expect(system).toContain("첨부 파일도 근거로");
   });
 });
 
@@ -89,6 +98,17 @@ describe("historyToMessages", () => {
       { role: "user", content: "VIP 올려줘" },
       { role: "assistant", content: "시트 수정 제안: VIP 탭 2행 VIP 단계 'VIP3' → 'VIP4' (적용됨)" },
       { role: "assistant", content: "네" },
+    ]);
+  });
+
+  it("tags user turns with their attachment names", () => {
+    const history: HistoryMessage[] = [
+      { role: "user", content: "이 파일 확인해줘", proposal: null, status: null, attachmentNames: ["보상.txt", "코드.csv"] },
+      { role: "user", content: "", proposal: null, status: null, attachmentNames: ["vip.xlsx"] },
+    ];
+    expect(historyToMessages(history)).toEqual([
+      { role: "user", content: "이 파일 확인해줘\n[첨부: 보상.txt, 코드.csv]" },
+      { role: "user", content: "[첨부: vip.xlsx]" },
     ]);
   });
 });

@@ -30,6 +30,7 @@ const messageRow = {
   failure_reason: null,
   applied_by: null,
   applied_at: null,
+  attachments: null,
   created_at: "2026-09-04T01:01:00.000Z",
 };
 
@@ -107,8 +108,19 @@ describe("listMessages", () => {
       failureReason: null,
       appliedBy: null,
       appliedAt: null,
+      attachments: [],
       createdAt: messageRow.created_at,
     });
+  });
+
+  it("maps stored attachments", async () => {
+    const attachments = [{ name: "보상.txt", size: 12, text: "52009 VIP3" }];
+    const order = vi.fn().mockResolvedValue({ data: [{ ...messageRow, role: "user", content: "확인", attachments }], error: null });
+    const from = vi.fn(() => ({ select: () => ({ eq: () => ({ order }) }) }));
+
+    const result = await listMessages({ from } as never, "c1");
+
+    expect(result[0].attachments).toEqual(attachments);
   });
 });
 
@@ -126,6 +138,7 @@ describe("insertMessage", () => {
       content: "",
       proposal: messageRow.proposal,
       status: "pending",
+      attachments: null,
     });
   });
   it("writes text rows without proposal", async () => {
@@ -135,7 +148,19 @@ describe("insertMessage", () => {
 
     await insertMessage({ from } as never, { conversationId: "c1", role: "user", content: "hi" });
 
-    expect(insert).toHaveBeenCalledWith({ conversation_id: "c1", role: "user", content: "hi", proposal: null, status: null });
+    expect(insert).toHaveBeenCalledWith({ conversation_id: "c1", role: "user", content: "hi", proposal: null, status: null, attachments: null });
+  });
+
+  it("writes attachments on user rows", async () => {
+    const attachments = [{ name: "보상.txt", size: 12, text: "52009 VIP3" }];
+    const single = vi.fn().mockResolvedValue({ data: { ...messageRow, role: "user", content: "", proposal: null, status: null, attachments }, error: null });
+    const insert = vi.fn(() => ({ select: () => ({ single }) }));
+    const from = vi.fn(() => ({ insert }));
+
+    const result = await insertMessage({ from } as never, { conversationId: "c1", role: "user", content: "", attachments });
+
+    expect(insert).toHaveBeenCalledWith({ conversation_id: "c1", role: "user", content: "", proposal: null, status: null, attachments });
+    expect(result?.attachments).toEqual(attachments);
   });
 });
 
@@ -165,11 +190,29 @@ describe("toHistory", () => {
       failureReason: null,
       appliedBy: null,
       appliedAt: null,
+      attachments: [],
       createdAt: "2026-09-04T00:00:00.000Z",
     }));
     const history = toHistory(messages);
     expect(history).toHaveLength(20);
     expect(history[0].content).toBe("q5");
-    expect(history[19]).toEqual({ role: "user", content: "q24", proposal: null, status: null });
+    expect(history[19]).toEqual({ role: "user", content: "q24", proposal: null, status: null, attachmentNames: [] });
+  });
+
+  it("carries attachment names into history", () => {
+    const message: MessageRow = {
+      id: "m1",
+      conversationId: "c1",
+      role: "user",
+      content: "확인",
+      proposal: null,
+      status: null,
+      failureReason: null,
+      appliedBy: null,
+      appliedAt: null,
+      attachments: [{ name: "보상.txt", size: 3, text: "abc" }],
+      createdAt: "2026-09-04T00:00:00.000Z",
+    };
+    expect(toHistory([message])[0].attachmentNames).toEqual(["보상.txt"]);
   });
 });
