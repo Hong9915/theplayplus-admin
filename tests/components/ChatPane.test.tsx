@@ -165,10 +165,25 @@ describe("ChatPane", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/지원하지 않는 형식/);
 
     const big = new File(["x"], "big.txt", { type: "text/plain" });
-    Object.defineProperty(big, "size", { value: 3 * 1024 * 1024 });
+    Object.defineProperty(big, "size", { value: 5 * 1024 * 1024 });
     await userEvent.upload(screen.getByLabelText("파일 첨부"), big);
     expect(screen.queryByText("big.txt")).not.toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent(/2MB/);
+    expect(screen.getByRole("alert")).toHaveTextContent(/파일당 4MB/);
+  });
+
+  it("refuses a file that would push the message total over 4MB", async () => {
+    render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
+    const first = new File(["x"], "a.txt", { type: "text/plain" });
+    Object.defineProperty(first, "size", { value: 3 * 1024 * 1024 });
+    const second = new File(["x"], "b.txt", { type: "text/plain" });
+    Object.defineProperty(second, "size", { value: 2 * 1024 * 1024 });
+
+    await userEvent.upload(screen.getByLabelText("파일 첨부"), first);
+    await userEvent.upload(screen.getByLabelText("파일 첨부"), second);
+
+    expect(screen.getByText("a.txt")).toBeInTheDocument();
+    expect(screen.queryByText("b.txt")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/합계 4MB/);
   });
 
   it("sends files as multipart and shows them under the user bubble", async () => {

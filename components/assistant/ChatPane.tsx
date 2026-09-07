@@ -4,7 +4,13 @@ import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } fro
 import { useRouter } from "next/navigation";
 import { readNdjson } from "@/lib/ndjson";
 import type { Proposal } from "@/lib/sheets";
-import { MAX_ATTACHMENTS_PER_MESSAGE, MAX_ATTACHMENT_BYTES, SUPPORTED_ATTACHMENT_ACCEPT, isSupportedAttachment } from "@/lib/attachment-rules";
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_ATTACHMENT_BYTES,
+  MAX_MESSAGE_ATTACHMENT_BYTES,
+  SUPPORTED_ATTACHMENT_ACCEPT,
+  isSupportedAttachment,
+} from "@/lib/attachment-rules";
 import ProposalCard from "@/components/assistant/ProposalCard";
 import { GENERIC_ERROR, STREAM_ERROR_MESSAGES, formatFileSize, type ChatAttachment, type ChatMessage } from "@/components/assistant/messages";
 
@@ -106,6 +112,10 @@ export default function ChatPane({
       const next = [...current, ...picked];
       if (next.length > MAX_ATTACHMENTS_PER_MESSAGE) {
         setError(STREAM_ERROR_MESSAGES.too_many_files);
+        return current;
+      }
+      if (next.reduce((sum, file) => sum + file.size, 0) > MAX_MESSAGE_ATTACHMENT_BYTES) {
+        setError(STREAM_ERROR_MESSAGES.message_too_large);
         return current;
       }
       return next;
@@ -239,7 +249,7 @@ export default function ChatPane({
           <div className="flex items-end gap-2">
           <label
             className={`shrink-0 cursor-pointer rounded-xl border border-line px-3 py-3 text-sm text-muted hover:text-ink hover:bg-ground ${sending ? "pointer-events-none opacity-50" : ""}`}
-            title="파일 첨부 (txt, md, csv, tsv, json, xlsx · 2MB · 5개까지)"
+            title="파일 첨부 (txt, md, csv, tsv, json, xlsx · 파일당 4MB · 합계 4MB · 5개까지)"
           >
             <span aria-hidden="true">📎</span>
             <input type="file" aria-label="파일 첨부" multiple accept={SUPPORTED_ATTACHMENT_ACCEPT} onChange={pickFiles} disabled={sending} className="sr-only" />

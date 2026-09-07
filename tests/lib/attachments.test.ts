@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import {
   AttachmentError,
   MAX_ATTACHMENT_BYTES,
+  MAX_MESSAGE_ATTACHMENT_BYTES,
   extractAttachmentText,
   isSupportedAttachment,
   serializeAttachments,
@@ -69,6 +70,13 @@ describe("extractAttachmentText", () => {
 
   it("rejects a broken xlsx as unreadable", async () => {
     await expect(extractAttachmentText(file("a.xlsx", "not a zip"))).rejects.toMatchObject({ reason: "file_unreadable" });
+  });
+});
+
+describe("limits", () => {
+  it("allows 4MB per file and 4MB per message, under Vercel's 4.5MB body cap", () => {
+    expect(MAX_ATTACHMENT_BYTES).toBe(4 * 1024 * 1024);
+    expect(MAX_MESSAGE_ATTACHMENT_BYTES).toBe(4 * 1024 * 1024);
   });
 });
 

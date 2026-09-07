@@ -9,6 +9,7 @@ import {
   AttachmentError,
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_ATTACHMENT_TEXT_CHARS,
+  MAX_MESSAGE_ATTACHMENT_BYTES,
   extractAttachmentText,
   serializeAttachments,
   type Attachment,
@@ -39,6 +40,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
   if (files.length > MAX_ATTACHMENTS_PER_MESSAGE) {
     return NextResponse.json({ success: false, error: "too_many_files" }, { status: 400 });
+  }
+  if (files.reduce((sum, file) => sum + file.size, 0) > MAX_MESSAGE_ATTACHMENT_BYTES) {
+    return NextResponse.json({ success: false, error: "message_too_large" }, { status: 400 });
   }
 
   let attachments: Attachment[];

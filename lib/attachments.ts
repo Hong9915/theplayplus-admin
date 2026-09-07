@@ -8,7 +8,13 @@ import ExcelJS from "exceljs";
 import { detectHeader, serializeSheets, type SheetTab } from "@/lib/sheets";
 import { MAX_ATTACHMENT_BYTES, TABLE_EXTENSIONS, extensionOf, isSupportedAttachment } from "@/lib/attachment-rules";
 
-export type AttachmentErrorReason = "unsupported_type" | "file_too_large" | "too_many_files" | "attachments_too_large" | "file_unreadable";
+export type AttachmentErrorReason =
+  | "unsupported_type"
+  | "file_too_large"
+  | "message_too_large"
+  | "too_many_files"
+  | "attachments_too_large"
+  | "file_unreadable";
 
 export class AttachmentError extends Error {
   constructor(
@@ -28,6 +34,7 @@ export interface Attachment {
 
 export {
   MAX_ATTACHMENT_BYTES,
+  MAX_MESSAGE_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_ATTACHMENT_TEXT_CHARS,
   SUPPORTED_ATTACHMENT_ACCEPT,

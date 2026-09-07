@@ -201,6 +201,21 @@ describe("POST /api/assistant/conversations/[id]/messages", () => {
     expect(await response.json()).toEqual({ success: false, error: "too_many_files" });
   });
 
+  it("rejects a message whose files together exceed the per-message byte cap", async () => {
+    const form = new FormData();
+    form.set("content", "x");
+    // multipart를 거치면 size를 흉내 낼 수 없어 실제 크기로 만든다.
+    form.append("files", new File(["x".repeat(3 * 1024 * 1024)], "a.txt", { type: "text/plain" }));
+    form.append("files", new File(["x".repeat(2 * 1024 * 1024)], "b.txt", { type: "text/plain" }));
+    const req = new Request("http://localhost/api/assistant/conversations/c1/messages", { method: "POST", body: form });
+
+    const response = await POST(req, { params: { id: "c1" } });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: "message_too_large" });
+    expect(storeModule.insertMessage).not.toHaveBeenCalled();
+  });
+
   it("rejects files once the conversation's attachment text would exceed the cap", async () => {
     vi.mocked(storeModule.listMessages).mockResolvedValue([userMessage("m0", "", [{ name: "big.txt", size: 1, text: "x".repeat(199_995) }])]);
     const response = await POST(multipart("x", [{ name: "more.txt", text: "123456" }]), { params: { id: "c1" } });
