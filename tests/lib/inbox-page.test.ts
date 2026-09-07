@@ -46,6 +46,7 @@ function inquiry(overrides: Partial<inquiriesModule.InquiryRow>): inquiriesModul
     replyContent: null,
     repliedAt: null,
     gmailThreadId: null,
+    unreadReplyAt: null,
     locale: null,
     translations: {},
     paymentNo: null,

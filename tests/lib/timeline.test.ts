@@ -22,6 +22,7 @@ const inquiry: InquiryRow = {
   replyContent: null,
   repliedAt: null,
   gmailThreadId: "t1",
+  unreadReplyAt: null,
   locale: null,
   translations: {},
   paymentNo: null,
