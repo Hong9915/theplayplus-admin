@@ -239,4 +239,15 @@ describe("SuggestButton", () => {
     await screen.findByRole("button", { name: "적용" });
     expect(screen.queryByText(/유사 문의 검색이 안 돼/)).not.toBeInTheDocument();
   });
+
+  it("hides the apply button when only evidence came back with no body", async () => {
+    mockStreamOnce([{ type: "text", text: "=== 근거 ===\n- VIP 시트 VIP 탭 7행" }]);
+    render(<SuggestButton inquiryId="inq-1" onApply={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
+
+    expect(await screen.findByText("VIP 시트 VIP 탭 7행")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "버리기" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "적용" })).not.toBeInTheDocument();
+  });
 });

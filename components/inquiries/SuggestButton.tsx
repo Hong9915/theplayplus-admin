@@ -104,8 +104,8 @@ export default function SuggestButton({
 
       {warnings.length > 0 && (
         <ul className="flex flex-col gap-1 text-xs text-amber-700" role="status">
-          {warnings.map((message) => (
-            <li key={message}>{message}</li>
+          {warnings.map((message, index) => (
+            <li key={index}>{message}</li>
           ))}
         </ul>
       )}
@@ -126,8 +126,8 @@ export default function SuggestButton({
             <div className="mt-3 text-xs text-muted">
               <p className="font-medium">참고한 자료</p>
               <ul className="mt-1 list-disc pl-4">
-                {evidence.map((item) => (
-                  <li key={item}>{item}</li>
+                {evidence.map((item, index) => (
+                  <li key={index}>{item}</li>
                 ))}
               </ul>
             </div>
@@ -136,16 +136,18 @@ export default function SuggestButton({
               나머지가 어디로 갔는지 관리자가 알 수 없다. */}
           {!loading && (
             <div className="flex items-center gap-2 mt-3">
-              <button
-                type="button"
-                onClick={() => {
-                  onApply(body);
-                  setSuggestion(null);
-                }}
-                className="border border-line rounded-lg px-3 py-1 text-sm hover:bg-panel transition-colors"
-              >
-                적용
-              </button>
+              {body !== "" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onApply(body);
+                    setSuggestion(null);
+                  }}
+                  className="border border-line rounded-lg px-3 py-1 text-sm hover:bg-panel transition-colors"
+                >
+                  적용
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setSuggestion(null)}
