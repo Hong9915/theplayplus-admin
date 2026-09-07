@@ -51,9 +51,9 @@
 - `syncAllMailboxes(supabase)`: `game`, `service` 두 메일함을 돌되 `mailboxSender()`가 같은 주소면
   (서비스 계정 미설정으로 게임 계정 대체) 한 번만 돈다. 한 메일함 실패가 다른 메일함을 막지 않는다.
 
-### 2. DB (마이그레이션 `0016_reply_sync.sql`)
+### 2. DB (마이그레이션 `0017_reply_sync.sql`)
 
-`feat/sheet-assistant` 브랜치도 0016을 쓰고 있다. 나중에 머지하는 쪽이 번호를 옮긴다.
+0016은 자동 답변 지연 범위 변경이 먼저 가져갔다. `feat/sheet-assistant` 브랜치의 0016/0017과는 나중에 머지하는 쪽이 번호를 옮긴다.
 
 ```sql
 alter table inquiries add column if not exists unread_reply_at timestamptz;
