@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { getAdminSession } from "@/lib/require-admin-session";
-import { listGames } from "@/lib/categories";
 import { getConversation, getMessage, updateProposalStatus } from "@/lib/assistant-store";
 import { applyProposal, SheetError, type SheetErrorReason } from "@/lib/sheets";
+import { getSource } from "@/lib/assistant-sources";
 
 /** 관리자가 [적용]을 누르면 시트에 쓴다. 실패는 200으로 사유를 돌려주고 카드에 남긴다. */
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
@@ -22,19 +22,21 @@ export async function POST(_request: Request, { params }: { params: { id: string
   }
 
   const conversation = await getConversation(supabase, message.conversationId);
-  const game = conversation ? (await listGames(supabase)).find((entry) => entry.id === conversation.gameId) : undefined;
 
   const fail = async (reason: SheetErrorReason) => {
     await updateProposalStatus(supabase, message.id, { status: "failed", failureReason: reason });
     return NextResponse.json({ success: false, status: "failed", failureReason: reason });
   };
 
-  if (!game?.sheetId) {
-    return fail("not_configured");
+  // 0017 이전에 저장된 제안은 sourceId가 없다. 자료가 해제됐거나 다른 게임·문서를 가리켜도 적용하지 않는다.
+  const sourceId = typeof message.proposal.sourceId === "string" ? message.proposal.sourceId : null;
+  const source = sourceId ? await getSource(supabase, sourceId) : null;
+  if (!conversation || !source || source.kind !== "sheet" || source.gameId !== conversation.gameId) {
+    return fail("invalid_proposal");
   }
 
   try {
-    await applyProposal(game.sheetId, message.proposal);
+    await applyProposal(source.externalId, message.proposal);
   } catch (error) {
     return fail(error instanceof SheetError ? error.reason : "sheet_write_failed");
   }

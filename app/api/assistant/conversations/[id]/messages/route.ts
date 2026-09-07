@@ -3,7 +3,8 @@ import { getSupabaseServerClient } from "@/lib/supabase";
 import { requireAdminSession } from "@/lib/require-admin-session";
 import { listGames } from "@/lib/categories";
 import { getConversation, insertMessage, listMessages, touchConversation, toHistory, type MessageRow } from "@/lib/assistant-store";
-import { readSpreadsheet, serializeSheets, SheetError, type Proposal } from "@/lib/sheets";
+import { SheetError, type Proposal } from "@/lib/sheets";
+import { listSources, loadSources, serializeSources } from "@/lib/assistant-sources";
 import { buildAssistantPrompt, formatToday, streamAssistant, type AssistantErrorReason } from "@/lib/assistant";
 import {
   AttachmentError,
@@ -18,7 +19,7 @@ import {
 type StreamEvent =
   | { type: "text"; text: string }
   | { type: "proposal"; messageId: string; proposal: Proposal }
-  | { type: "error"; reason: AssistantErrorReason | "save_failed" };
+  | { type: "error"; reason: AssistantErrorReason | "save_failed"; sourceTitle?: string };
 
 /**
  * 메시지 하나를 보내고 답을 스트리밍한다. 시트 읽기 실패도 스트림의 error 한 줄로
@@ -62,10 +63,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (!game) {
     return NextResponse.json({ success: false, error: "not_found" }, { status: 404 });
   }
-  if (!game.sheetId) {
+  const sources = await listSources(supabase, game.id);
+  if (sources.length === 0) {
     return NextResponse.json({ success: false, error: "not_configured" }, { status: 400 });
   }
-  const sheetId = game.sheetId;
   const conversationId = conversation.id;
   const gameName = game.name;
 
@@ -91,11 +92,15 @@ export async function POST(request: Request, { params }: { params: { id: string 
   await touchConversation(supabase, conversationId);
 
   async function* run(): AsyncGenerator<StreamEvent> {
-    let tabs;
+    let loaded;
     try {
-      tabs = await readSpreadsheet(sheetId);
+      loaded = await loadSources(sources);
     } catch (error) {
-      yield { type: "error", reason: error instanceof SheetError ? error.reason : "sheet_read_failed" };
+      if (error instanceof SheetError) {
+        yield { type: "error", reason: error.reason, ...(error.sourceTitle ? { sourceTitle: error.sourceTitle } : {}) };
+      } else {
+        yield { type: "error", reason: "source_read_failed" };
+      }
       return;
     }
 
@@ -103,13 +108,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const system = buildAssistantPrompt({
       gameName,
       today: formatToday(),
-      sheetText: serializeSheets(tabs),
+      sourcesText: serializeSources(loaded),
       attachmentsText: serializeAttachments(messages.flatMap((message) => message.attachments)),
     });
 
     let text = "";
     let failed = false;
-    for await (const event of streamAssistant({ system, history: toHistory(messages), tabs })) {
+    for await (const event of streamAssistant({ system, history: toHistory(messages), sources: loaded })) {
       if (event.type === "text") {
         text += event.text;
         yield event;

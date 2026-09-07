@@ -4,21 +4,21 @@ import { POST as cancel } from "@/app/api/assistant/messages/[id]/cancel/route";
 import * as sessionModule from "@/lib/require-admin-session";
 import * as storeModule from "@/lib/assistant-store";
 import * as sheetsModule from "@/lib/sheets";
-import * as categoriesModule from "@/lib/categories";
+import * as sourcesModule from "@/lib/assistant-sources";
 
 vi.mock("@/lib/supabase", () => ({ getSupabaseServerClient: vi.fn(() => ({})) }));
 vi.mock("@/lib/require-admin-session", () => ({ requireAdminSession: vi.fn(), getAdminSession: vi.fn() }));
-vi.mock("@/lib/categories", () => ({ listGames: vi.fn() }));
 vi.mock("@/lib/assistant-store", () => ({ getMessage: vi.fn(), getConversation: vi.fn(), updateProposalStatus: vi.fn() }));
 vi.mock("@/lib/sheets", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/sheets")>();
   return { ...actual, applyProposal: vi.fn() };
 });
+vi.mock("@/lib/assistant-sources", () => ({ getSource: vi.fn() }));
 
-const proposal = { kind: "update" as const, sheet: "VIP", row: 2, updates: [{ column: "VIP 단계", before: "VIP3", after: "VIP4" }] };
+const proposal = { kind: "update" as const, sourceId: "s1", sourceTitle: "VIP 원장", sheet: "VIP", row: 2, updates: [{ column: "VIP 단계", before: "VIP3", after: "VIP4" }] };
 const message = { id: "m1", conversationId: "c1", role: "proposal" as const, content: "", proposal, status: "pending" as const, failureReason: null, appliedBy: null, appliedAt: null, attachments: [], createdAt: "" };
 const conversation = { id: "c1", gameId: "g1", title: "t", createdBy: "a@b", createdAt: "", updatedAt: "" };
-const game = { id: "g1", name: "G", status: "active", logoPath: null, ownerName: null, createdAt: "", sheetId: "sheet-1" };
+const source = { id: "s1", gameId: "g1", kind: "sheet" as const, externalId: "sheet-1", title: "VIP 원장", createdAt: "" };
 
 const req = () => new Request("http://localhost/x", { method: "POST" });
 
@@ -28,7 +28,7 @@ describe("POST /api/assistant/messages/[id]/apply", () => {
     vi.mocked(storeModule.getMessage).mockReset().mockResolvedValue(message);
     vi.mocked(storeModule.getConversation).mockReset().mockResolvedValue(conversation);
     vi.mocked(storeModule.updateProposalStatus).mockReset().mockResolvedValue(true);
-    vi.mocked(categoriesModule.listGames).mockReset().mockResolvedValue([game] as never);
+    vi.mocked(sourcesModule.getSource).mockReset().mockResolvedValue(source);
     vi.mocked(sheetsModule.applyProposal).mockReset().mockResolvedValue(undefined);
   });
 
@@ -68,10 +68,25 @@ describe("POST /api/assistant/messages/[id]/apply", () => {
     expect(storeModule.updateProposalStatus).toHaveBeenCalledWith(expect.anything(), "m1", { status: "failed", failureReason: "conflict" });
   });
 
-  it("fails with not_configured when the game lost its sheet", async () => {
-    vi.mocked(categoriesModule.listGames).mockResolvedValue([{ ...game, sheetId: null }] as never);
+  it("fails with invalid_proposal when the source is gone", async () => {
+    vi.mocked(sourcesModule.getSource).mockResolvedValue(null);
     const response = await apply(req(), { params: { id: "m1" } });
-    expect(await response.json()).toEqual({ success: false, status: "failed", failureReason: "not_configured" });
+    expect(await response.json()).toEqual({ success: false, status: "failed", failureReason: "invalid_proposal" });
+    expect(sheetsModule.applyProposal).not.toHaveBeenCalled();
+  });
+
+  it("fails with invalid_proposal when the source belongs to another game or is a doc", async () => {
+    vi.mocked(sourcesModule.getSource).mockResolvedValue({ ...source, gameId: "g2" });
+    expect(await (await apply(req(), { params: { id: "m1" } })).json()).toMatchObject({ failureReason: "invalid_proposal" });
+    vi.mocked(sourcesModule.getSource).mockResolvedValue({ ...source, kind: "doc" });
+    expect(await (await apply(req(), { params: { id: "m1" } })).json()).toMatchObject({ failureReason: "invalid_proposal" });
+  });
+
+  it("fails with invalid_proposal for a proposal saved before sources existed", async () => {
+    const { sourceId: _omit, ...legacy } = proposal;
+    vi.mocked(storeModule.getMessage).mockResolvedValue({ ...message, proposal: legacy as never });
+    expect(await (await apply(req(), { params: { id: "m1" } })).json()).toMatchObject({ failureReason: "invalid_proposal" });
+    expect(sourcesModule.getSource).not.toHaveBeenCalled();
   });
 });
 
