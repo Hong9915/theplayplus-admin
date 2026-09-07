@@ -144,6 +144,14 @@ describe("ChatPane", () => {
     expect(screen.getByText("2 KB")).toBeInTheDocument();
   });
 
+  it("always shows the attachment limits under the composer", () => {
+    render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
+    const hint = screen.getByText(/4MB 이하/);
+    expect(hint).toBeVisible();
+    expect(hint).toHaveTextContent(/txt.*xlsx/);
+    expect(hint).toHaveTextContent(/5개/);
+  });
+
   it("lists picked files as chips and removes one on click", async () => {
     render(<ChatPane gameId="g1" conversationId="c1" initialMessages={[]} />);
 

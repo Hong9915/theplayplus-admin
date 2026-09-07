@@ -273,6 +273,7 @@ export default function ChatPane({
             {sending ? "전송 중…" : "보내기"}
           </button>
           </div>
+          <p className="text-xs text-muted">첨부 파일은 txt · md · csv · tsv · json · xlsx, 파일당 4MB 이하 · 한 번에 5개(합계 4MB)까지</p>
         </div>
       </div>
     </section>
