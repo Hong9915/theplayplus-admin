@@ -23,7 +23,7 @@ vi.mock("@/lib/events", () => ({ listEvents: vi.fn() }));
 vi.mock("@/lib/templates", () => ({ listTemplates: vi.fn() }));
 vi.mock("@/lib/messages", () => ({ listMessages: vi.fn(), listMessagesByInquiryIds: vi.fn() }));
 
-const game = { id: "g1", name: "아르카나 사가", status: "active" as const, logoPath: null, ownerName: null, createdAt: "2026-01-01T00:00:00.000Z", sheetId: null };
+const game = { id: "g1", name: "아르카나 사가", status: "active" as const, logoPath: null, ownerName: null, createdAt: "2026-01-01T00:00:00.000Z" };
 const labels = { groupLabels: {}, typeLabels: {}, typeOrder: [] };
 const emptyPage = { rows: [], total: 0, page: 1, pageSize: 50 };
 

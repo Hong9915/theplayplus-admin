@@ -12,7 +12,7 @@ THE PLAY+ 고객지원 관리자 페이지. `theplayplus-contact`(문의 접수 
 6. **새 문의 Slack 알림** — Supabase Database Webhook(`inquiries` INSERT)이 `/api/notify/inquiry`를 호출하면 게임명·유형·제목·상세 링크를 Slack Incoming Webhook으로 보낸다(`lib/slack.ts`). 호출자는 `x-webhook-secret` 헤더가 `INQUIRY_WEBHOOK_SECRET`과 일치해야 하고, `SLACK_WEBHOOK_URL`이 비어 있으면 조용히 건너뛴다. 지금은 모든 신규 문의를 보내며, 특정 유형만 보내려면 이 라우트에서 거르면 된다. 서비스 문의는 게임명 자리에 "서비스 문의"가 들어가고 링크는 `/service/inquiries/{id}`다.
 
 7. **유형별 매크로 자동 답변** — 답변 템플릿(`reply_templates`)에 "자동 발송"을 켜 두면(게임·유형당 하나, 공용 템플릿은 유형 전용이 없을 때의 대체) 새 문의에 그 내용을 브랜드 이메일로 보낸다. 접수 직후가 아니라 **30분~1시간 뒤 랜덤**으로 나간다: 접수 시 DB 트리거가 `inquiries.auto_reply_due_at`을 채우고(그 게임에 자동 발송 템플릿이 있을 때만), Supabase `pg_cron`이 매분 `/api/auto-reply/run`을 호출하면 `claim_due_auto_replies` RPC로 예정 시각이 지난 건을 가져와 보낸다(마이그레이션 0014). RPC가 예정을 지우면서 행을 돌려주므로 호출이 겹쳐도 두 번 보내지 않고, 기다리는 사이 관리자가 먼저 답했거나 템플릿이 꺼졌으면 건너뛰며, 발송 실패는 5분 뒤로 다시 예약한다. 상태는 `접수`로 남기고 마지막 답변도 갱신하지 않으며, 타임라인에는 "자동 발송"으로, 이력에는 "자동 답변 발송"으로 구분해 보인다. 인증은 Slack 알림과 같은 `x-webhook-secret`(`lib/webhook-secret.ts`)
-8. **운영 시트 어시스턴트** — 문의함 보기 열의 "운영 어시스턴트 ↗"가 새 탭으로 `/games/{gameId}/assistant`를 연다(`app/(assistant)/`, 레일 없음). 게임에 연결한 구글 스프레드시트(`games.sheet_id`, 화면의 "시트 설정"에서 URL 입력)를 서비스 계정(`GOOGLE_SERVICE_ACCOUNT_JSON`, 시트를 그 계정에 편집자로 공유)으로 매번 통째로 읽어 텍스트 표로 만들고 OpenAI(`OPENAI_API_KEY`, `OPENAI_MODEL` 기본 `gpt-5-mini`)에 시스템 프롬프트로 싣는다(`lib/sheets.ts`, `lib/assistant.ts`). 임베딩 검색은 쓰지 않는다. "52009 VIP4로 올려줘" 같은 수정 요청은 모델이 `propose_update`/`propose_append` 도구로 제안만 만들고, 서버가 탭·열·행을 검증해 `assistant_messages`에 `pending`으로 저장하며, 관리자가 카드의 [적용]을 눌러야 시트를 다시 읽어 충돌을 확인한 뒤 Sheets API로 쓴다(마이그레이션 0015). 첫 줄이 열 이름인 탭만 수정할 수 있고 줄글 탭은 읽기 전용이다. 대화는 게임별로 저장되고 ChatGPT식 사이드바에서 고른다(`?c=`). 입력창의 📎로 파일(txt/md/csv/tsv/json/xlsx, 파일당 4MB·메시지당 합계 4MB(Vercel 요청 본문 상한 4.5MB 아래)·5개·대화당 텍스트 200,000자)을 메시지에 붙일 수 있다: 서버가 텍스트만 뽑아 `assistant_messages.attachments` jsonb에 남기고(원본 미보관, 마이그레이션 0016, `lib/attachments.ts`; xlsx는 시트와 같은 표 형식으로 변환, utf-8이 아니면 EUC-KR로 해석) 그 대화의 모든 첨부를 프롬프트의 `# 첨부 파일` 섹션으로 싣는다. 파일은 읽기만 하고 수정 제안은 시트에만 한다. 설계는 `docs/superpowers/specs/2026-09-04-sheet-assistant-design.md`.
+8. **운영 시트 어시스턴트** — 문의함 보기 열의 "운영 어시스턴트 ↗"가 새 탭으로 `/games/{gameId}/assistant`를 연다(`app/(assistant)/`, 레일 없음). 게임에 연결한 구글 스프레드시트·구글 문서(`assistant_sources`, 사이드바의 "+ 자료 추가"에 URL 입력, 여러 개 가능, 마이그레이션 0017)를 서비스 계정(`GOOGLE_SERVICE_ACCOUNT_JSON`, 각 자료를 그 계정에 편집자로 공유)으로 매번 통째로 읽어 `# 시트: 제목`/`# 문서: 제목` 구간의 텍스트로 만들고 OpenAI(`OPENAI_API_KEY`, `OPENAI_MODEL` 기본 `gpt-5-mini`)에 시스템 프롬프트로 싣는다(`lib/assistant-sources.ts`, `lib/sheets.ts`, `lib/docs.ts`, `lib/assistant.ts`). 임베딩 검색은 쓰지 않고 자료 합계 30만 자까지다. 자료 제목은 등록 시 구글에서 읽어 저장하며, 공유가 안 돼 있으면 등록이 거절된다. "52009 VIP4로 올려줘" 같은 수정 요청은 모델이 `propose_update`/`propose_append` 도구(`spreadsheet` 인자로 시트 제목 지정)로 제안만 만들고, 서버가 자료·탭·열·행을 검증해 `sourceId`를 붙여 `assistant_messages`에 `pending`으로 저장하며, 관리자가 카드의 [적용]을 눌러야 그 시트를 다시 읽어 충돌을 확인한 뒤 Sheets API로 쓴다(마이그레이션 0015). 문서는 읽기 전용이고, 시트는 첫 줄이 열 이름인 탭만 수정할 수 있다. 대화는 게임별로 저장되고 ChatGPT식 사이드바에서 고른다(`?c=`). 입력창의 📎로 파일(txt/md/csv/tsv/json/xlsx, 파일당 4MB·메시지당 합계 4MB(Vercel 요청 본문 상한 4.5MB 아래)·5개·대화당 텍스트 200,000자)을 메시지에 붙일 수 있다: 서버가 텍스트만 뽑아 `assistant_messages.attachments` jsonb에 남기고(원본 미보관, 마이그레이션 0016, `lib/attachments.ts`; xlsx는 시트와 같은 표 형식으로 변환, utf-8이 아니면 EUC-KR로 해석) 그 대화의 모든 첨부를 프롬프트의 `# 첨부 파일` 섹션으로 싣는다. 파일은 읽기만 하고 수정 제안은 시트에만 한다. 설계는 `docs/superpowers/specs/2026-09-04-sheet-assistant-design.md`와 `docs/superpowers/specs/2026-09-07-assistant-sources-design.md`.
 
 상세 설계는 `docs/superpowers/specs/2026-09-01-admin-panel-design.md`, 인박스 화면은 `docs/superpowers/specs/2026-09-03-inbox-layout-design.md`, 자동 답변은 `docs/superpowers/specs/2026-09-03-auto-reply-design.md`, 운영 시트 어시스턴트는 `docs/superpowers/specs/2026-09-04-sheet-assistant-design.md` 참고.
 
@@ -41,12 +41,12 @@ THE PLAY+ 고객지원 관리자 페이지. `theplayplus-contact`(문의 접수 
 
 ## 운영 시트 어시스턴트 설정 절차
 
-1. Google Cloud 콘솔 → 프로젝트 선택 → "Google Sheets API" 사용 설정 → IAM → 서비스 계정 만들기 → 키(JSON) 발급
+1. Google Cloud 콘솔 → 프로젝트 선택 → "Google Sheets API"와 "Google Docs API" 사용 설정 → IAM → 서비스 계정 만들기 → 키(JSON) 발급
 2. 키 파일 내용을 한 줄로 만들어 `GOOGLE_SERVICE_ACCOUNT_JSON`에, OpenAI 키를 `OPENAI_API_KEY`에 넣고 재배포. Node 22 이상에서 실행한다(`openai` 패키지 요구사항; Vercel 프로젝트의 Node 버전을 확인)
-3. Supabase SQL Editor에서 `0015_assistant.sql`과 `0016_assistant_attachments.sql` 실행. 0015는 anon의 games 조회를 열 단위로 제한한다 — 접수 폼은 id/name/logo_path만 읽는다
-4. 게임 운영 시트를 만든다. 수정까지 쓰려면 탭 첫 줄에 열 이름을 둔다(예: VIP 탭 = 이메일 / ID / 서버 / 닉네임 / VIP 단계 / 갱신일)
-5. 관리자 페이지 → 게임 문의함 → "운영 어시스턴트" → "시트 설정"에 URL을 넣고, 안내된 서비스 계정 이메일에 시트를 편집자로 공유
-6. "52009 VIP 몇이야"로 읽기, "52009 VIP4로 올려줘" → 제안 카드 → [적용] → 시트 반영 확인
+3. Supabase SQL Editor에서 `0015_assistant.sql`, `0016_assistant_attachments.sql`, `0017_assistant_sources.sql`을 순서대로 실행. 0015는 anon의 games 조회를 열 단위로 제한한다 — 접수 폼은 id/name/logo_path만 읽는다. 0017은 기존 `games.sheet_id`를 자료 표로 옮기고 열을 지운다
+4. 게임 운영 시트·문서를 만든다. 시트를 수정까지 쓰려면 탭 첫 줄에 열 이름을 둔다(예: VIP 탭 = 이메일 / ID / 서버 / 닉네임 / VIP 단계 / 갱신일)
+5. 안내된 서비스 계정 이메일에 각 시트·문서를 편집자로 공유한 뒤, 관리자 페이지 → 게임 문의함 → "운영 어시스턴트" → 사이드바 "+ 자료 추가"에 URL을 넣는다
+6. 시트는 "52009 VIP 몇이야"로 읽기, "52009 VIP4로 올려줘" → 제안 카드 → [적용] → 시트 반영 확인. 문서는 "환불 정책이 뭐야"처럼 물어 근거에 문서 이름이 붙는지 확인
 
 ## 컨벤션
 

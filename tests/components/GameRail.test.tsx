@@ -18,8 +18,8 @@ vi.mock("@/components/games/GameForm", () => ({ default: () => <div data-testid=
 vi.mock("@/lib/supabase-browser", () => ({ getSupabaseBrowserClient: () => ({ auth: { signOut: vi.fn() } }) }));
 
 const games: GameRow[] = [
-  { id: "g1", name: "아르카나 사가", status: "active", logoPath: null, ownerName: null, createdAt: "2026-01-01T00:00:00.000Z", sheetId: null },
-  { id: "g2", name: "여신의 검", status: "ended", logoPath: null, ownerName: null, createdAt: "2026-01-02T00:00:00.000Z", sheetId: null },
+  { id: "g1", name: "아르카나 사가", status: "active", logoPath: null, ownerName: null, createdAt: "2026-01-01T00:00:00.000Z" },
+  { id: "g2", name: "여신의 검", status: "ended", logoPath: null, ownerName: null, createdAt: "2026-01-02T00:00:00.000Z" },
 ];
 
 describe("GameRail", () => {

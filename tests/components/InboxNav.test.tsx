@@ -9,7 +9,7 @@ import { SERVICE_SCOPE, gameScope } from "@/lib/inbox-scope";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
 
-const game: GameRow = { id: "g1", name: "아르카나 사가", status: "active", logoPath: null, ownerName: null, createdAt: "2026-01-01T00:00:00.000Z", sheetId: null };
+const game: GameRow = { id: "g1", name: "아르카나 사가", status: "active", logoPath: null, ownerName: null, createdAt: "2026-01-01T00:00:00.000Z" };
 
 const labels = {
   groupLabels: { game_usage: "게임 이용 문의" },
