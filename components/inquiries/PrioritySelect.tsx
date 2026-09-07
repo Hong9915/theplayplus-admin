@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { InquiryPriority } from "@/lib/inquiries";
+import StatusMessage from "@/components/ui/StatusMessage";
 
 const OPTIONS: Array<{ value: InquiryPriority; label: string }> = [
   { value: "urgent", label: "긴급" },
@@ -56,7 +57,7 @@ export default function PrioritySelect({
         <select
           value={priority}
           onChange={(e) => handleChange(e.target.value as InquiryPriority)}
-          className="bg-panel border border-line rounded-lg px-2.5 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-colors"
+          className="bg-panel border border-line rounded-lg px-2.5 py-1.5 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent transition-colors"
         >
           {OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -65,7 +66,7 @@ export default function PrioritySelect({
           ))}
         </select>
       </label>
-      {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
+      <StatusMessage className="text-sm mt-1">{error}</StatusMessage>
     </div>
   );
 }

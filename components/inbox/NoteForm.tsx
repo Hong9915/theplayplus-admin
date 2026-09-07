@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import StatusMessage from "@/components/ui/StatusMessage";
 
 /** 내부 메모 작성. 저장되면 타임라인에 나타나므로 여기서는 목록을 그리지 않는다. */
 export default function NoteForm({ inquiryId }: { inquiryId: string }) {
@@ -44,17 +45,18 @@ export default function NoteForm({ inquiryId }: { inquiryId: string }) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-2">
       <p className="text-xs text-muted">운영자 전용 · 사용자에게 보이지 않습니다.</p>
       <textarea
+        name="note"
         value={content}
         onChange={(e) => setContent(e.target.value)}
         rows={4}
-        placeholder="처리 과정, 확인한 내용 등을 기록합니다."
+        placeholder="처리 과정, 확인한 내용 등을 기록합니다…"
         aria-label="내부 메모"
-        className="bg-ground border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-colors"
+        className="bg-ground border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent transition-colors"
       />
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      <StatusMessage className="text-sm">{error}</StatusMessage>
       <div className="flex justify-end">
         <button type="submit" disabled={submitting} className="border border-line rounded-lg px-3 py-1.5 text-sm hover:bg-ground disabled:opacity-50 transition-colors">
-          메모 추가
+          {submitting ? "저장 중…" : "메모 추가"}
         </button>
       </div>
     </form>

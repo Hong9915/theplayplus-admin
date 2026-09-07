@@ -124,14 +124,14 @@ export default function TranslatableBody({
         const text = translations[lang];
         if (state?.status === "loading") {
           return (
-            <div key={lang} className="mt-2.5 pt-2.5 border-t border-dashed border-line text-xs text-muted">
+            <div key={lang} role="status" aria-live="polite" className="mt-2.5 pt-2.5 border-t border-dashed border-line text-xs text-muted">
               번역 중…
             </div>
           );
         }
         if (state?.status === "error") {
           return (
-            <div key={lang} className="mt-2.5 pt-2.5 border-t border-dashed border-line text-xs text-red-600 flex flex-wrap items-center gap-2">
+            <div key={lang} role="status" aria-live="polite" className="mt-2.5 pt-2.5 border-t border-dashed border-line text-xs text-red-600 flex flex-wrap items-center gap-2">
               <span>{state.message}</span>
               <button type="button" onClick={() => translate(lang)} className="underline underline-offset-2 hover:text-ink">
                 다시 시도
@@ -141,7 +141,7 @@ export default function TranslatableBody({
         }
         if (state?.status === "notice") {
           return (
-            <div key={lang} className="mt-2.5 pt-2.5 border-t border-dashed border-line text-xs text-muted">
+            <div key={lang} role="status" aria-live="polite" className="mt-2.5 pt-2.5 border-t border-dashed border-line text-xs text-muted">
               {state.message}
             </div>
           );

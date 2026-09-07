@@ -86,12 +86,12 @@ export default function InboxNav({
               <Link href={href(view.patch)} aria-current={active ? "true" : undefined} className={`${ITEM} ${active ? ITEM_ACTIVE : ITEM_IDLE}`}>
                 <span>{view.label}</span>
                 {count !== null && view.key === "new" && count > 0 && (
-                  <span className="inline-flex min-w-[20px] h-[18px] px-1.5 rounded-full bg-accent/10 text-accent text-[11px] font-semibold leading-[18px] justify-center">
+                  <span className="inline-flex min-w-[20px] h-[18px] px-1.5 rounded-full bg-accent/10 text-accent text-[11px] font-semibold leading-[18px] justify-center tabular-nums">
                     {count}
                   </span>
                 )}
                 {count !== null && view.key !== "new" && (
-                  <span className={`text-xs font-normal ${view.key === "stale" && count > 0 ? "text-accent font-semibold" : "text-muted"}`}>
+                  <span className={`text-xs font-normal tabular-nums ${view.key === "stale" && count > 0 ? "text-accent font-semibold" : "text-muted"}`}>
                     {count}
                   </span>
                 )}
@@ -110,7 +110,7 @@ export default function InboxNav({
               <li key={key}>
                 <Link href={href({ type: key, group: null })} aria-current={active ? "true" : undefined} className={`${ITEM} h-8 ${active ? ITEM_ACTIVE : ITEM_IDLE}`}>
                   <span className="truncate">{labels.typeLabels[key] ?? key}</span>
-                  {counts && <span className="text-xs font-normal text-muted">{counts.type[key] ?? 0}</span>}
+                  {counts && <span className="text-xs font-normal text-muted tabular-nums">{counts.type[key] ?? 0}</span>}
                 </Link>
               </li>
             );
@@ -130,7 +130,7 @@ export default function InboxNav({
                     <span className={`w-2 h-2 rounded-full ${item.dot}`} aria-hidden="true" />
                     <span>{item.label}</span>
                   </span>
-                  {counts && <span className="text-xs font-normal text-muted">{counts.priority[item.key]}</span>}
+                  {counts && <span className="text-xs font-normal text-muted tabular-nums">{counts.priority[item.key]}</span>}
                 </Link>
               </li>
             );
