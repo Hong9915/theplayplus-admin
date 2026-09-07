@@ -19,10 +19,6 @@ vi.mock("@/lib/assistant-store", () => ({
   touchConversation: vi.fn(),
   toHistory: vi.fn((messages: unknown[]) => messages),
 }));
-vi.mock("@/lib/sheets", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/sheets")>();
-  return { ...actual, readSpreadsheet: vi.fn() };
-});
 vi.mock("@/lib/assistant", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/assistant")>();
   return { ...actual, streamAssistant: vi.fn() };
