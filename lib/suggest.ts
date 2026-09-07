@@ -1,4 +1,6 @@
-import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import OpenAI from "openai";
+import type { PastReply } from "@/lib/replies";
+import { EVIDENCE_DELIMITER } from "@/lib/suggest-evidence";
 
 export interface SuggestInput {
   gameName: string;
@@ -9,21 +11,30 @@ export interface SuggestInput {
   gameAccount: string | null;
   companyName: string | null;
   templates: Array<{ title: string; content: string }>;
-  pastReplies: string[];
+  pastReplies: PastReply[];
+  /** serializeSources 결과. 자료가 없거나 서비스 문의면 "". */
+  sourcesText: string;
 }
 
 export type SuggestErrorReason = "not_configured" | "refused" | "failed";
+export type SuggestWarningReason = "sources_unavailable" | "similar_unavailable";
 
 /**
- * 스트리밍 이벤트. 텍스트 조각이 순서대로 오고, 문제가 생기면 error 이벤트가
+ * 스트리밍 이벤트. warning은 라우트가 근거를 모으다 실패한 것을 본문보다 먼저
+ * 알리는 용도이고, 텍스트 조각이 순서대로 온 뒤 문제가 생기면 error 이벤트가
  * 마지막에 온다. error 앞에 이미 나간 텍스트는 그대로 유효하다(관리자가 살릴지
  * 판단한다).
  */
 export type SuggestEvent =
   | { type: "text"; text: string }
+  | { type: "warning"; reason: SuggestWarningReason; sourceTitle?: string }
   | { type: "error"; reason: SuggestErrorReason };
 
-const SYSTEM_PROMPT = [
+const DEFAULT_MODEL = "gpt-5-mini";
+
+// 규칙은 모든 게임에 같고 자료는 게임마다 같다. 이 순서로 system을 만들어야
+// OpenAI 프롬프트 캐시가 앞부분을 재사용한다.
+const SYSTEM_RULES = [
   "당신은 게임사 THE PLAY+의 고객지원 담당자입니다.",
   "접수된 문의에 보낼 답변 메일 본문을 한국어로 작성하세요.",
   "",
@@ -31,10 +42,18 @@ const SYSTEM_PROMPT = [
   "- 메일 본문만 출력하세요. 머리말, 설명, 따옴표, 코드블록을 붙이지 마세요.",
   "- 확인되지 않은 사실을 지어내지 마세요. 보상 지급, 환불 승인, 수정 일정처럼",
   "  확인이 필요한 사항은 약속하지 말고 '확인 후 안내드리겠습니다'로 남기세요.",
+  "- 참고 자료에 있는 사실(이벤트 기간, 지급 기준, 운영 정책 등)로 답할 수 있으면",
+  "  그 사실을 답변에 쓰세요. 자료에 없는 사실은 지어내지 말고 '확인 후 안내드리겠습니다'로 남기세요.",
   "- 참고 템플릿이 주어지면 그 말투와 구조를 따르세요. 템플릿의 제목은 참고용",
   "  이름일 뿐이니 답변 본문에 옮겨 적지 마세요.",
-  "- 과거 답변 예시가 주어지면 표현 방식을 참고하세요.",
+  "- 과거 문의와 답변이 주어지면 표현 방식과 처리 방향을 참고하되, 그때의 계정·금액·날짜를",
+  "  이번 답변에 옮겨 적지 마세요.",
   "- 서명이나 발신자 정보는 붙이지 마세요. 발송 시스템이 처리합니다.",
+  "",
+  "출력 형식:",
+  `- 본문을 다 쓴 뒤 다음 줄에 ${EVIDENCE_DELIMITER} 를 쓰고, 그 아래에 참고한 자료를 한 줄에 하나씩 적으세요.`,
+  "  시트는 'VIP 시트 VIP 탭 7행', 문서는 '운영 가이드 문서 환불 항목', 과거 답변은 '과거 답변 R-20260902-0001'처럼 적으세요.",
+  "- 참고한 것이 없으면 구분선 아래에 '없음'이라고 적으세요.",
 ].join("\n");
 
 /**
@@ -42,6 +61,8 @@ const SYSTEM_PROMPT = [
  * 아무도 고치지 못하므로 순수 함수로 분리한다.
  */
 export function buildSuggestPrompt(input: SuggestInput): { system: string; userMessage: string } {
+  const system = input.sourcesText.trim() === "" ? SYSTEM_RULES : `${SYSTEM_RULES}\n\n# 참고 자료\n\n${input.sourcesText}`;
+
   const lines: string[] = [
     `게임: ${input.gameName}`,
     `문의 종류: ${input.groupLabel}`,
@@ -68,17 +89,23 @@ export function buildSuggestPrompt(input: SuggestInput): { system: string; userM
   }
 
   if (input.pastReplies.length > 0) {
-    lines.push("", "---", "같은 유형의 과거 답변 예시:");
-    for (const reply of input.pastReplies) {
-      lines.push("", reply);
-    }
+    lines.push("", "---", "과거 문의와 답변:");
+    input.pastReplies.forEach((entry, index) => {
+      if (entry.inquiryNo) {
+        lines.push("", `${index + 1}) 문의 ${entry.inquiryNo}: ${entry.title ?? ""}`.trimEnd());
+        if (entry.excerpt) lines.push(`문의 요약: ${entry.excerpt}`);
+        lines.push("보낸 답변:", entry.reply);
+      } else {
+        lines.push("", `${index + 1}) 같은 유형의 최근 답변:`, entry.reply);
+      }
+    });
   }
 
-  return { system: SYSTEM_PROMPT, userMessage: lines.join("\n") };
+  return { system, userMessage: lines.join("\n") };
 }
 
 export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<SuggestEvent> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     yield { type: "error", reason: "not_configured" };
     return;
@@ -88,40 +115,38 @@ export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<Sug
   let emitted = false;
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    const client = new OpenAI({ apiKey });
     // 관리자가 버튼을 누르고 기다리는 화면이라 한 번에 받으면 몇 초간 아무것도
     // 안 보인다. 조각이 오는 대로 흘려보낸다.
-    const stream = await ai.models.generateContentStream({
-      // 모델 이름은 서버 쪽에서 바뀐다. 그때마다 코드를 고치고 배포할 이유가 없다.
-      // gemini-2.5-flash-lite는 신규 사용자에게 더 이상 제공되지 않는다(404).
-      model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite",
-      contents: userMessage,
-      config: {
-        systemInstruction: system,
-        maxOutputTokens: 2048,
-        // 템플릿 말투를 따라야 하므로 창의성보다 일관성 쪽으로 둔다.
-        temperature: 0.4,
-        // 답변 한 통 쓰는 데 깊은 사고가 필요 없다.
-        //
-        // thinkingBudget: 0은 이 모델에서 400 INVALID_ARGUMENT다 — 사고를
-        // 끄는 것이 아니라 thinkingLevel로 수준만 낮출 수 있다.
-        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-      },
+    const stream = await client.chat.completions.create({
+      // 모델 이름은 서버 쪽에서 바뀐다. 어시스턴트와 같은 환경변수를 쓴다.
+      model: process.env.OPENAI_MODEL ?? DEFAULT_MODEL,
+      stream: true,
+      // 답변 한 통 쓰는 데 깊은 사고가 필요 없다. gpt-5 계열은 temperature를
+      // 기본값 외로 주면 거절하므로 넣지 않는다.
+      reasoning_effort: "minimal",
+      max_completion_tokens: 2048,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userMessage },
+      ],
     });
 
     for await (const chunk of stream) {
-      // 안전 필터 차단은 예외가 아니라 정상 응답으로 돌아온다. 스트리밍에서는
-      // 본문 일부가 나간 뒤 중간에 끊길 수도 있다.
-      const finishReason = chunk.candidates?.[0]?.finishReason;
-      if (finishReason === "SAFETY" || finishReason === "RECITATION") {
-        yield { type: "error", reason: "refused" };
-        return;
-      }
+      const choice = chunk.choices[0];
+      if (!choice) continue;
 
-      const text = chunk.text;
+      const text = choice.delta?.content;
       if (text) {
         emitted = true;
         yield { type: "text", text };
+      }
+
+      // 콘텐츠 필터 차단은 예외가 아니라 finish_reason으로 온다. 본문 일부가
+      // 나간 뒤 중간에 끊길 수도 있다.
+      if (choice.finish_reason === "content_filter") {
+        yield { type: "error", reason: "refused" };
+        return;
       }
     }
 
@@ -129,7 +154,7 @@ export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<Sug
       yield { type: "error", reason: "refused" };
     }
   } catch (error) {
-    console.warn("[suggest] Gemini request failed", error);
+    console.warn("[suggest] OpenAI request failed", error);
     yield { type: "error", reason: "failed" };
   }
 }
