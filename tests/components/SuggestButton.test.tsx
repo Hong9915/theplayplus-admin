@@ -4,7 +4,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SuggestButton from "@/components/inquiries/SuggestButton";
 
-type Event = { type: "text"; text: string } | { type: "error"; reason: string };
+type Event =
+  | { type: "text"; text: string }
+  | { type: "warning"; reason: string; sourceTitle?: string }
+  | { type: "error"; reason: string };
 
 /** 라우트가 흘려보내는 NDJSON 응답을 흉내 낸다. */
 function ndjsonResponse(events: Event[]) {
@@ -118,7 +121,7 @@ describe("SuggestButton", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
 
-    expect(await screen.findByText(/GEMINI_API_KEY/)).toBeInTheDocument();
+    expect(await screen.findByText(/OPENAI_API_KEY/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "적용" })).not.toBeInTheDocument();
   });
 
@@ -171,5 +174,69 @@ describe("SuggestButton", () => {
     expect(await screen.findByText("추천 생성에 실패했습니다.")).toBeInTheDocument();
     // 실패해도 다시 시도할 수 있어야 한다.
     await waitFor(() => expect(screen.getByRole("button", { name: "AI 답변 추천" })).not.toBeDisabled());
+  });
+
+  it("shows the evidence apart from the body and applies only the body", async () => {
+    mockStreamOnce([
+      { type: "text", text: "안녕하세요, 확인 후 안내드리겠습니다.\n" },
+      { type: "text", text: "=== 근거 ===\n- VIP 시트 VIP 탭 7행\n- 과거 답변 R-20260902-0001" },
+    ]);
+    const onApply = vi.fn();
+    render(<SuggestButton inquiryId="inq-1" onApply={onApply} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
+
+    expect(await screen.findByText("참고한 자료")).toBeInTheDocument();
+    expect(screen.getByText("VIP 시트 VIP 탭 7행")).toBeInTheDocument();
+    expect(screen.getByText("과거 답변 R-20260902-0001")).toBeInTheDocument();
+    expect(screen.queryByText(/=== 근거 ===/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "적용" }));
+    expect(onApply).toHaveBeenCalledWith("안녕하세요, 확인 후 안내드리겠습니다.");
+  });
+
+  it("hides the evidence heading when the model reports none", async () => {
+    mockStreamOnce([{ type: "text", text: `${FULL}\n=== 근거 ===\n없음` }]);
+    render(<SuggestButton inquiryId="inq-1" onApply={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
+
+    expect(await screen.findByRole("button", { name: "적용" })).toBeInTheDocument();
+    expect(screen.queryByText("참고한 자료")).not.toBeInTheDocument();
+  });
+
+  it("shows a warning line naming the source that could not be read", async () => {
+    mockStreamOnce([
+      { type: "warning", reason: "sources_unavailable", sourceTitle: "VIP 원장" },
+      { type: "text", text: FULL },
+    ]);
+    render(<SuggestButton inquiryId="inq-1" onApply={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
+
+    expect(await screen.findByText("운영 자료를 읽지 못해 자료 없이 작성했습니다. (자료: VIP 원장)")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "적용" })).toBeInTheDocument();
+  });
+
+  it("shows a warning line when similar replies could not be searched", async () => {
+    mockStreamOnce([{ type: "warning", reason: "similar_unavailable" }, { type: "text", text: FULL }]);
+    render(<SuggestButton inquiryId="inq-1" onApply={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
+
+    expect(await screen.findByText("유사 문의 검색이 안 돼 같은 유형의 최근 답변만 참고했습니다.")).toBeInTheDocument();
+  });
+
+  it("clears warnings when a new suggestion is requested", async () => {
+    mockStreamOnce([{ type: "warning", reason: "similar_unavailable" }, { type: "text", text: FULL }]);
+    render(<SuggestButton inquiryId="inq-1" onApply={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
+    expect(await screen.findByText(/유사 문의 검색이 안 돼/)).toBeInTheDocument();
+
+    mockStreamOnce([{ type: "text", text: FULL }]);
+    await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
+    await screen.findByRole("button", { name: "적용" });
+    expect(screen.queryByText(/유사 문의 검색이 안 돼/)).not.toBeInTheDocument();
   });
 });
