@@ -175,7 +175,9 @@ export function buildSuggestPrompt(input: SuggestInput): { system: string; userM
 
 **userMessage**: 지금처럼 게임·종류·유형·계정·회사·제목·본문 → `참고 템플릿` → `과거 문의와 답변` 구간. 과거 답변은 항목마다 `N) 문의 R-…: 제목` / `문의 요약: (excerpt)` / `보낸 답변:` / 본문. `inquiryNo`가 null인 대체 항목은 `N) 같은 유형의 최근 답변:` 뒤에 본문만.
 
-### 근거 분리 — 순수 함수
+### 근거 분리 — `lib/suggest-evidence.ts` (신규, 의존성 없음)
+
+`SuggestButton`(클라이언트 컴포넌트)이 import하므로 `openai`를 import하는 `lib/suggest.ts`와 분리한다. `lib/suggest.ts`는 여기서 구분선 상수를 가져다 규칙 문구에 쓴다.
 
 ```ts
 export const EVIDENCE_DELIMITER = "=== 근거 ===";
