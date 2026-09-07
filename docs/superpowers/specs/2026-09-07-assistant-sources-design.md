@@ -29,7 +29,7 @@
 - 자료별 켜고 끄기, 순서 바꾸기. 등록 순서대로 싣는다.
 - 자료 제목 자동 갱신. 구글에서 이름을 바꾸면 삭제 후 다시 등록한다.
 
-## 데이터 모델 (마이그레이션 0016)
+## 데이터 모델 (마이그레이션 0017 — 0016은 첨부 파일용으로 이미 쓰였다)
 
 ```sql
 create table if not exists assistant_sources (
@@ -64,7 +64,7 @@ type Proposal =
   | { kind: "append"; sourceId: string; sourceTitle: string; sheet: string; values: Record<string, string> };
 ```
 
-0016 이전에 저장된 `pending` 제안은 `sourceId`가 없다. 적용 라우트는 이를 `invalid_proposal`로 실패시킨다. 개발 중 데이터뿐이라 별도 변환은 하지 않는다.
+0017 이전에 저장된 `pending` 제안은 `sourceId`가 없다. 적용 라우트는 이를 `invalid_proposal`로 실패시킨다. 개발 중 데이터뿐이라 별도 변환은 하지 않는다.
 
 ## 자료 읽기
 
@@ -187,7 +187,7 @@ props의 `game.sheetId` 대신 `sources: SourceRow[]`를 받는다. 자료가 �
 
 ## 문서·설정
 
-- CLAUDE.md 8번 항목과 "운영 시트 어시스턴트 설정 절차"를 갱신: 시트·문서 여러 개, Cloud 콘솔에서 "Google Docs API"도 사용 설정, 0016 실행.
+- CLAUDE.md 8번 항목과 "운영 시트 어시스턴트 설정 절차"를 갱신: 시트·문서 여러 개, Cloud 콘솔에서 "Google Docs API"도 사용 설정, 0017 실행.
 - `.env.example`의 `GOOGLE_SERVICE_ACCOUNT_JSON` 주석에 "문서도 이 계정에 공유"를 덧붙인다.
 
 ## 테스트
@@ -207,6 +207,6 @@ props의 `game.sheetId` 대신 `sources: SourceRow[]`를 받는다. 자료가 �
 
 1. Google Cloud 콘솔 → 프로젝트 → "Google Sheets API"와 "Google Docs API" 사용 설정 → 서비스 계정 키(JSON).
 2. `GOOGLE_SERVICE_ACCOUNT_JSON`, `OPENAI_API_KEY` 설정 후 재배포.
-3. Supabase SQL Editor에서 `0015_assistant.sql`, `0016_assistant_sources.sql` 순서로 실행.
+3. Supabase SQL Editor에서 `0015_assistant.sql`, `0017_assistant_sources.sql` 순서로 실행.
 4. 관리자 페이지 → 게임 문의함 → "운영 어시스턴트" → "+ 자료 추가"에 시트·문서 URL을 넣는다. 그 전에 안내된 서비스 계정 이메일에 각 자료를 편집자로 공유한다.
 5. 시트는 "52009 VIP 몇이야" → "52009 VIP4로 올려줘" → 제안 카드 → [적용]. 문서는 "환불 정책이 뭐야"처럼 물어 근거에 문서 이름이 붙는지 확인한다.
