@@ -5,6 +5,14 @@ import { listGames } from "@/lib/categories";
 import { getConversation, insertMessage, listMessages, touchConversation, toHistory } from "@/lib/assistant-store";
 import { readSpreadsheet, serializeSheets, SheetError, type Proposal } from "@/lib/sheets";
 import { buildAssistantPrompt, formatToday, streamAssistant, type AssistantErrorReason } from "@/lib/assistant";
+import {
+  AttachmentError,
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_ATTACHMENT_TEXT_CHARS,
+  extractAttachmentText,
+  serializeAttachments,
+  type Attachment,
+} from "@/lib/attachments";
 
 type StreamEvent =
   | { type: "text"; text: string }
@@ -21,19 +29,24 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
   }
 
-  let parsed: unknown;
+  const input = await parseBody(request);
+  if (!input) {
+    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
+  }
+  const { content, files } = input;
+  if (!content && files.length === 0) {
+    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
+  }
+  if (files.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+    return NextResponse.json({ success: false, error: "too_many_files" }, { status: 400 });
+  }
+
+  let attachments: Attachment[];
   try {
-    parsed = await request.json();
-  } catch {
-    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
-  }
-  if (typeof parsed !== "object" || parsed === null) {
-    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
-  }
-  const body = parsed as { content?: unknown };
-  const content = typeof body.content === "string" ? body.content.trim() : "";
-  if (!content) {
-    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
+    attachments = await Promise.all(files.map((file) => extractAttachmentText(file)));
+  } catch (error) {
+    const reason = error instanceof AttachmentError ? error.reason : "file_unreadable";
+    return NextResponse.json({ success: false, error: reason }, { status: 400 });
   }
 
   const supabase = getSupabaseServerClient();
@@ -52,7 +65,21 @@ export async function POST(request: Request, { params }: { params: { id: string 
   const conversationId = conversation.id;
   const gameName = game.name;
 
-  const userMessage = await insertMessage(supabase, { conversationId, role: "user", content });
+  // 첨부는 대화 단위로 프롬프트에 쌓이므로 합계를 잰다. 넘치면 저장 전에 거절해
+  // 사용자가 파일을 빼고 다시 보낼 수 있게 한다.
+  const earlier = await listMessages(supabase, conversationId);
+  const earlierAttachments = earlier.flatMap((message) => message.attachments);
+  const totalChars = [...earlierAttachments, ...attachments].reduce((sum, attachment) => sum + attachment.text.length, 0);
+  if (attachments.length > 0 && totalChars > MAX_ATTACHMENT_TEXT_CHARS) {
+    return NextResponse.json({ success: false, error: "attachments_too_large" }, { status: 400 });
+  }
+
+  const userMessage = await insertMessage(supabase, {
+    conversationId,
+    role: "user",
+    content,
+    ...(attachments.length > 0 ? { attachments } : {}),
+  });
   if (!userMessage) {
     return NextResponse.json({ success: false, error: "save_failed" }, { status: 500 });
   }
@@ -67,8 +94,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return;
     }
 
-    const messages = await listMessages(supabase, conversationId);
-    const system = buildAssistantPrompt({ gameName, today: formatToday(), sheetText: serializeSheets(tabs) });
+    const messages = [...earlier, userMessage];
+    const system = buildAssistantPrompt({
+      gameName,
+      today: formatToday(),
+      sheetText: serializeSheets(tabs),
+      attachmentsText: serializeAttachments(messages.flatMap((message) => message.attachments)),
+    });
 
     let text = "";
     let failed = false;
@@ -118,6 +150,35 @@ export async function POST(request: Request, { params }: { params: { id: string 
       "Cache-Control": "no-cache, no-transform",
     },
   });
+}
+
+/**
+ * JSON(`{ content }`)과 multipart(`content` + `files`) 둘 다 받는다. 파일이 있을 때만
+ * 화면이 multipart로 보낸다. 형식이 틀리면 null.
+ */
+async function parseBody(request: Request): Promise<{ content: string; files: File[] } | null> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("multipart/form-data")) {
+    let form: FormData;
+    try {
+      form = await request.formData();
+    } catch {
+      return null;
+    }
+    const content = form.get("content");
+    const files = form.getAll("files").filter((entry): entry is File => entry instanceof File && entry.size > 0);
+    return { content: typeof content === "string" ? content.trim() : "", files };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = await request.json();
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const body = parsed as { content?: unknown };
+  return { content: typeof body.content === "string" ? body.content.trim() : "", files: [] };
 }
 
 function toNdjsonStream(events: AsyncGenerator<StreamEvent>): ReadableStream<Uint8Array> {

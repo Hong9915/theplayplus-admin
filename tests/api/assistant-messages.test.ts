@@ -36,6 +36,17 @@ function request(body: unknown) {
   return new Request("http://localhost/api/assistant/conversations/c1/messages", { method: "POST", body: JSON.stringify(body) });
 }
 
+function multipart(content: string, files: Array<{ name: string; text: string }>) {
+  const form = new FormData();
+  form.set("content", content);
+  for (const file of files) form.append("files", new File([file.text], file.name, { type: "text/plain" }));
+  return new Request("http://localhost/api/assistant/conversations/c1/messages", { method: "POST", body: form });
+}
+
+function userMessage(id: string, content: string, attachments: Array<{ name: string; size: number; text: string }>) {
+  return { id, conversationId: "c1", role: "user" as const, content, proposal: null, status: null, failureReason: null, appliedBy: null, appliedAt: null, attachments, createdAt: "" };
+}
+
 async function events(response: Response) {
   const out: unknown[] = [];
   for await (const event of readNdjson(response.body!)) out.push(event);
@@ -66,6 +77,7 @@ describe("POST /api/assistant/conversations/[id]/messages", () => {
       failureReason: null,
       appliedBy: null,
       appliedAt: null,
+      attachments: input.attachments ?? [],
       createdAt: "",
     }));
     vi.mocked(sheetsModule.readSpreadsheet).mockReset().mockResolvedValue(tabs);
@@ -144,6 +156,68 @@ describe("POST /api/assistant/conversations/[id]/messages", () => {
     expect(await events(response)).toEqual([{ type: "error", reason: "sheet_forbidden" }]);
     expect(storeModule.insertMessage).toHaveBeenCalledTimes(1);
     expect(assistantModule.streamAssistant).not.toHaveBeenCalled();
+  });
+
+  it("stores multipart attachments with the user message and puts their text in the prompt", async () => {
+    vi.mocked(assistantModule.streamAssistant).mockReturnValue(stream({ type: "text", text: "확인했습니다" }));
+
+    const response = await POST(multipart("이 파일 봐줘", [{ name: "보상.txt", text: "52009 VIP3" }]), { params: { id: "c1" } });
+
+    expect(await events(response)).toEqual([{ type: "text", text: "확인했습니다" }]);
+    expect(storeModule.insertMessage).toHaveBeenNthCalledWith(1, expect.anything(), {
+      conversationId: "c1",
+      role: "user",
+      content: "이 파일 봐줘",
+      attachments: [{ name: "보상.txt", size: 10, text: "52009 VIP3" }],
+    });
+    const args = vi.mocked(assistantModule.streamAssistant).mock.calls[0][0];
+    expect(args.system).toContain("# 첨부 파일");
+    expect(args.system).toContain("## 보상.txt\n52009 VIP3");
+  });
+
+  it("accepts a file with no text", async () => {
+    vi.mocked(assistantModule.streamAssistant).mockReturnValue(stream({ type: "text", text: "네" }));
+    const response = await POST(multipart("  ", [{ name: "a.txt", text: "x" }]), { params: { id: "c1" } });
+    expect(response.status).toBe(200);
+    expect(storeModule.insertMessage).toHaveBeenNthCalledWith(1, expect.anything(), expect.objectContaining({ role: "user", content: "" }));
+  });
+
+  it("rejects multipart with neither text nor files", async () => {
+    expect((await POST(multipart("", []), { params: { id: "c1" } })).status).toBe(400);
+    expect(storeModule.insertMessage).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported file types before saving anything", async () => {
+    const response = await POST(multipart("x", [{ name: "a.pdf", text: "x" }]), { params: { id: "c1" } });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: "unsupported_type" });
+    expect(storeModule.insertMessage).not.toHaveBeenCalled();
+  });
+
+  it("rejects more than five files", async () => {
+    const files = Array.from({ length: 6 }, (_, i) => ({ name: `f${i}.txt`, text: "x" }));
+    const response = await POST(multipart("x", files), { params: { id: "c1" } });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: "too_many_files" });
+  });
+
+  it("rejects files once the conversation's attachment text would exceed the cap", async () => {
+    vi.mocked(storeModule.listMessages).mockResolvedValue([userMessage("m0", "", [{ name: "big.txt", size: 1, text: "x".repeat(199_995) }])]);
+    const response = await POST(multipart("x", [{ name: "more.txt", text: "123456" }]), { params: { id: "c1" } });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: "attachments_too_large" });
+    expect(storeModule.insertMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps earlier attachments of the conversation in the prompt", async () => {
+    vi.mocked(storeModule.listMessages).mockResolvedValue([userMessage("m0", "먼저", [{ name: "old.txt", size: 3, text: "old" }])]);
+    vi.mocked(assistantModule.streamAssistant).mockReturnValue(stream({ type: "text", text: "네" }));
+
+    await events(await POST(request({ content: "다시" }), { params: { id: "c1" } }));
+
+    const args = vi.mocked(assistantModule.streamAssistant).mock.calls[0][0];
+    expect(args.system).toContain("## old.txt\nold");
+    expect(args.history).toHaveLength(2);
   });
 
   it("does not store the assistant text when the stream ends in error", async () => {
