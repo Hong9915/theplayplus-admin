@@ -279,19 +279,21 @@ Supabase(Postgres)에 저장하며 `theplayplus-contact`와 **동일한 프로�
 
 ### `inquiries` 주요 컬럼
 
-| 컬럼 | 설명 |
-|---|---|
-| `inquiry_no` | 접수번호 `R-YYYYMMDD-NNNN`. DB 트리거가 부여한다. |
-| `game_id` | 게임 참조. **nullable** — 게임과 무관한 서비스 문의가 있을 수 있다. |
-| `group_key` / `type_key` | 카테고리 키. FK가 아닌 문자열이다. |
-| `game_account` | 게임 계정. 계정 이력 매칭의 키. |
-| `status` | `new` / `in_progress` / `resolved` |
-| `priority` | `urgent` / `high` / `normal` / `low` (기본 `normal`) |
-| `priority_rank` | 정렬용 생성 컬럼 (urgent=0 … low=3). `priority`를 그대로 정렬하면 알파벳순이 되어 쓸모없다. |
-| `meta` | jsonb. 접수 폼이 보내는 부가 정보를 담고, 상세 화면이 자동 렌더한다. |
-| `draft_reply` | 작성 중인 답변 초안 |
-| `reply_content` / `replied_at` | 마지막 답변과 그 시각 |
-| `gmail_thread_id` | Gmail 스레드 연결 |
+| 컬럼 | 설명 | 도입 |
+|---|---|---|
+| `inquiry_no` | 접수번호 `R-YYYYMMDD-NNNN`. DB 트리거가 부여한다. | 0001 |
+| `game_id` | 게임 참조. **nullable** — 게임과 무관한 서비스 문의가 있을 수 있다. | 0001 |
+| `group_key` / `type_key` | 카테고리 키. FK가 아닌 문자열이다. | 0001 |
+| `game_account` | 게임 계정. 계정 이력 매칭의 키. | 0001 |
+| `status` | `new` / `in_progress` / `resolved` | 0001 |
+| `priority` | `urgent` / `high` / `normal` / `low` (기본 `normal`) | 0001 |
+| `priority_rank` | 정렬용 생성 컬럼 (urgent=0 … low=3). `priority`를 그대로 정렬하면 알파벳순이 되어 쓸모없다. | 0001 |
+| `meta` | jsonb. 접수 폼이 보내는 부가 정보를 담고, 상세 화면이 자동 렌더한다. | 0001 |
+| `draft_reply` | 작성 중인 답변 초안 | 0001 |
+| `reply_content` / `replied_at` | 마지막 답변과 그 시각 | 0001 |
+| `gmail_thread_id` | Gmail 스레드 연결 | 0001 |
+| `embedding` | 제목+본문 임베딩(`vector(1536)`, text-embedding-3-small). AI 답변 추천의 유사 문의 검색용 | 0020 |
+| `embedding_model` | `embedding`을 만든 모델명. 다르면 다시 계산 | 0020 |
 
 ### 접수번호 채번 규칙
 
