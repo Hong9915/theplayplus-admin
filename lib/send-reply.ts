@@ -128,6 +128,8 @@ export async function sendInquiryReply(supabase: SupabaseClient, input: SendRepl
           // 발송했으니 초안은 비운다.
           draft_reply: null,
           gmail_thread_id: gmailThreadId,
+          // 관리자가 답했으니 "읽지 않은 회신" 표시는 끝난 것으로 본다.
+          unread_reply_at: null,
         }
       : { gmail_thread_id: gmailThreadId };
 

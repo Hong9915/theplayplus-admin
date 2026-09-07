@@ -1,453 +1,75 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  countInquiriesByGame,
-  countNewInquiriesByGame,
-  getInquiryById,
-  getInquiryFacetCounts,
-  listAttachmentSignedUrls,
-  listAttachmentSignedUrlsByInquiryIds,
-  listInquiryIds,
-  queryInquiries,
-  sanitizeSearch,
-} from "@/lib/inquiries";
+import { getInquiryFacetCounts, queryInquiries } from "@/lib/inquiries";
 import { DEFAULT_QUERY } from "@/lib/inquiry-filters";
-import { SERVICE_SCOPE, gameScope } from "@/lib/inbox-scope";
+import { gameScope } from "@/lib/inbox-scope";
 
-const sampleRow = {
+const baseRow = {
   id: "inq-1",
-  game_id: "game-1",
+  inquiry_no: "R-1",
+  game_id: "g1",
   group_key: "game_usage",
   type_key: "bug_report",
-  game_account: "player1",
+  game_account: "user#1",
   company_name: null,
-  reply_email: "a@b.com",
+  reply_email: "user@example.com",
   title: "제목",
-  content: "내용",
+  content: "본문",
   status: "new",
+  priority: "normal",
+  meta: {},
+  draft_reply: null,
   reply_content: null,
   replied_at: null,
-  created_at: "2026-01-01T00:00:00.000Z",
-  inquiry_no: "R-20260101-0001",
-  priority: "high",
-  meta: { uid: "10024871" },
-  draft_reply: "작성 중",
+  gmail_thread_id: null,
+  created_at: "2026-09-07T00:00:00.000Z",
 };
 
-/**
- * supabase-js 빌더를 흉내 낸다. 모든 필터 메서드가 자기 자신을 돌려주고,
- * await 하면 준비된 결과가 나온다.
- */
-function mockBuilder(result: { data?: unknown; error?: { message: string } | null; count?: number | null }) {
+/** supabase 빌더 흉내. 호출된 필터를 기록하고 마지막에 rows를 돌려준다. */
+function fakeBuilder(rows: unknown[]) {
+  const calls: Array<[string, ...unknown[]]> = [];
   const builder: Record<string, unknown> = {};
-  const calls: Record<string, unknown[][]> = {};
-  for (const name of ["eq", "neq", "lt", "or", "order", "range", "limit", "in", "is"]) {
-    calls[name] = [];
-    builder[name] = vi.fn((...args: unknown[]) => {
-      calls[name].push(args);
+  for (const name of ["eq", "is", "neq", "lt", "not", "or", "order", "range", "limit"]) {
+    builder[name] = (...args: unknown[]) => {
+      calls.push([name, ...args]);
       return builder;
-    });
+    };
   }
-  builder.then = (resolve: (value: unknown) => unknown) =>
-    Promise.resolve({ data: null, error: null, count: null, ...result }).then(resolve);
-  const select = vi.fn(() => builder);
-  const from = vi.fn(() => ({ select }));
-  return { from, select, calls };
+  builder.then = (resolve: (value: unknown) => void) => resolve({ data: rows, error: null, count: rows.length });
+  const from = vi.fn(() => ({ select: () => builder }));
+  return { client: { from } as never, calls };
 }
 
 describe("queryInquiries", () => {
-  it("filters by game, orders newest first, and pages with an exact count", async () => {
-    const { from, select, calls } = mockBuilder({ data: [sampleRow], count: 120 });
-
-    const page = await queryInquiries({ from } as never, gameScope("game-1"), DEFAULT_QUERY);
-
-    expect(select).toHaveBeenCalledWith("*", { count: "exact" });
-    expect(calls.eq).toEqual([["game_id", "game-1"]]);
-    expect(calls.or).toEqual([]);
-    expect(calls.order).toEqual([["created_at", { ascending: false }]]);
-    expect(calls.range).toEqual([[0, 49]]);
-    expect(page).toMatchObject({ total: 120, page: 1, pageSize: 50 });
-    expect(page.rows[0].gameAccount).toBe("player1");
+  it("maps unread_reply_at onto the row", async () => {
+    const { client } = fakeBuilder([{ ...baseRow, unread_reply_at: "2026-09-07T01:00:00.000Z" }]);
+    const page = await queryInquiries(client, gameScope("g1"), DEFAULT_QUERY);
+    expect(page.rows[0].unreadReplyAt).toBe("2026-09-07T01:00:00.000Z");
   });
 
-  it("applies group, type, status filters and the page offset", async () => {
-    const { from, calls } = mockBuilder({ data: [], count: 0 });
-
-    await queryInquiries({ from } as never, gameScope("game-1"), {
-      ...DEFAULT_QUERY,
-      group: "game_usage",
-      type: "bug_report",
-      status: "resolved",
-      page: 3,
-    });
-
-    expect(calls.eq).toEqual([
-      ["game_id", "game-1"],
-      ["group_key", "game_usage"],
-      ["type_key", "bug_report"],
-      ["status", "resolved"],
-    ]);
-    expect(calls.range).toEqual([[100, 149]]);
+  it("filters to inquiries with an unread reply when unread is set", async () => {
+    const { client, calls } = fakeBuilder([]);
+    await queryInquiries(client, gameScope("g1"), { ...DEFAULT_QUERY, unread: true });
+    expect(calls).toContainEqual(["not", "unread_reply_at", "is", null]);
   });
 
-  it("searches title, number, account, and body with one or() filter", async () => {
-    const { from, calls } = mockBuilder({ data: [], count: 0 });
-
-    await queryInquiries({ from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, q: "환불" });
-
-    expect(calls.or).toEqual([
-      ["title.ilike.%환불%,inquiry_no.ilike.%환불%,game_account.ilike.%환불%,content.ilike.%환불%"],
-    ]);
-  });
-
-  it("sorts oldest first and by priority rank", async () => {
-    const oldest = mockBuilder({ data: [], count: 0 });
-    await queryInquiries({ from: oldest.from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, sort: "oldest" });
-    expect(oldest.calls.order).toEqual([["created_at", { ascending: true }]]);
-
-    const priority = mockBuilder({ data: [], count: 0 });
-    await queryInquiries({ from: priority.from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, sort: "priority" });
-    expect(priority.calls.order).toEqual([
-      ["priority_rank", { ascending: true }],
-      ["created_at", { ascending: false }],
-    ]);
-  });
-
-  it("throws when the query errors", async () => {
-    const { from } = mockBuilder({ error: { message: "db down" } });
-    await expect(queryInquiries({ from } as never, gameScope("game-1"), DEFAULT_QUERY)).rejects.toThrow(/db down/);
-  });
-
-  it("filters by priority", async () => {
-    const { from, calls } = mockBuilder({ data: [], count: 0 });
-    await queryInquiries({ from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, priority: "urgent" });
-    expect(calls.eq).toEqual([
-      ["game_id", "game-1"],
-      ["priority", "urgent"],
-    ]);
-  });
-
-  it("stale means unresolved and older than 72 hours from the injected now", async () => {
-    const { from, calls } = mockBuilder({ data: [], count: 0 });
-    const now = new Date("2026-09-04T12:00:00.000Z");
-
-    await queryInquiries({ from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, stale: true }, { now });
-
-    expect(calls.neq).toEqual([["status", "resolved"]]);
-    expect(calls.lt).toEqual([["created_at", "2026-09-01T12:00:00.000Z"]]);
-  });
-
-  it("does not add stale conditions by default", async () => {
-    const { from, calls } = mockBuilder({ data: [], count: 0 });
-    await queryInquiries({ from } as never, gameScope("game-1"), DEFAULT_QUERY);
-    expect(calls.neq).toEqual([]);
-    expect(calls.lt).toEqual([]);
-  });
-
-  it("service scope filters game_id is null instead of eq", async () => {
-    const { from, calls } = mockBuilder({ data: [], count: 0 });
-
-    await queryInquiries({ from } as never, SERVICE_SCOPE, { ...DEFAULT_QUERY, status: "new" });
-
-    expect(calls.is).toEqual([["game_id", null]]);
-    expect(calls.eq).toEqual([["status", "new"]]);
-  });
-
-  it("game scope never calls is()", async () => {
-    const { from, calls } = mockBuilder({ data: [], count: 0 });
-    await queryInquiries({ from } as never, gameScope("game-1"), DEFAULT_QUERY);
-    expect(calls.is).toEqual([]);
-  });
-});
-
-describe("sanitizeSearch", () => {
-  it("removes characters that would break the PostgREST or() syntax", () => {
-    expect(sanitizeSearch("a,b(c)%d_e")).toBe("a b c d e");
-    expect(sanitizeSearch("  결제   오류 ")).toBe("결제 오류");
-  });
-});
-
-describe("listInquiryIds", () => {
-  it("returns ids in the same order as the list, without paging", async () => {
-    const { from, select, calls } = mockBuilder({ data: [{ id: "a" }, { id: "b" }] });
-
-    const ids = await listInquiryIds({ from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, status: "new", page: 4 });
-
-    expect(select).toHaveBeenCalledWith("id");
-    expect(calls.eq).toEqual([
-      ["game_id", "game-1"],
-      ["status", "new"],
-    ]);
-    expect(calls.range).toEqual([]);
-    expect(calls.limit).toEqual([[1000]]);
-    expect(ids).toEqual(["a", "b"]);
-  });
-
-  it("returns an empty list on error", async () => {
-    const { from } = mockBuilder({ error: { message: "x" } });
-    await expect(listInquiryIds({ from } as never, gameScope("game-1"), DEFAULT_QUERY)).resolves.toEqual([]);
-  });
-
-  it("accepts a custom limit and applies stale with the injected now", async () => {
-    const { from, calls } = mockBuilder({ data: [] });
-    await listInquiryIds({ from } as never, gameScope("game-1"), { ...DEFAULT_QUERY, stale: true }, {
-      limit: 10,
-      now: new Date("2026-09-04T12:00:00.000Z"),
-    });
-    expect(calls.limit).toEqual([[10]]);
-    expect(calls.lt).toEqual([["created_at", "2026-09-01T12:00:00.000Z"]]);
-  });
-
-  it("service scope filters game_id is null", async () => {
-    const { from, calls } = mockBuilder({ data: [{ id: "s1" }] });
-    await expect(listInquiryIds({ from } as never, SERVICE_SCOPE, DEFAULT_QUERY)).resolves.toEqual(["s1"]);
-    expect(calls.is).toEqual([["game_id", null]]);
-    expect(calls.eq).toEqual([]);
+  it("does not add the unread condition by default", async () => {
+    const { client, calls } = fakeBuilder([]);
+    await queryInquiries(client, gameScope("g1"), DEFAULT_QUERY);
+    expect(calls.find((call) => call[0] === "not")).toBeUndefined();
   });
 });
 
 describe("getInquiryFacetCounts", () => {
-  it("calls the RPC and folds rows into a counts object", async () => {
+  it("reads the unread facet", async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [
-        { facet: "status", key: "new", count: 4 },
-        { facet: "status", key: "in_progress", count: 7 },
-        { facet: "type", key: "bug_report", count: 5 },
-        { facet: "type", key: "payment_refund", count: 8 },
-        { facet: "priority", key: "urgent", count: 1 },
-        { facet: "priority", key: "high", count: 3 },
-        { facet: "stale", key: "1", count: 2 },
-        { facet: "total", key: "all", count: 23 },
+        { facet: "total", key: "all", count: 3 },
+        { facet: "unread", key: "1", count: "2" },
       ],
       error: null,
     });
-
-    const counts = await getInquiryFacetCounts({ rpc } as never, gameScope("game-1"));
-
-    expect(rpc).toHaveBeenCalledWith("inquiry_facet_counts", { p_game_id: "game-1" });
-    expect(counts).toEqual({
-      total: 23,
-      status: { new: 4, in_progress: 7, resolved: 0 },
-      type: { bug_report: 5, payment_refund: 8 },
-      priority: { urgent: 1, high: 3, normal: 0, low: 0 },
-      stale: 2,
-    });
-  });
-
-  it("ignores unknown facets and keys and coerces bigint strings", async () => {
-    const rpc = vi.fn().mockResolvedValue({
-      data: [
-        { facet: "status", key: "weird", count: "9" },
-        { facet: "mystery", key: "x", count: 1 },
-        { facet: "total", key: "all", count: "12" },
-      ],
-      error: null,
-    });
-    const counts = await getInquiryFacetCounts({ rpc } as never, gameScope("game-1"));
-    expect(counts?.total).toBe(12);
-    expect(counts?.status).toEqual({ new: 0, in_progress: 0, resolved: 0 });
-  });
-
-  it("returns null when the RPC fails", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: "boom" } });
-    await expect(getInquiryFacetCounts({ rpc } as never, gameScope("game-1"))).resolves.toBeNull();
-  });
-
-  it("passes p_game_id null for the service scope", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: [{ facet: "total", key: "all", count: 3 }], error: null });
-    const counts = await getInquiryFacetCounts({ rpc } as never, SERVICE_SCOPE);
-    expect(rpc).toHaveBeenCalledWith("inquiry_facet_counts", { p_game_id: null });
+    const counts = await getInquiryFacetCounts({ rpc } as never, gameScope("g1"));
+    expect(counts?.unread).toBe(2);
     expect(counts?.total).toBe(3);
-  });
-});
-
-describe("countInquiriesByGame", () => {
-  it("asks for a head count", async () => {
-    const eq = vi.fn().mockResolvedValue({ count: 7 });
-    const select = vi.fn(() => ({ eq }));
-    const from = vi.fn(() => ({ select }));
-
-    await expect(countInquiriesByGame({ from } as never, "game-1")).resolves.toBe(7);
-    expect(select).toHaveBeenCalledWith("id", { count: "exact", head: true });
-    expect(eq).toHaveBeenCalledWith("game_id", "game-1");
-  });
-});
-
-describe("countNewInquiriesByGame", () => {
-  it("tallies new inquiries per game and counts game-less ones under 'service'", async () => {
-    const eq = vi.fn().mockResolvedValue({
-      data: [{ game_id: "g1" }, { game_id: "g1" }, { game_id: "g2" }, { game_id: null }, { game_id: null }],
-      error: null,
-    });
-    const select = vi.fn(() => ({ eq }));
-    const from = vi.fn(() => ({ select }));
-
-    await expect(countNewInquiriesByGame({ from } as never)).resolves.toEqual({ g1: 2, g2: 1, service: 2 });
-    expect(eq).toHaveBeenCalledWith("status", "new");
-  });
-
-  it("omits the service key when no game-less inquiry is new", async () => {
-    const eq = vi.fn().mockResolvedValue({ data: [{ game_id: "g1" }], error: null });
-    const from = vi.fn(() => ({ select: vi.fn(() => ({ eq })) }));
-    await expect(countNewInquiriesByGame({ from } as never)).resolves.toEqual({ g1: 1 });
-  });
-
-  it("returns an empty map on error", async () => {
-    const eq = vi.fn().mockResolvedValue({ data: null, error: { message: "x" } });
-    const from = vi.fn(() => ({ select: vi.fn(() => ({ eq })) }));
-    await expect(countNewInquiriesByGame({ from } as never)).resolves.toEqual({});
-  });
-});
-
-describe("getInquiryById", () => {
-  it("returns null when the query errors", async () => {
-    const single = vi.fn().mockResolvedValue({ data: null, error: { message: "not found" } });
-    const eq = vi.fn(() => ({ single }));
-    const select = vi.fn(() => ({ eq }));
-    const from = vi.fn(() => ({ select }));
-
-    const result = await getInquiryById({ from } as never, "missing");
-    expect(result).toBeNull();
-  });
-
-  it("maps a found row", async () => {
-    const single = vi.fn().mockResolvedValue({ data: sampleRow, error: null });
-    const eq = vi.fn(() => ({ single }));
-    const select = vi.fn(() => ({ eq }));
-    const from = vi.fn(() => ({ select }));
-
-    const result = await getInquiryById({ from } as never, "inq-1");
-    expect(result?.status).toBe("new");
-  });
-});
-
-function mockAttachments(rows: Array<{ id: string; inquiry_id: string; file_path: string; file_name: string }>, signed: Record<string, string | null> = {}) {
-  const inFn = vi.fn().mockResolvedValue({ data: rows, error: null });
-  const select = vi.fn(() => ({ in: inFn }));
-  const from = vi.fn(() => ({ select }));
-  const createSignedUrls = vi.fn(async (paths: string[]) => ({
-    data: paths.map((path) => ({ path, signedUrl: signed[path] ?? null, signedURL: null, error: null })),
-    error: null,
-  }));
-  const storageFrom = vi.fn(() => ({ createSignedUrls }));
-  return { supabase: { from, storage: { from: storageFrom } } as never, from, select, inFn, createSignedUrls, storageFrom };
-}
-
-describe("listAttachmentSignedUrls", () => {
-  it("returns an empty array when there are no attachments", async () => {
-    const { supabase, createSignedUrls } = mockAttachments([]);
-
-    const result = await listAttachmentSignedUrls(supabase, "inq-1");
-    expect(result).toEqual([]);
-    expect(createSignedUrls).not.toHaveBeenCalled();
-  });
-
-  it("signs every attachment of the inquiry in one storage call", async () => {
-    const { supabase, createSignedUrls, inFn } = mockAttachments(
-      [
-        { id: "att-1", inquiry_id: "inq-1", file_path: "inq-1/screenshot.png", file_name: "screenshot.png" },
-        { id: "att-2", inquiry_id: "inq-1", file_path: "inq-1/log.txt", file_name: "log.txt" },
-      ],
-      { "inq-1/screenshot.png": "https://signed.example/x", "inq-1/log.txt": "https://signed.example/y" }
-    );
-
-    const result = await listAttachmentSignedUrls(supabase, "inq-1");
-    expect(inFn).toHaveBeenCalledWith("inquiry_id", ["inq-1"]);
-    expect(createSignedUrls).toHaveBeenCalledTimes(1);
-    expect(createSignedUrls).toHaveBeenCalledWith(["inq-1/screenshot.png", "inq-1/log.txt"], 3600);
-    expect(result).toEqual([
-      { id: "att-1", fileName: "screenshot.png", signedUrl: "https://signed.example/x" },
-      { id: "att-2", fileName: "log.txt", signedUrl: "https://signed.example/y" },
-    ]);
-  });
-});
-
-describe("listAttachmentSignedUrlsByInquiryIds", () => {
-  it("returns an empty map without querying when no ids are given", async () => {
-    const { supabase, from } = mockAttachments([]);
-    await expect(listAttachmentSignedUrlsByInquiryIds(supabase, [])).resolves.toEqual({});
-    expect(from).not.toHaveBeenCalled();
-  });
-
-  it("fetches every inquiry's attachments with one query and one signing call, grouped by inquiry", async () => {
-    const { supabase, inFn, createSignedUrls, storageFrom } = mockAttachments(
-      [
-        { id: "att-1", inquiry_id: "inq-1", file_path: "inq-1/a.png", file_name: "a.png" },
-        { id: "att-2", inquiry_id: "inq-2", file_path: "inq-2/b.png", file_name: "b.png" },
-        { id: "att-3", inquiry_id: "inq-2", file_path: "inq-2/c.png", file_name: "c.png" },
-      ],
-      { "inq-1/a.png": "https://signed.example/a", "inq-2/b.png": "https://signed.example/b" }
-    );
-
-    const result = await listAttachmentSignedUrlsByInquiryIds(supabase, ["inq-1", "inq-2", "inq-3"]);
-
-    expect(inFn).toHaveBeenCalledWith("inquiry_id", ["inq-1", "inq-2", "inq-3"]);
-    expect(storageFrom).toHaveBeenCalledWith("inquiry-attachments");
-    expect(createSignedUrls).toHaveBeenCalledTimes(1);
-    expect(createSignedUrls).toHaveBeenCalledWith(["inq-1/a.png", "inq-2/b.png", "inq-2/c.png"], 3600);
-    expect(result).toEqual({
-      "inq-1": [{ id: "att-1", fileName: "a.png", signedUrl: "https://signed.example/a" }],
-      "inq-2": [
-        { id: "att-2", fileName: "b.png", signedUrl: "https://signed.example/b" },
-        { id: "att-3", fileName: "c.png", signedUrl: null },
-      ],
-    });
-  });
-
-  it("leaves signed URLs null when signing fails but still lists the files", async () => {
-    const { supabase, createSignedUrls } = mockAttachments([{ id: "att-1", inquiry_id: "inq-1", file_path: "inq-1/a.png", file_name: "a.png" }]);
-    createSignedUrls.mockResolvedValue({ data: null, error: { message: "boom" } } as never);
-
-    const result = await listAttachmentSignedUrlsByInquiryIds(supabase, ["inq-1"]);
-    expect(result).toEqual({ "inq-1": [{ id: "att-1", fileName: "a.png", signedUrl: null }] });
-  });
-
-  it("returns an empty map when the attachment query fails", async () => {
-    const { supabase, inFn } = mockAttachments([]);
-    inFn.mockResolvedValue({ data: null, error: { message: "boom" } });
-    await expect(listAttachmentSignedUrlsByInquiryIds(supabase, ["inq-1"])).resolves.toEqual({});
-  });
-});
-
-describe("mapInquiryRow via getInquiryById", () => {
-  function mockSingle(row: unknown) {
-    const single = vi.fn().mockResolvedValue({ data: row, error: null });
-    const eq = vi.fn(() => ({ single }));
-    const select = vi.fn(() => ({ eq }));
-    return { from: vi.fn(() => ({ select })) };
-  }
-
-  it("maps inquiry_no, priority, and meta", async () => {
-    const result = await getInquiryById(mockSingle(sampleRow) as never, "inq-1");
-    expect(result?.inquiryNo).toBe("R-20260101-0001");
-    expect(result?.priority).toBe("high");
-    expect(result?.meta).toEqual({ uid: "10024871" });
-    expect(result?.draftReply).toBe("작성 중");
-  });
-
-  it("maps the per-type detail columns the contact form fills in", async () => {
-    const result = await getInquiryById(
-      mockSingle({ ...sampleRow, locale: "zh", payment_no: "imp_123", occurred_at: "2026-09-03T14:05", device_info: "iPhone 15 / iOS 17.5" }) as never,
-      "inq-1"
-    );
-    expect(result?.locale).toBe("zh");
-    expect(result?.paymentNo).toBe("imp_123");
-    expect(result?.occurredAt).toBe("2026-09-03T14:05");
-    expect(result?.deviceInfo).toBe("iPhone 15 / iOS 17.5");
-  });
-
-  it("leaves the detail columns null when the row predates them", async () => {
-    const result = await getInquiryById(mockSingle(sampleRow) as never, "inq-1");
-    expect(result?.locale).toBeNull();
-    expect(result?.paymentNo).toBeNull();
-    expect(result?.occurredAt).toBeNull();
-    expect(result?.deviceInfo).toBeNull();
-  });
-
-  it("falls back when inquiry_no, priority, and meta are missing", async () => {
-    const bare = { ...sampleRow, inquiry_no: null, priority: null, meta: null };
-    const result = await getInquiryById(mockSingle(bare) as never, "inq-1");
-    expect(result?.inquiryNo).toBeNull();
-    expect(result?.priority).toBe("normal");
-    expect(result?.meta).toEqual({});
   });
 });

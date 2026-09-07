@@ -40,6 +40,11 @@ export interface InboundEmail {
   sentAt: string;
 }
 
+/** 메일함 전체에서 찾은 회신. 어느 문의인지 스레드 id로 맞춘다. */
+export interface InboundEmailWithThread extends InboundEmail {
+  threadId: string;
+}
+
 /**
  * 답변이 나가는 메일함. 게임 문의는 help@, 서비스 문의는 info@처럼 계정이
  * 다르므로 스코프 종류(InboxScope.kind)와 같은 값으로 고른다.
@@ -332,22 +337,90 @@ export async function fetchInboundReplies(threadId: string, mailbox: Mailbox): P
 
   const inbound: InboundEmail[] = [];
   for (const message of messages) {
-    const headers = message.payload?.headers;
-    const fromEmail = extractAddress(header(headers, "From"));
-    if (fromEmail === senderAddress) continue;
-    if (!message.id) continue;
-
-    const body = stripQuotedReply(extractPlainText(message.payload));
-    const internalDate = message.internalDate ? Number(message.internalDate) : NaN;
-    const sentAt = Number.isFinite(internalDate) ? new Date(internalDate).toISOString() : new Date().toISOString();
-
-    inbound.push({
-      gmailMessageId: message.id,
-      rfcMessageId: header(headers, "Message-ID"),
-      fromEmail,
-      body,
-      sentAt,
-    });
+    const parsed = parseInboundMessage(message, senderAddress);
+    if (parsed) inbound.push(parsed);
   }
   return inbound;
+}
+
+/**
+ * Gmail 메시지 하나를 InboundEmail로 바꾼다. 우리 발신 주소에서 나간 메일이거나
+ * id가 없으면 null.
+ */
+function parseInboundMessage(message: gmail_v1.Schema$Message, senderAddress: string): InboundEmail | null {
+  const headers = message.payload?.headers;
+  const fromEmail = extractAddress(header(headers, "From"));
+  if (fromEmail === senderAddress) return null;
+  if (!message.id) return null;
+
+  const body = stripQuotedReply(extractPlainText(message.payload));
+  const internalDate = message.internalDate ? Number(message.internalDate) : NaN;
+  const sentAt = Number.isFinite(internalDate) ? new Date(internalDate).toISOString() : new Date().toISOString();
+
+  return {
+    gmailMessageId: message.id,
+    rfcMessageId: header(headers, "Message-ID"),
+    fromEmail,
+    body,
+    sentAt,
+  };
+}
+
+/** 한 번의 동기화에서 훑는 메일 상한. 넘치면 다음 실행이 이어서 본다. */
+const LIST_INBOUND_LIMIT = 500;
+const LIST_PAGE_SIZE = 100;
+
+export interface InboundMessageRef {
+  id: string;
+  threadId: string;
+}
+
+/**
+ * 메일함 하나를 읽는 핸들. 회신 자동 동기화가 쓴다. OAuth 클라이언트를 한 번만
+ * 만들어 메시지마다 토큰을 새로 받지 않는다. gmail.readonly 스코프가 필요하다.
+ */
+export interface MailboxReader {
+  /** 이 메일함의 발신 주소. 서비스 계정이 게임 계정으로 대체되면 같은 값이 나온다. */
+  sender: string;
+  /**
+   * `since` 이후 받은 메일의 id와 스레드 id만 가져온다. 본문은 안 읽으므로
+   * 호출부가 스레드로 문의를 먼저 맞춰 보고 필요한 것만 getInboundMessage로 연다.
+   * Gmail 검색의 after:는 초 단위 epoch만 받는다.
+   */
+  listInboundIdsSince(since: Date): Promise<InboundMessageRef[]>;
+  /** 메일 하나를 본문까지 읽는다. 우리 발신 주소에서 나간 메일이면 null. */
+  getInboundMessage(id: string): Promise<InboundEmailWithThread | null>;
+}
+
+export function openMailbox(mailbox: Mailbox): MailboxReader {
+  const { gmail, sender } = getGmailClient(mailbox);
+  const senderAddress = sender.trim().toLowerCase();
+
+  return {
+    sender,
+    async listInboundIdsSince(since) {
+      const q = `after:${Math.floor(since.getTime() / 1000)} -from:${senderAddress}`;
+      const refs: InboundMessageRef[] = [];
+      let pageToken: string | undefined;
+      do {
+        const response = await gmail.users.messages.list({
+          userId: "me",
+          q,
+          maxResults: LIST_PAGE_SIZE,
+          ...(pageToken ? { pageToken } : {}),
+        });
+        for (const entry of response.data.messages ?? []) {
+          if (entry.id && entry.threadId) refs.push({ id: entry.id, threadId: entry.threadId });
+        }
+        pageToken = response.data.nextPageToken ?? undefined;
+      } while (pageToken && refs.length < LIST_INBOUND_LIMIT);
+      return refs;
+    },
+    async getInboundMessage(id) {
+      const response = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+      const parsed = parseInboundMessage(response.data, senderAddress);
+      if (!parsed || !response.data.threadId) return null;
+      return { ...parsed, threadId: response.data.threadId };
+    },
+  };
 }

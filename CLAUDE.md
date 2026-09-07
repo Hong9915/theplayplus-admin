@@ -15,7 +15,9 @@ THE PLAY+ 고객지원 관리자 페이지. `theplayplus-contact`(문의 접수 
 
 8. **대화 번역** — 대화 열의 말풍선(문의 본문·이메일 회신·보낸 답변, 내부 메모 제외)을 우클릭하면 "한국어로 번역" / "중국어(간체)로 번역" 메뉴가 뜨고, 번역문이 원문 아래에 이어 붙는다(`components/inbox/TranslatableBody.tsx`). `POST /api/inquiries/{id}/translate`가 DB의 원문을 읽어 DeepL(`lib/deepl.ts`, `DEEPL_API_KEY`, `:fx` 키면 무료 엔드포인트)로 번역하고 `inquiries.translations` / `inquiry_messages.translations` jsonb(`{"ko":…, "zh":…}`, 마이그레이션 0015)에 언어별로 저장해 다시 열어도 남는다(`lib/translations.ts`). 원문이 이미 그 언어면 저장하지 않고 안내만 한다. 저장된 언어는 메뉴가 숨기기/다시 번역으로 바뀐다.
 
-상세 설계는 `docs/superpowers/specs/2026-09-01-admin-panel-design.md`, 인박스 화면은 `docs/superpowers/specs/2026-09-03-inbox-layout-design.md`, 자동 답변은 `docs/superpowers/specs/2026-09-03-auto-reply-design.md` 참고.
+9. **사용자 회신 자동 동기화** — 관리자가 "회신 확인"을 누르지 않아도 Supabase `pg_cron` 잡 `reply-sync-run`이 5분마다 `/api/replies/sync`를 부르고(마이그레이션 0017, 인증은 자동 답변과 같은 `x-webhook-secret`), 발신 메일함(help@, info@)마다 "마지막 확인 이후 받은 메일"을 `messages.list`로 한 번에 가져와 스레드 id로 문의에 맞춰 `inquiry_messages`에 inbound로 넣는다(`lib/reply-sync.ts`, `lib/gmail.ts`의 `openMailbox`). 마지막 확인 시각은 `gmail_sync_state`에 메일함별로 저장하고 10분 앞에서 다시 훑으며(중복은 `gmail_message_id` 유니크 인덱스가 거름), 첫 실행은 24시간 전부터 본다. 서비스 계정이 게임 계정으로 대체되면 한 번만 읽는다. 새 회신이 들어온 문의는 `inquiries.unread_reply_at`이 채워져 목록에 "회신 옴" 배지, 문의함 보기에 "회신 도착"(URL `unread=1`, 건수는 RPC의 `unread` 항목)으로 보이고, 관리자가 그 문의를 열면(`MarkReadOnOpen` → `/api/inquiries/{id}/mark-read`) 또는 수동 답변을 보내면 비워진다. 상태는 바꾸지 않고 Slack 알림도 없다(붙이려면 sync 라우트에서 `added`를 보면 된다). Gmail 조회 실패는 확인 시각을 갱신하지 않아 다음 실행이 다시 본다. "회신 확인" 버튼은 즉시 확인용으로 그대로 있다.
+
+상세 설계는 `docs/superpowers/specs/2026-09-01-admin-panel-design.md`, 인박스 화면은 `docs/superpowers/specs/2026-09-03-inbox-layout-design.md`, 자동 답변은 `docs/superpowers/specs/2026-09-03-auto-reply-design.md`, 회신 동기화는 `docs/superpowers/specs/2026-09-07-reply-sync-design.md` 참고.
 
 ## 기술 스택
 
@@ -39,6 +41,12 @@ THE PLAY+ 고객지원 관리자 페이지. `theplayplus-contact`(문의 접수 
 3. 예전 방식의 Supabase 웹훅(`inquiries` INSERT → `/api/auto-reply/inquiry`)이 등록돼 있으면 지운다. 그 라우트는 없어졌다
 4. 관리자 앱의 게임별 "답변 템플릿" 화면에서 유형별 템플릿을 만들고 "자동 발송 켜기"를 누른다. 같은 유형에 다른 템플릿을 켜면 이전 것은 자동으로 꺼진다
 5. 접수 폼에서 테스트 문의를 넣고 30분~1시간 뒤 메일이 오는지, 문의함 타임라인에 "자동 발송"으로 보이는지 확인. 실행 기록은 `select * from cron.job_run_details order by start_time desc limit 20;`
+
+## 회신 자동 동기화 설정 절차
+
+1. 두 발신 계정(help@, info@)의 refresh token에 `gmail.readonly` 스코프가 있는지 확인한다. 없으면 `scripts/get-gmail-refresh-token.js`로 다시 발급해 환경변수를 바꾼다
+2. 마이그레이션 `0017_reply_sync.sql`을 실행한다. 컬럼·표·건수 RPC를 만들고 `pg_cron` 잡 `reply-sync-run`이 5분마다 `https://admin.theplayplus.com/api/replies/sync`를 호출하게 등록한다. Vault의 `inquiry_webhook_secret`은 자동 답변 설정 때 넣은 것을 그대로 쓴다
+3. 테스트 문의에 답변을 보내고 그 메일에 회신한 뒤 5분 안에 목록에 "회신 옴"이 뜨는지 확인. 실행 기록은 `select * from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'reply-sync-run') order by start_time desc limit 20;`
 
 ## 컨벤션
 
