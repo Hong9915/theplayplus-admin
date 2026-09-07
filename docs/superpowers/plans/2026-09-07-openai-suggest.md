@@ -19,7 +19,7 @@
 - 유사 답변: 상위 5건, 유사도 0.35 이상. 2건 미만이면 같은 유형 최근 3건으로 보충.
 - 자료: 게임 문의만, `listSources` → `loadSources` → `serializeSources` 그대로 재사용. 서비스 문의는 `sourcesText = ""`.
 - 근거 구분선: `=== 근거 ===`. 화면은 구분선 앞만 적용한다.
-- 마이그레이션 번호: 어시스턴트 0015→0017, 0016→0018, 0017→0019. 임베딩 0020.
+- 마이그레이션 번호: 어시스턴트 0015→0017, 0016→0018, 0017→0019. 임베딩 0021.
 - 테스트: `npx vitest run <파일>`로 개별 실행, 태스크 끝마다 커밋. 커밋 메시지 끝에 아래 두 줄을 붙인다.
 
 ```
@@ -34,7 +34,7 @@ Claude-Session: https://claude.ai/code/session_01HzkFZximGaiVZjY3gauArg
 | 파일 | 역할 |
 |---|---|
 | `supabase/migrations/0017_assistant.sql` 등 (이름 변경) | 어시스턴트 마이그레이션 번호 정리 |
-| `supabase/migrations/0020_inquiry_embeddings.sql` (신규) | pgvector 확장, `inquiries.embedding`/`embedding_model`, HNSW 인덱스, `match_answered_inquiries` RPC |
+| `supabase/migrations/0021_inquiry_embeddings.sql` (신규) | pgvector 확장, `inquiries.embedding`/`embedding_model`, HNSW 인덱스, `match_answered_inquiries` RPC |
 | `lib/embeddings.ts` (신규) | 임베딩 텍스트 규칙, OpenAI embeddings 호출, 문의 임베딩 보장 |
 | `lib/replies.ts` (수정) | `PastReply`, 유사 답변 RPC 조회, 최근 답변 보충 병합 |
 | `lib/suggest-evidence.ts` (신규) | 구분선 상수, `splitSuggestion` (클라이언트에서도 import) |
@@ -98,10 +98,10 @@ git commit -m "chore: 어시스턴트 마이그레이션을 0017~0019로 옮겨 
 
 ---
 
-### Task 2: 마이그레이션 0020 — pgvector 컬럼과 유사 문의 RPC
+### Task 2: 마이그레이션 0021 — pgvector 컬럼과 유사 문의 RPC
 
 **Files:**
-- Create: `supabase/migrations/0020_inquiry_embeddings.sql`
+- Create: `supabase/migrations/0021_inquiry_embeddings.sql`
 - Modify: `docs/PRD.md` (테이블 표 아래 `inquiries` 주요 컬럼 절, 마이그레이션 목록이 있으면 거기)
 
 **Interfaces:**
@@ -185,8 +185,8 @@ $$;
 `docs/PRD.md`에서 `### \`inquiries\` 주요 컬럼` 절을 찾아(Task 1 이후 줄 번호가 달라질 수 있으니 grep) 그 표 끝에 다음 두 행을 붙인다. 표 형식은 그 절의 기존 행을 따른다.
 
 ```markdown
-| `embedding` | 제목+본문 임베딩(`vector(1536)`, text-embedding-3-small). AI 답변 추천의 유사 문의 검색용 | 0020 |
-| `embedding_model` | `embedding`을 만든 모델명. 다르면 다시 계산 | 0020 |
+| `embedding` | 제목+본문 임베딩(`vector(1536)`, text-embedding-3-small). AI 답변 추천의 유사 문의 검색용 | 0021 |
+| `embedding_model` | `embedding`을 만든 모델명. 다르면 다시 계산 | 0021 |
 ```
 
 - [ ] **Step 3: SQL 문법 확인**
@@ -196,8 +196,8 @@ $$;
 - [ ] **Step 4: 커밋**
 
 ```bash
-git add supabase/migrations/0020_inquiry_embeddings.sql docs/PRD.md
-git commit -m "feat: 문의 임베딩 컬럼과 유사 문의 RPC (마이그레이션 0020)"
+git add supabase/migrations/0021_inquiry_embeddings.sql docs/PRD.md
+git commit -m "feat: 문의 임베딩 컬럼과 유사 문의 RPC (마이그레이션 0021)"
 ```
 
 ---
@@ -640,7 +640,7 @@ interface MatchRow {
 }
 
 /**
- * 같은 스코프에서 내용이 비슷한, 답변이 있는 과거 문의(마이그레이션 0020의 RPC).
+ * 같은 스코프에서 내용이 비슷한, 답변이 있는 과거 문의(마이그레이션 0021의 RPC).
  * 임베딩이 없는 문의는 RPC가 걸러낸다. 오류·빈 결과는 []로 돌려 호출부가
  * 최근 답변으로 보충하게 한다.
  */
@@ -2174,7 +2174,7 @@ git commit -m "feat: 답변 완료 문의 임베딩 백필 스크립트"
 8번(운영 시트 어시스턴트) 뒤에 9번을 추가한다.
 
 ```markdown
-9. **AI 답변 추천** — 대화 열의 "AI 답변 추천"이 `POST /api/inquiries/{id}/suggest`로 답변 초안을 스트리밍한다(NDJSON, `lib/suggest.ts`). 모델은 어시스턴트와 같은 OpenAI(`OPENAI_API_KEY`, `OPENAI_MODEL` 기본 `gpt-5-mini`, `reasoning_effort: minimal`). 근거 세 가지를 프롬프트에 넣는다: (1) 유형 템플릿, (2) **유사 과거 답변** — 문의 제목+본문을 `text-embedding-3-small`로 임베딩해 `inquiries.embedding`(pgvector, 마이그레이션 0020)에 저장하고 `match_answered_inquiries` RPC로 같은 스코프(게임 하나 또는 서비스 문의)에서 유사도 0.35 이상 상위 5건의 "문의 요약 + 첫 수동 답변"을 가져오며 2건 미만이면 같은 유형 최근 3건으로 보충(`lib/embeddings.ts`, `lib/replies.ts`), (3) **운영 자료** — 게임 문의면 어시스턴트에 연결된 시트·문서 전부를 `loadSources`로 읽어 system 프롬프트 뒤에 싣는다(서비스 문의는 없음). 임베딩은 추천 클릭 시와 수동 답변 발송 시 채우고, 기존 문의는 `scripts/backfill-inquiry-embeddings.js`로 한 번 채운다. 모델은 본문 뒤에 `=== 근거 ===` 구분선과 참고 자료 목록을 쓰고, 화면은 본문만 적용하며 근거는 미리보기 아래에 보여준다(`lib/suggest-evidence.ts`). 자료 읽기 실패·임베딩 실패는 `warning` 이벤트로 본문보다 먼저 내려가고 추천은 계속 만든다. 막히는 건 API 키 없음뿐이다. 설계는 `docs/superpowers/specs/2026-09-07-openai-suggest-design.md`.
+9. **AI 답변 추천** — 대화 열의 "AI 답변 추천"이 `POST /api/inquiries/{id}/suggest`로 답변 초안을 스트리밍한다(NDJSON, `lib/suggest.ts`). 모델은 어시스턴트와 같은 OpenAI(`OPENAI_API_KEY`, `OPENAI_MODEL` 기본 `gpt-5-mini`, `reasoning_effort: minimal`). 근거 세 가지를 프롬프트에 넣는다: (1) 유형 템플릿, (2) **유사 과거 답변** — 문의 제목+본문을 `text-embedding-3-small`로 임베딩해 `inquiries.embedding`(pgvector, 마이그레이션 0021)에 저장하고 `match_answered_inquiries` RPC로 같은 스코프(게임 하나 또는 서비스 문의)에서 유사도 0.35 이상 상위 5건의 "문의 요약 + 첫 수동 답변"을 가져오며 2건 미만이면 같은 유형 최근 3건으로 보충(`lib/embeddings.ts`, `lib/replies.ts`), (3) **운영 자료** — 게임 문의면 어시스턴트에 연결된 시트·문서 전부를 `loadSources`로 읽어 system 프롬프트 뒤에 싣는다(서비스 문의는 없음). 임베딩은 추천 클릭 시와 수동 답변 발송 시 채우고, 기존 문의는 `scripts/backfill-inquiry-embeddings.js`로 한 번 채운다. 모델은 본문 뒤에 `=== 근거 ===` 구분선과 참고 자료 목록을 쓰고, 화면은 본문만 적용하며 근거는 미리보기 아래에 보여준다(`lib/suggest-evidence.ts`). 자료 읽기 실패·임베딩 실패는 `warning` 이벤트로 본문보다 먼저 내려가고 추천은 계속 만든다. 막히는 건 API 키 없음뿐이다. 설계는 `docs/superpowers/specs/2026-09-07-openai-suggest-design.md`.
 ```
 
 "상세 설계는 …" 줄 끝에 `, AI 답변 추천은 \`docs/superpowers/specs/2026-09-07-openai-suggest-design.md\``를 덧붙인다.
@@ -2187,7 +2187,7 @@ git commit -m "feat: 답변 완료 문의 임베딩 백필 스크립트"
 ## AI 답변 추천 설정 절차
 
 1. `OPENAI_API_KEY`가 설정돼 있어야 한다(어시스턴트와 공유). Gemini 키는 더 이상 쓰지 않는다
-2. Supabase SQL Editor에서 `0020_inquiry_embeddings.sql`을 실행한다. pgvector 확장, `inquiries.embedding`·`embedding_model` 열, HNSW 인덱스, `match_answered_inquiries` RPC를 만든다
+2. Supabase SQL Editor에서 `0021_inquiry_embeddings.sql`을 실행한다. pgvector 확장, `inquiries.embedding`·`embedding_model` 열, HNSW 인덱스, `match_answered_inquiries` RPC를 만든다
 3. 로컬에서 `.env.local`에 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`를 두고 `node scripts/backfill-inquiry-embeddings.js`를 한 번 실행해 답변이 있는 기존 문의의 임베딩을 채운다. 다시 실행하면 남은 것만 처리한다
 4. 문의함에서 "AI 답변 추천"을 눌러 미리보기 아래 "참고한 자료"에 시트·과거 답변이 보이는지, 자료 읽기 실패 시 노란 안내가 뜨는지 확인한다
 ```
@@ -2218,7 +2218,7 @@ git commit -m "docs: AI 답변 추천(OpenAI·유사 답변·운영 자료) 기�
 
 ## 실행 후 확인(사람이 한다)
 
-1. Supabase에서 0020 실행 → 백필 스크립트 실행.
+1. Supabase에서 0021 실행 → 백필 스크립트 실행.
 2. 자료가 연결된 게임의 문의에서 추천 → 근거 목록에 시트 행이 보이는지, 시트 사실이 본문에 들어갔는지.
 3. 서비스 문의에서 추천 → 자료 경고 없이 동작.
 4. `GOOGLE_SERVICE_ACCOUNT_JSON`을 잠시 비우고 추천 → "운영 자료를 읽지 못해…" 안내가 뜨고 본문은 나오는지.

@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { InquiryPage, InquiryRow, InquiryStatus } from "@/lib/inquiries";
 import type { CategoryLabelMaps } from "@/lib/categories";
 import { SORT_OPTIONS, inboxHref, inquiryHref, type InquiryListQuery } from "@/lib/inquiry-filters";
 import type { InboxScope } from "@/lib/inbox-scope";
 import StatusBadge from "@/components/ui/StatusBadge";
+import StatusMessage from "@/components/ui/StatusMessage";
 import { formatElapsed } from "@/lib/format";
 
 const STATUS_OPTIONS: Array<{ value: InquiryStatus; label: string }> = [
@@ -22,10 +24,12 @@ const PRIORITY_MARK: Partial<Record<InquiryRow["priority"], { label: string; cla
 };
 
 const SELECT =
-  "bg-panel border border-line rounded-lg px-2 py-1 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-colors";
+  "bg-panel border border-line rounded-lg px-2 py-1 text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent transition-colors";
+
+const PAGE_BTN = "border border-line rounded-lg px-2 py-0.5 transition-colors";
 
 function hasFilter(query: InquiryListQuery): boolean {
-  return Boolean(query.group || query.type || query.status || query.priority || query.stale || query.q);
+  return Boolean(query.group || query.type || query.status || query.priority || query.stale || query.unread || query.q);
 }
 
 function firstLine(content: string): string {
@@ -39,6 +43,7 @@ export default function InboxList({
   labels,
   selectedId,
   viewLabel,
+  now = Date.now(),
 }: {
   scope: InboxScope;
   page: InquiryPage;
@@ -47,12 +52,18 @@ export default function InboxList({
   selectedId: string | null;
   /** 머리에 보여줄 현재 보기 이름 (접수, 처리중, 전체 …). */
   viewLabel: string;
+  /**
+   * 경과 시간의 기준 시각(ms). 서버가 렌더한 값을 그대로 넘겨야 hydration 때 분 경계를
+   * 넘어 서버·클라이언트 표시가 어긋나지 않는다.
+   */
+  now?: number;
 }) {
   const router = useRouter();
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<InquiryStatus>("resolved");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const [bulkFailed, setBulkFailed] = useState(false);
   // 클릭한 문의를 서버 응답 전에 먼저 강조한다. 서버가 그 문의를 선택으로 돌려주면 지운다.
   const [pendingId, setPendingId] = useState<string | null>(null);
 
@@ -60,6 +71,7 @@ export default function InboxList({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const firstIndex = total === 0 ? 0 : (query.page - 1) * pageSize + 1;
   const lastIndex = Math.min(total, query.page * pageSize);
+  const reference = new Date(now);
 
   // 서버가 준 목록이 바뀌면 체크는 의미를 잃는다.
   useEffect(() => {
@@ -72,15 +84,17 @@ export default function InboxList({
 
   const shownId = pendingId ?? selectedId;
 
-  function open(inquiryId: string) {
+  function markPending(inquiryId: string) {
     if (inquiryId === selectedId) return;
     setPendingId(inquiryId);
-    router.push(inquiryHref(scope, inquiryId, query));
   }
 
-  function navigate(next: Partial<InquiryListQuery>, resetPage = true) {
-    const merged: InquiryListQuery = { ...query, ...next, page: resetPage ? 1 : next.page ?? query.page };
-    router.replace(inboxHref(scope, selectedId, merged));
+  function navigate(next: Partial<InquiryListQuery>) {
+    router.replace(inboxHref(scope, selectedId, { ...query, ...next, page: 1 }));
+  }
+
+  function pageHref(pageNo: number): string {
+    return inboxHref(scope, selectedId, { ...query, page: pageNo });
   }
 
   const allChecked = rows.length > 0 && rows.every((row) => checked.has(row.id));
@@ -102,6 +116,7 @@ export default function InboxList({
     if (checked.size === 0) return;
     setBulkBusy(true);
     setBulkMessage(null);
+    setBulkFailed(false);
 
     let json: { success: boolean; updated?: number };
     try {
@@ -112,12 +127,14 @@ export default function InboxList({
       json = await response.json();
     } catch {
       setBulkBusy(false);
+      setBulkFailed(true);
       setBulkMessage("상태 변경에 실패했습니다.");
       return;
     }
     setBulkBusy(false);
 
     if (!json.success) {
+      setBulkFailed(true);
       setBulkMessage("상태 변경에 실패했습니다.");
       return;
     }
@@ -132,7 +149,7 @@ export default function InboxList({
         <div className="flex items-center gap-2 min-w-0">
           <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="이 페이지 전체 선택" className="accent-accent" />
           <span className="text-[13px] font-semibold truncate">
-            <span>{viewLabel}</span> <span className="text-muted font-normal">{total}건</span>
+            <span>{viewLabel}</span> <span className="text-muted font-normal tabular-nums">{total}건</span>
           </span>
         </div>
         <select
@@ -157,19 +174,18 @@ export default function InboxList({
         ) : (
           <ul>
             {rows.map((inquiry) => {
-              const elapsed = formatElapsed(inquiry.createdAt);
+              const elapsed = formatElapsed(inquiry.createdAt, reference);
               const stale = inquiry.status !== "resolved" && elapsed.endsWith("일");
               const selected = inquiry.id === shownId;
               const pending = pendingId !== null && inquiry.id === pendingId;
               const priority = PRIORITY_MARK[inquiry.priority];
+              const href = inquiryHref(scope, inquiry.id, query);
               return (
                 <li
                   key={inquiry.id}
-                  onClick={() => open(inquiry.id)}
-                  onPointerEnter={() => router.prefetch(inquiryHref(scope, inquiry.id, query))}
                   aria-current={selected ? "true" : undefined}
                   aria-busy={pending ? "true" : undefined}
-                  className={`flex gap-2 px-4 py-3 border-b border-line cursor-pointer transition-colors border-l-2 ${pending ? "cursor-progress" : ""} ${
+                  className={`flex gap-2 px-4 py-3 border-b border-line transition-colors border-l-2 ${
                     selected || inquiry.status === "new" ? "border-l-accent" : "border-l-transparent"
                   } ${selected || checked.has(inquiry.id) ? "bg-accent/5" : "hover:bg-ground/60"}`}
                 >
@@ -177,23 +193,35 @@ export default function InboxList({
                     type="checkbox"
                     checked={checked.has(inquiry.id)}
                     onChange={() => toggleOne(inquiry.id)}
-                    onClick={(e) => e.stopPropagation()}
                     aria-label={`${inquiry.title} 선택`}
-                    className="accent-accent mt-0.5"
+                    className="accent-accent mt-0.5 shrink-0"
                   />
-                  <div className="flex flex-col gap-1 min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-muted">
+                  {/* 행 본문은 진짜 링크다. 키보드 초점·Cmd+클릭 새 탭·가운데 클릭이 그대로 된다. */}
+                  <Link
+                    href={href}
+                    onClick={() => markPending(inquiry.id)}
+                    onPointerEnter={() => router.prefetch(href)}
+                    className={`flex flex-col gap-1 min-w-0 flex-1 -m-1 p-1 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+                      pending ? "cursor-progress" : ""
+                    }`}
+                  >
+                    <span className="flex items-center justify-between gap-2 font-mono text-[11px] text-muted">
                       <span>{inquiry.inquiryNo ?? "—"}</span>
                       <span className={stale ? "text-accent font-semibold" : ""}>{elapsed}</span>
-                    </div>
-                    <p className="text-sm font-semibold text-ink truncate">{inquiry.title}</p>
-                    <p className="text-xs text-muted truncate">{firstLine(inquiry.content)}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5 text-xs">
+                    </span>
+                    <span className="block text-sm font-semibold text-ink truncate">{inquiry.title}</span>
+                    <span className="block text-xs text-muted truncate">{firstLine(inquiry.content)}</span>
+                    <span className="flex items-center gap-1.5 mt-0.5 text-xs">
                       <StatusBadge status={inquiry.status} />
+                      {inquiry.unreadReplyAt && (
+                        <span className="inline-flex items-center h-[18px] px-1.5 rounded-full bg-accent/10 text-accent text-[11px] font-semibold whitespace-nowrap shrink-0">
+                          회신 옴
+                        </span>
+                      )}
                       <span className="text-muted truncate">{labels.typeLabels[inquiry.typeKey] ?? inquiry.typeKey}</span>
                       {priority && <span className={`ml-auto ${priority.className}`}>{priority.label}</span>}
-                    </div>
-                  </div>
+                    </span>
+                  </Link>
                 </li>
               );
             })}
@@ -203,7 +231,7 @@ export default function InboxList({
 
       {checked.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-t border-line bg-accent/5 text-xs shrink-0">
-          <span className="font-medium">선택 {checked.size}건</span>
+          <span className="font-medium tabular-nums">선택 {checked.size}건</span>
           <select value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value as InquiryStatus)} className={SELECT} aria-label="일괄 변경 상태">
             {STATUS_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -215,43 +243,47 @@ export default function InboxList({
             type="button"
             onClick={applyBulkStatus}
             disabled={bulkBusy}
-            className="bg-accent text-white rounded-lg px-3 py-1 hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            className="bg-accent text-white rounded-lg px-3 py-1 hover:bg-accent/90 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           >
-            상태 변경
+            {bulkBusy ? "변경 중…" : "상태 변경"}
           </button>
-          {bulkMessage && <span className="text-muted">{bulkMessage}</span>}
+          <StatusMessage tone={bulkFailed ? "error" : "muted"}>{bulkMessage}</StatusMessage>
         </div>
       )}
-      {checked.size === 0 && bulkMessage && (
-        <p className="px-4 py-2 border-t border-line text-xs text-muted shrink-0">{bulkMessage}</p>
+      {checked.size === 0 && (
+        <StatusMessage tone={bulkFailed ? "error" : "muted"} className={bulkMessage ? "px-4 py-2 border-t border-line text-xs shrink-0" : ""}>
+          {bulkMessage}
+        </StatusMessage>
       )}
 
       <footer className="flex items-center justify-between gap-2 h-11 px-4 border-t border-line text-xs text-muted shrink-0" aria-label="페이지">
-        <span>
+        <span className="tabular-nums">
           {firstIndex}–{lastIndex} / {total}건
         </span>
         {total > pageSize && (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => navigate({ page: query.page - 1 }, false)}
-              disabled={query.page <= 1}
-              className="border border-line rounded-lg px-2 py-0.5 hover:bg-ground disabled:opacity-40 transition-colors"
-            >
-              이전
-            </button>
+          <nav className="flex items-center gap-1.5" aria-label="페이지 이동">
+            {query.page > 1 ? (
+              <Link href={pageHref(query.page - 1)} rel="prev" className={`${PAGE_BTN} hover:bg-ground`}>
+                이전
+              </Link>
+            ) : (
+              <span aria-disabled="true" className={`${PAGE_BTN} opacity-40`}>
+                이전
+              </span>
+            )}
             <span className="font-mono">
               {query.page} / {totalPages}
             </span>
-            <button
-              type="button"
-              onClick={() => navigate({ page: query.page + 1 }, false)}
-              disabled={query.page >= totalPages}
-              className="border border-line rounded-lg px-2 py-0.5 hover:bg-ground disabled:opacity-40 transition-colors"
-            >
-              다음
-            </button>
-          </div>
+            {query.page < totalPages ? (
+              <Link href={pageHref(query.page + 1)} rel="next" className={`${PAGE_BTN} hover:bg-ground`}>
+                다음
+              </Link>
+            ) : (
+              <span aria-disabled="true" className={`${PAGE_BTN} opacity-40`}>
+                다음
+              </span>
+            )}
+          </nav>
         )}
       </footer>
     </section>

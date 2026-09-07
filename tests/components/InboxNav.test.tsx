@@ -23,6 +23,7 @@ const counts: InquiryFacetCounts = {
   type: { account_login: 6, payment_refund: 8 },
   priority: { urgent: 1, high: 3, normal: 10, low: 9 },
   stale: 2,
+  unread: 3,
 };
 
 function renderNav(query: InquiryListQuery = DEFAULT_QUERY, c: InquiryFacetCounts | null = counts, selectedId: string | null = null) {
@@ -54,9 +55,23 @@ describe("InboxNav", () => {
     expect(screen.getByRole("link", { name: /^3일 이상 미처리/ })).toHaveAttribute("href", "/games/g1/inquiries?stale=1&sort=oldest");
   });
 
-  it("전체 clears status, stale, priority, and type but keeps the search and sort", () => {
-    renderNav({ ...DEFAULT_QUERY, status: "new", type: "account_login", priority: "high", stale: true, q: "x", sort: "priority" });
+  it("전체 clears status, stale, unread, priority, and type but keeps the search and sort", () => {
+    renderNav({ ...DEFAULT_QUERY, status: "new", type: "account_login", priority: "high", stale: true, unread: true, q: "x", sort: "priority" });
     expect(screen.getByRole("link", { name: /^전체/ })).toHaveAttribute("href", "/games/g1/inquiries?q=x&sort=priority");
+  });
+
+  it("offers a 회신 도착 view with its count that swaps out the status and stale filters", () => {
+    renderNav({ ...DEFAULT_QUERY, status: "new", stale: true });
+    const link = screen.getByRole("link", { name: /^회신 도착/ });
+    expect(link).toHaveAttribute("href", "/games/g1/inquiries?unread=1");
+    expect(within(link).getByText("3")).toBeInTheDocument();
+  });
+
+  it("회신 도착 is active only when unread is set, and other views drop it", () => {
+    renderNav({ ...DEFAULT_QUERY, unread: true });
+    expect(screen.getByRole("link", { name: /^회신 도착/ })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("link", { name: /^전체/ })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: /^접수/ })).toHaveAttribute("href", "/games/g1/inquiries?status=new");
   });
 
   it("marks the active view, type, and priority", () => {

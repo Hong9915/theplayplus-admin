@@ -22,7 +22,9 @@ const inquiry: InquiryRow = {
   replyContent: null,
   repliedAt: null,
   gmailThreadId: "t1",
+  unreadReplyAt: null,
   locale: null,
+  translations: {},
   paymentNo: null,
   occurredAt: null,
   deviceInfo: null,
@@ -30,8 +32,8 @@ const inquiry: InquiryRow = {
 };
 
 const messages: MessageRow[] = [
-  { id: "m-in", direction: "inbound", authorEmail: "luna@example.com", body: "감사합니다", gmailMessageId: "g2", rfcMessageId: null, sentAt: "2026-09-03T04:48:00.000Z", autoSent: false },
-  { id: "m-out", direction: "outbound", authorEmail: "info@theplayplus.com", body: "환불 처리했습니다", gmailMessageId: "g1", rfcMessageId: "<a>", sentAt: "2026-09-03T02:05:00.000Z", autoSent: false },
+  { id: "m-in", direction: "inbound", authorEmail: "luna@example.com", body: "감사합니다", gmailMessageId: "g2", rfcMessageId: null, sentAt: "2026-09-03T04:48:00.000Z", autoSent: false, translations: {} },
+  { id: "m-out", direction: "outbound", authorEmail: "info@theplayplus.com", body: "환불 처리했습니다", gmailMessageId: "g1", rfcMessageId: "<a>", sentAt: "2026-09-03T02:05:00.000Z", autoSent: false, translations: {} },
 ];
 
 const notes: NoteRow[] = [
@@ -52,10 +54,12 @@ describe("buildTimeline", () => {
       body: "두 번 결제됐어요",
       details: [],
       attachments,
+      translations: {},
     });
     expect(entries[1]).toMatchObject({ kind: "note", id: "n-1", author: "hong@theplayplus.com", body: "중복 승인 확인" });
-    expect(entries[2]).toMatchObject({ kind: "outbound", id: "m-out", author: "info@theplayplus.com" });
-    expect(entries[3]).toMatchObject({ kind: "inbound", id: "m-in", author: "luna@example.com" });
+    // 메시지 항목은 번역 API가 필요로 하는 문의 id와 저장된 번역을 함께 싣는다.
+    expect(entries[2]).toMatchObject({ kind: "outbound", id: "m-out", inquiryId: "inq-1", author: "info@theplayplus.com", translations: {} });
+    expect(entries[3]).toMatchObject({ kind: "inbound", id: "m-in", inquiryId: "inq-1", author: "luna@example.com", translations: {} });
   });
 
   it("carries the type-specific detail rows on the inquiry entry", () => {
@@ -69,7 +73,7 @@ describe("buildTimeline", () => {
   });
 
   it("flags outbound entries that were sent automatically", () => {
-    const auto: MessageRow = { ...messages[1], id: "m-auto", authorEmail: null, autoSent: true };
+    const auto: MessageRow = { ...messages[1], id: "m-auto", authorEmail: null, autoSent: true, translations: {} };
     const entries = buildTimeline(inquiry, [], [auto, messages[1]], []);
     expect(entries[1]).toMatchObject({ kind: "outbound", id: "m-auto", auto: true, author: null });
     expect(entries[2]).toMatchObject({ kind: "outbound", id: "m-out", auto: false });
@@ -101,6 +105,7 @@ describe("buildAccountTimeline", () => {
       occurredAt: null,
       paymentNo: null,
       deviceInfo: null,
+      translations: {},
       createdAt: "2026-07-21T00:00:00.000Z",
     },
     attachments: [],

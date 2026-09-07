@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { TemplateRow } from "@/lib/templates";
+import StatusMessage from "@/components/ui/StatusMessage";
 
 interface EditDraft {
   id: string;
@@ -164,7 +165,7 @@ export default function TemplateManager({
   }
 
   const inputClass =
-    "bg-ground border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-colors";
+    "bg-ground border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent transition-colors";
 
   return (
     <div className="flex flex-col gap-4">
@@ -172,13 +173,16 @@ export default function TemplateManager({
         <h2 className="font-semibold mb-3">템플릿 추가</h2>
         <form onSubmit={handleCreate} className="flex flex-col gap-2">
           <input
+            name="title"
+            autoComplete="off"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             aria-label="템플릿 제목"
-            placeholder="템플릿 제목"
+            placeholder="예: 결제 오류 안내…"
             className={inputClass}
           />
           <select
+            name="typeKey"
             value={typeKey}
             onChange={(e) => setTypeKey(e.target.value)}
             aria-label="적용 유형"
@@ -192,27 +196,32 @@ export default function TemplateManager({
             ))}
           </select>
           <textarea
+            name="content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={5}
             aria-label="템플릿 내용"
-            placeholder="답변에 삽입될 본문을 작성합니다."
+            placeholder="답변에 삽입될 본문을 작성합니다…"
             className={inputClass}
           />
           {/* 편집 중 오류는 편집 폼 쪽에 뜬다. */}
-          {error && !editing && <p className="text-red-600 text-sm">{error}</p>}
+          <StatusMessage className="text-sm">{!editing ? error : null}</StatusMessage>
           <button
             type="submit"
             disabled={submitting}
             className="self-start border border-line rounded-lg px-3 py-1.5 text-sm hover:bg-ground disabled:opacity-50 transition-colors"
           >
-            템플릿 추가
+            {submitting ? "추가 중…" : "템플릿 추가"}
           </button>
         </form>
       </section>
 
       <section className="bg-panel border border-line rounded-2xl p-4">
-        <h2 className="font-semibold mb-3">등록된 템플릿</h2>
+        <h2 className="font-semibold mb-1">등록된 템플릿</h2>
+        {/* 툴팁(title)은 마우스로만 볼 수 있어 눈에 보이는 도움말로 둔다. */}
+        <p id="auto-send-help" className="text-xs text-muted mb-3">
+          자동 발송을 켜면 그 유형의 새 문의에 이 템플릿이 30분~1시간 뒤 자동으로 발송됩니다. 같은 유형에는 하나만 켤 수 있습니다.
+        </p>
         {templates.length === 0 ? (
           <p className="text-sm text-muted">등록된 템플릿이 없습니다.</p>
         ) : (
@@ -222,6 +231,8 @@ export default function TemplateManager({
                 {editing?.id === template.id ? (
                   <div className="flex flex-col gap-2">
                     <input
+                      name="title"
+                      autoComplete="off"
                       value={editing.title}
                       onChange={(e) => setEditing({ ...editing, title: e.target.value })}
                       aria-label="템플릿 제목"
@@ -247,7 +258,7 @@ export default function TemplateManager({
                       aria-label="템플릿 내용"
                       className={inputClass}
                     />
-                    {error && <p className="text-red-600 text-sm">{error}</p>}
+                    <StatusMessage className="text-sm">{error}</StatusMessage>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -255,7 +266,7 @@ export default function TemplateManager({
                         disabled={submitting}
                         className="border border-accent bg-accent text-white rounded-lg px-3 py-1.5 text-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
                       >
-                        저장
+                        {submitting ? "저장 중…" : "저장"}
                       </button>
                       <button
                         type="button"
@@ -273,8 +284,8 @@ export default function TemplateManager({
                 <>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-medium flex items-center gap-2">
-                      {template.title}
+                    <p className="font-medium flex flex-wrap items-center gap-2">
+                      <span className="min-w-0 break-words">{template.title}</span>
                       {template.autoSend && (
                         <span className="text-[11px] font-semibold text-accent bg-accent/10 rounded-full px-2 py-0.5">자동 발송 중</span>
                       )}
@@ -293,7 +304,7 @@ export default function TemplateManager({
                   <button
                     type="button"
                     onClick={() => handleAutoSend(template.id, !template.autoSend)}
-                    title="켜면 이 유형의 새 문의에 이 템플릿이 자동으로 발송됩니다. 같은 유형에는 하나만 켤 수 있습니다."
+                    aria-describedby="auto-send-help"
                     className="shrink-0 text-sm text-muted hover:text-ink transition-colors"
                   >
                     {template.autoSend ? "자동 발송 끄기" : "자동 발송 켜기"}
@@ -326,7 +337,7 @@ export default function TemplateManager({
                     </button>
                   )}
                 </div>
-                <p className="whitespace-pre-wrap text-sm mt-2 text-muted">{template.content}</p>
+                <p className="whitespace-pre-wrap break-words text-sm mt-2 text-muted">{template.content}</p>
                 </>
                 )}
               </li>

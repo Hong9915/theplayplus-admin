@@ -86,6 +86,48 @@ describe("sendReplyEmail", () => {
     expect(decoded).toContain("References: <a@theplayplus.com> <b@mail.example>");
   });
 
+  it("starts a new thread when the stored thread does not exist in this mailbox", async () => {
+    // 예전 발신 계정이 만든 스레드는 새 계정에 없어서 Gmail이 404를 낸다.
+    sendMock
+      .mockRejectedValueOnce(Object.assign(new Error("Requested entity was not found."), { code: 404 }))
+      .mockResolvedValueOnce({ data: { id: "gm-2", threadId: "thread-new" } });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { sendReplyEmail } = await import("@/lib/gmail");
+
+    const sent = await sendReplyEmail({
+      mailbox: "game",
+      to: "user@example.com",
+      subject: "s",
+      body: "b",
+      threadId: "thread-old",
+      references: ["<old@gmail.com>"],
+    });
+
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    expect(sendMock.mock.calls[0][0].requestBody.threadId).toBe("thread-old");
+    expect(sendMock.mock.calls[1][0].requestBody.threadId).toBeUndefined();
+    const decoded = Buffer.from(sendMock.mock.calls[1][0].requestBody.raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
+    expect(decoded).toContain("In-Reply-To: <old@gmail.com>");
+    expect(sent.gmailThreadId).toBe("thread-new");
+    warn.mockRestore();
+  });
+
+  it("does not retry a 404 when no thread was requested", async () => {
+    sendMock.mockRejectedValue(Object.assign(new Error("Requested entity was not found."), { code: 404 }));
+    const { sendReplyEmail } = await import("@/lib/gmail");
+    await expect(sendReplyEmail({ mailbox: "game", to: "a@b.com", subject: "s", body: "b" })).rejects.toThrow("not found");
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry other Gmail errors on a threaded send", async () => {
+    sendMock.mockRejectedValue(Object.assign(new Error("Backend Error"), { code: 500 }));
+    const { sendReplyEmail } = await import("@/lib/gmail");
+    await expect(
+      sendReplyEmail({ mailbox: "game", to: "a@b.com", subject: "s", body: "b", threadId: "thread-old" })
+    ).rejects.toThrow("Backend Error");
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
   it("propagates an error when the Gmail API call fails", async () => {
     sendMock.mockRejectedValue(new Error("gmail down"));
     const { sendReplyEmail } = await import("@/lib/gmail");

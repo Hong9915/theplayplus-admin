@@ -9,12 +9,10 @@ describe("DEFAULT_REPLY_TEMPLATES", () => {
     expect(templateKeys).toEqual(typeKeys);
   });
 
-  it("has a title and body for each template and never repeats the email greeting", () => {
+  it("has a title and body for each template", () => {
     for (const template of DEFAULT_REPLY_TEMPLATES) {
       expect(template.title.length).toBeGreaterThan(0);
       expect(template.content.length).toBeGreaterThan(20);
-      // 메일 템플릿이 "안녕하세요"를 이미 붙이므로 본문에 또 들어가면 두 번 인사한다.
-      expect(template.content).not.toContain("안녕하세요");
     }
   });
 });

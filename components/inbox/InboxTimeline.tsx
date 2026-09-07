@@ -4,6 +4,7 @@ import type { CategoryLabelMaps } from "@/lib/categories";
 import { emailLocalPart, formatReceivedAt } from "@/lib/format";
 import StatusBadge from "@/components/ui/StatusBadge";
 import ScrollToCurrent from "@/components/inbox/ScrollToCurrent";
+import TranslatableBody from "@/components/inbox/TranslatableBody";
 
 type MessageEntry = Exclude<TimelineEntry, { kind: "divider" }>;
 type DividerEntry = Extract<TimelineEntry, { kind: "divider" }>;
@@ -62,7 +63,7 @@ function Attachments({ attachments }: { attachments: AttachmentWithUrl[] }) {
             <>
               <a href={attachment.signedUrl} target="_blank" rel="noreferrer" title="원본 크기로 열기" className="block border border-line rounded-lg overflow-hidden bg-black/5">
                 {/* 첨부 버킷은 이미지 MIME만 허용하므로 항상 <img>로 렌더링한다. */}
-                <img src={attachment.signedUrl} alt={attachment.fileName} loading="lazy" className="max-h-48 w-auto object-contain" />
+                <img src={attachment.signedUrl} alt={attachment.fileName} loading="lazy" width={240} height={192} className="max-h-48 w-auto max-w-full object-contain" />
               </a>
               <span className="text-muted truncate">{attachment.fileName}</span>
             </>
@@ -129,7 +130,17 @@ export default function InboxTimeline({ entries, labels }: { entries: TimelineEn
                   note ? "bg-amber-50 border-amber-200 text-amber-900" : "bg-panel border-line"
                 }`}
               >
-                <p className="whitespace-pre-wrap break-words">{entry.body}</p>
+                {/* 메모는 관리자가 한국어로 쓰니 번역 메뉴가 필요 없다. 나머지는 우클릭으로 번역. */}
+                {note ? (
+                  <p className="whitespace-pre-wrap break-words">{entry.body}</p>
+                ) : (
+                  <TranslatableBody
+                    inquiryId={entry.kind === "inquiry" ? entry.id : entry.inquiryId}
+                    target={entry.kind === "inquiry" ? { kind: "inquiry" } : { kind: "message", messageId: entry.id }}
+                    body={entry.body}
+                    translations={entry.translations}
+                  />
+                )}
                 {entry.kind === "inquiry" && entry.details.length > 0 && (
                   <dl className="mt-2.5 pt-2.5 border-t border-line flex flex-col gap-1 text-xs" data-testid="inquiry-details">
                     {entry.details.map((row) => (

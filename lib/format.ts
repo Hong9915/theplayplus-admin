@@ -31,17 +31,29 @@ export function formatElapsed(iso: string, now: Date = new Date()): string {
   return `${Math.floor(hours / 24)}일`;
 }
 
-/** "2026. 07. 23. 오후 10:55" */
+/** 관리자 화면의 시각은 어디서 렌더되든(Vercel 서버는 UTC) 한국 시간으로 보여준다. */
+export const DISPLAY_TIME_ZONE = "Asia/Seoul";
+
+const receivedAtParts = new Intl.DateTimeFormat("en-US", {
+  timeZone: DISPLAY_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** "2026. 07. 23. 오후 10:55" (Asia/Seoul 기준) */
 export function formatReceivedAt(iso: string): string {
-  const date = new Date(iso);
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  const hours = date.getHours();
+  const parts: Record<string, string> = {};
+  for (const part of receivedAtParts.formatToParts(new Date(iso))) {
+    parts[part.type] = part.value;
+  }
+  const hours = Number(parts.hour);
   const meridiem = hours < 12 ? "오전" : "오후";
   const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-  const min = String(date.getMinutes()).padStart(2, "0");
-  return `${yyyy}. ${mm}. ${dd}. ${meridiem} ${hour12}:${min}`;
+  return `${parts.year}. ${parts.month}. ${parts.day}. ${meridiem} ${hour12}:${parts.minute}`;
 }
 
 /**

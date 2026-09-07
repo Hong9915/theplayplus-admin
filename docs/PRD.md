@@ -181,7 +181,7 @@
 | ID | 요구사항 |
 |---|---|
 | FR-5.1 | 답변 본문을 작성해 Gmail API로 `info@theplayplus.com` 계정에서 발송한다. 본문은 1~5000자. |
-| FR-5.2 | 메일 제목은 `[접수번호] Re: 원제목` 형식이다. 사용자가 메일로 다시 문의해도 건을 특정할 수 있고, 제목이 같아야 Gmail이 같은 스레드로 묶는다. |
+| FR-5.2 | 메일 제목은 모든 답변에 `[더플레이플러스] 문의사항에 답변드립니다.`로 같다. 접수번호와 원래 제목은 본문에 들어가고, 후속 답변은 Gmail threadId와 References 헤더로 같은 스레드에 묶인다. |
 | FR-5.3 | 메일은 **THE PLAY+ 브랜드 HTML 템플릿**과 텍스트 본문을 함께 담은 multipart로 나간다. 로고는 base64 인라인 이미지로 첨부한다 (외부 이미지 차단 환경에서도 보이도록). |
 | FR-5.4 | 발송에 성공하면 상태를 **자동으로 `처리중`**으로 바꾼다. `완료`는 관리자가 직접 바꾼다 — 답변을 보냈다고 처리가 끝난 것은 아니기 때문이다. |
 | FR-5.5 | 발송한 답변은 `inquiry_messages`에 outbound로 쌓인다. `inquiries.reply_content`/`replied_at`은 "마지막 답변"으로 계속 갱신한다. |
@@ -273,9 +273,9 @@ Supabase(Postgres)에 저장하며 `theplayplus-contact`와 **동일한 프로�
 | `inquiry_events` | 변경 이력 (감사 로그) | 0003 |
 | `reply_templates` | 답변 템플릿 | 0004 |
 | `inquiry_messages` | 답변·회신 대화 기록 | 0005 |
-| `assistant_conversations` | 운영 시트 어시스턴트 대화 | 0017 |
-| `assistant_messages` | 어시스턴트 메시지·수정 제안 | 0017 |
-| `assistant_sources` | 게임별 운영 자료(구글 시트·문서) 연결. `id`, `game_id`, `kind`(sheet\|doc), `external_id`, `title`, `created_at`, `unique(game_id, kind, external_id)` | 0019 |
+| `assistant_conversations` | 운영 시트 어시스턴트 대화 | 0018 |
+| `assistant_messages` | 어시스턴트 메시지·수정 제안 | 0018 |
+| `assistant_sources` | 게임별 운영 자료(구글 시트·문서) 연결. `id`, `game_id`, `kind`(sheet\|doc), `external_id`, `title`, `created_at`, `unique(game_id, kind, external_id)` | 0020 |
 
 ### `inquiries` 주요 컬럼
 
@@ -292,8 +292,8 @@ Supabase(Postgres)에 저장하며 `theplayplus-contact`와 **동일한 프로�
 | `draft_reply` | 작성 중인 답변 초안 |
 | `reply_content` / `replied_at` | 마지막 답변과 그 시각 |
 | `gmail_thread_id` | Gmail 스레드 연결 |
-| `embedding` | 제목+본문 임베딩(`vector(1536)`, text-embedding-3-small). AI 답변 추천의 유사 문의 검색용 (마이그레이션 0020) |
-| `embedding_model` | `embedding`을 만든 모델명. 다르면 다시 계산 (마이그레이션 0020) |
+| `embedding` | 제목+본문 임베딩(`vector(1536)`, text-embedding-3-small). AI 답변 추천의 유사 문의 검색용 (마이그레이션 0021) |
+| `embedding_model` | `embedding`을 만든 모델명. 다르면 다시 계산 (마이그레이션 0021) |
 
 ### 접수번호 채번 규칙
 

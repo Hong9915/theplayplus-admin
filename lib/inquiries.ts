@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PAGE_SIZE, type InquiryListQuery } from "@/lib/inquiry-filters";
 import { SERVICE_RAIL_KEY, scopeGameId, type InboxScope } from "@/lib/inbox-scope";
+import { parseTranslations, type Translations } from "@/lib/translations";
 
 export type InquiryStatus = "new" | "in_progress" | "resolved";
 export type InquiryPriority = "urgent" | "high" | "normal" | "low";
@@ -24,6 +25,8 @@ export interface InquiryRow {
   replyContent: string | null;
   repliedAt: string | null;
   gmailThreadId: string | null;
+  /** 아직 열어 보지 않은 사용자 회신이 처음 도착한 시각(마이그레이션 0017). 열람하거나 답변하면 null. */
+  unreadReplyAt: string | null;
   /** 접수 폼 언어 (ko / zh / en). 예전 행은 null. */
   locale: string | null;
   /** 유형별 추가 항목. 접수 폼이 유형 플래그(collects_*)에 따라 채운다. */
@@ -31,13 +34,15 @@ export interface InquiryRow {
   /** datetime-local 문자열 (YYYY-MM-DDTHH:mm). */
   occurredAt: string | null;
   deviceInfo: string | null;
+  /** 관리자가 우클릭으로 만든 본문 번역(마이그레이션 0015). 없으면 빈 객체. */
+  translations: Translations;
   createdAt: string;
 }
 
 // 임베딩 벡터(1536 float)를 목록·상세에서 끌어오지 않도록 열을 명시한다.
 // mapInquiryRow가 읽는 열과 정확히 맞춘다(embedding, embedding_model은 제외).
 export const INQUIRY_COLUMNS =
-  "id, inquiry_no, game_id, group_key, type_key, game_account, company_name, reply_email, title, content, status, priority, meta, draft_reply, reply_content, replied_at, gmail_thread_id, locale, payment_no, occurred_at, device_info, created_at";
+  "id, inquiry_no, game_id, group_key, type_key, game_account, company_name, reply_email, title, content, status, priority, meta, draft_reply, reply_content, replied_at, gmail_thread_id, locale, payment_no, occurred_at, device_info, created_at, unread_reply_at, translations";
 
 export interface AttachmentWithUrl {
   id: string;
@@ -63,10 +68,12 @@ function mapInquiryRow(row: {
   reply_content: string | null;
   replied_at: string | null;
   gmail_thread_id?: string | null;
+  unread_reply_at?: string | null;
   locale?: string | null;
   payment_no?: string | null;
   occurred_at?: string | null;
   device_info?: string | null;
+  translations?: unknown;
   created_at: string;
 }): InquiryRow {
   return {
@@ -87,10 +94,12 @@ function mapInquiryRow(row: {
     replyContent: row.reply_content,
     repliedAt: row.replied_at,
     gmailThreadId: row.gmail_thread_id ?? null,
+    unreadReplyAt: row.unread_reply_at ?? null,
     locale: row.locale ?? null,
     paymentNo: row.payment_no ?? null,
     occurredAt: row.occurred_at ?? null,
     deviceInfo: row.device_info ?? null,
+    translations: parseTranslations(row.translations),
     createdAt: row.created_at,
   };
 }
@@ -119,6 +128,7 @@ interface FilterBuilder {
   is(column: string, value: null): FilterBuilder;
   neq(column: string, value: string): FilterBuilder;
   lt(column: string, value: string): FilterBuilder;
+  not(column: string, operator: "is", value: null): FilterBuilder;
   or(filters: string): FilterBuilder;
   order(column: string, options: { ascending: boolean }): FilterBuilder;
   range(from: number, to: number): FilterBuilder;
@@ -137,6 +147,9 @@ function applyFilters<T extends FilterBuilder>(builder: T, scope: InboxScope, qu
     // "3일 이상 미처리": 완료가 아니면서 접수 후 72시간이 지난 건.
     const cutoff = new Date(now.getTime() - STALE_AFTER_MS).toISOString();
     next = next.neq("status", "resolved").lt("created_at", cutoff) as T;
+  }
+  if (query.unread) {
+    next = next.not("unread_reply_at", "is", null) as T;
   }
 
   const q = sanitizeSearch(query.q);
@@ -302,6 +315,8 @@ export interface InquiryFacetCounts {
   type: Record<string, number>;
   priority: Record<InquiryPriority, number>;
   stale: number;
+  /** 열어 보지 않은 회신이 있는 건수(마이그레이션 0017의 unread 항목). */
+  unread: number;
 }
 
 const STATUS_KEYS: InquiryStatus[] = ["new", "in_progress", "resolved"];
@@ -326,6 +341,7 @@ export async function getInquiryFacetCounts(
     type: {},
     priority: { urgent: 0, high: 0, normal: 0, low: 0 },
     stale: 0,
+    unread: 0,
   };
 
   for (const row of data as Array<{ facet: string; key: string; count: number | string }>) {
@@ -342,6 +358,9 @@ export async function getInquiryFacetCounts(
         break;
       case "stale":
         counts.stale = count;
+        break;
+      case "unread":
+        counts.unread = count;
         break;
       case "total":
         counts.total = count;

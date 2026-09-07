@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 관리자 UI 문구는 한국어 전용. 코드 주석도 기존 파일처럼 한국어.
-- 새 마이그레이션 번호는 `0017_assistant.sql`(`supabase/migrations/`). 실제 DB 적용은 사람이 SQL Editor에서 한다.
+- 새 마이그레이션 번호는 `0018_assistant.sql`(`supabase/migrations/`). 실제 DB 적용은 사람이 SQL Editor에서 한다.
 - 환경변수: `OPENAI_API_KEY`, `OPENAI_MODEL`(기본 `gpt-5-mini`), `GOOGLE_SERVICE_ACCOUNT_JSON`(한 줄 JSON). 비밀값은 `.env.local`에만.
 - 시트 총량 한도 300,000자. 제안 종류는 `update`/`append` 둘뿐. 행 번호는 1-based(헤더 = 1행).
 - 모든 API는 `requireAdminSession`/`getAdminSession`으로 보호. 실패 응답은 `{ success: false, error }`.
@@ -31,7 +31,7 @@
 
 | 파일 | 역할 |
 |---|---|
-| `supabase/migrations/0017_assistant.sql` | `games.sheet_id`, `assistant_conversations`, `assistant_messages` |
+| `supabase/migrations/0018_assistant.sql` | `games.sheet_id`, `assistant_conversations`, `assistant_messages` |
 | `lib/categories.ts` (수정) | `GameRow.sheetId` 추가 |
 | `lib/sheets.ts` | 서비스 계정 인증, 시트 읽기/직렬화/제안 검증/쓰기, URL 파싱. 순수 함수와 API 호출을 한 파일에 두되 순수 함수는 API 없이 테스트한다 |
 | `lib/assistant.ts` | 시스템 프롬프트, 이력 변환, 도구 정의, OpenAI 스트리밍 → `AssistantEvent` |
@@ -55,7 +55,7 @@
 ### Task 1: 마이그레이션, 환경변수, 패키지, `GameRow.sheetId`
 
 **Files:**
-- Create: `supabase/migrations/0017_assistant.sql`
+- Create: `supabase/migrations/0018_assistant.sql`
 - Modify: `.env.example`, `package.json`(`openai` 추가), `lib/categories.ts:4-11,160-175`
 - Test: `tests/lib/categories.test.ts`
 
@@ -65,7 +65,7 @@
 - [ ] **Step 1: 마이그레이션 작성**
 
 ```sql
--- supabase/migrations/0017_assistant.sql
+-- supabase/migrations/0018_assistant.sql
 -- 운영 시트 어시스턴트: 게임별 시트 연결 + 대화/메시지 저장.
 
 alter table games add column if not exists sheet_id text;
@@ -156,7 +156,7 @@ Expected: PASS. tsc에서 `GameRow` 리터럴을 만드는 테스트 파일(`tes
 - [ ] **Step 8: 커밋**
 
 ```bash
-git add supabase/migrations/0017_assistant.sql .env.example package.json package-lock.json lib/categories.ts tests/
+git add supabase/migrations/0018_assistant.sql .env.example package.json package-lock.json lib/categories.ts tests/
 git commit -m "feat: assistant schema, env, openai dependency, GameRow.sheetId"
 ```
 
@@ -3664,7 +3664,7 @@ git commit -m "feat: inbox nav links to the operations assistant in a new tab"
 - [ ] **Step 1: `CLAUDE.md` 핵심 기능 목록 끝(7번 뒤)에 추가**
 
 ```markdown
-8. **운영 시트 어시스턴트** — 문의함 보기 열의 "운영 어시스턴트 ↗"가 새 탭으로 `/games/{gameId}/assistant`를 연다(`app/(assistant)/`, 레일 없음). 게임에 연결한 구글 스프레드시트(`games.sheet_id`, 화면의 "시트 설정"에서 URL 입력)를 서비스 계정(`GOOGLE_SERVICE_ACCOUNT_JSON`, 시트를 그 계정에 편집자로 공유)으로 매번 통째로 읽어 텍스트 표로 만들고 OpenAI(`OPENAI_API_KEY`, `OPENAI_MODEL` 기본 `gpt-5-mini`)에 시스템 프롬프트로 싣는다(`lib/sheets.ts`, `lib/assistant.ts`). 임베딩 검색은 쓰지 않는다. "52009 VIP4로 올려줘" 같은 수정 요청은 모델이 `propose_update`/`propose_append` 도구로 제안만 만들고, 서버가 탭·열·행을 검증해 `assistant_messages`에 `pending`으로 저장하며, 관리자가 카드의 [적용]을 눌러야 그 행을 다시 읽어 충돌을 확인한 뒤 Sheets API로 쓴다(마이그레이션 0017). 첫 줄이 열 이름인 탭만 수정할 수 있고 줄글 탭은 읽기 전용이다. 대화는 게임별로 저장되고 ChatGPT식 사이드바에서 고른다(`?c=`). 설계는 `docs/superpowers/specs/2026-09-04-sheet-assistant-design.md`.
+8. **운영 시트 어시스턴트** — 문의함 보기 열의 "운영 어시스턴트 ↗"가 새 탭으로 `/games/{gameId}/assistant`를 연다(`app/(assistant)/`, 레일 없음). 게임에 연결한 구글 스프레드시트(`games.sheet_id`, 화면의 "시트 설정"에서 URL 입력)를 서비스 계정(`GOOGLE_SERVICE_ACCOUNT_JSON`, 시트를 그 계정에 편집자로 공유)으로 매번 통째로 읽어 텍스트 표로 만들고 OpenAI(`OPENAI_API_KEY`, `OPENAI_MODEL` 기본 `gpt-5-mini`)에 시스템 프롬프트로 싣는다(`lib/sheets.ts`, `lib/assistant.ts`). 임베딩 검색은 쓰지 않는다. "52009 VIP4로 올려줘" 같은 수정 요청은 모델이 `propose_update`/`propose_append` 도구로 제안만 만들고, 서버가 탭·열·행을 검증해 `assistant_messages`에 `pending`으로 저장하며, 관리자가 카드의 [적용]을 눌러야 그 행을 다시 읽어 충돌을 확인한 뒤 Sheets API로 쓴다(마이그레이션 0018). 첫 줄이 열 이름인 탭만 수정할 수 있고 줄글 탭은 읽기 전용이다. 대화는 게임별로 저장되고 ChatGPT식 사이드바에서 고른다(`?c=`). 설계는 `docs/superpowers/specs/2026-09-04-sheet-assistant-design.md`.
 ```
 
 "자동 답변 설정 절차" 절 뒤에 추가:
@@ -3674,7 +3674,7 @@ git commit -m "feat: inbox nav links to the operations assistant in a new tab"
 
 1. Google Cloud 콘솔 → 프로젝트 선택 → "Google Sheets API" 사용 설정 → IAM → 서비스 계정 만들기 → 키(JSON) 발급
 2. 키 파일 내용을 한 줄로 만들어 `GOOGLE_SERVICE_ACCOUNT_JSON`에, OpenAI 키를 `OPENAI_API_KEY`에 넣고 재배포
-3. Supabase SQL Editor에서 `0017_assistant.sql` 실행
+3. Supabase SQL Editor에서 `0018_assistant.sql` 실행
 4. 게임 운영 시트를 만든다. 수정까지 쓰려면 탭 첫 줄에 열 이름을 둔다(예: VIP 탭 = 이메일 / ID / 서버 / 닉네임 / VIP 단계 / 갱신일)
 5. 관리자 페이지 → 게임 문의함 → "운영 어시스턴트" → "시트 설정"에 URL을 넣고, 안내된 서비스 계정 이메일에 시트를 편집자로 공유
 6. "52009 VIP 몇이야"로 읽기, "52009 VIP4로 올려줘" → 제안 카드 → [적용] → 시트 반영 확인

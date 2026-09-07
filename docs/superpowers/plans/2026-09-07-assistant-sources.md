@@ -16,7 +16,7 @@
 - 자료 합계 글자 수 상한은 `MAX_SHEET_CHARS = 300_000`(기존 상수 유지).
 - 오류 사유 이름: `source_forbidden`, `source_not_found`, `sources_too_large`, `source_read_failed`(기존 `sheet_*` 읽기 사유를 이 이름으로 바꾼다). `sheet_write_failed`, `invalid_proposal`, `conflict`, `not_configured`는 그대로.
 - 문서는 읽기 전용. 제안 도구는 시트에만 붙는다.
-- 마이그레이션 번호는 **0019**(0018은 다른 세션이 첨부 파일용으로 이미 썼다).
+- 마이그레이션 번호는 **0020**(0019은 다른 세션이 첨부 파일용으로 이미 썼다).
 - 이 워크트리에는 첨부 파일 기능을 작업하는 다른 세션이 있다. 각 작업 시작 전에 `git status`·`git log -3`으로 최신 상태를 확인하고, 미커밋 변경이 있는 파일(특히 `app/api/assistant/conversations/[id]/messages/route.ts`, `tests/api/assistant-messages.test.ts`, `components/assistant/ChatPane.tsx`)은 현재 내용을 다시 읽은 뒤 고친다. 커밋할 때는 이 계획의 파일만 `git add`한다.
 - 테스트 실행: `npx vitest run <경로>`. 전체는 `npx vitest run`. 타입 검사는 `npx tsc --noEmit`.
 - 커밋 메시지 끝에 붙인다:
@@ -31,7 +31,7 @@
 
 | 파일 | 역할 |
 |---|---|
-| `supabase/migrations/0019_assistant_sources.sql` (신규) | `assistant_sources` 표, `games.sheet_id` 이전·삭제 |
+| `supabase/migrations/0020_assistant_sources.sql` (신규) | `assistant_sources` 표, `games.sheet_id` 이전·삭제 |
 | `lib/google-auth.ts` (신규) | 서비스 계정 JSON 로드, JWT 생성(Sheets + Docs 읽기 스코프) |
 | `lib/sheets.ts` (수정) | 인증을 `google-auth`로 옮김, 읽기 사유 이름 변경, `readSpreadsheetTitle`, `SheetProposal`/`Proposal` 분리, `SheetError.sourceTitle` |
 | `lib/docs.ts` (신규) | 구글 문서 본문 텍스트화(`serializeDocument`), 읽기(`readDocument`) |
@@ -54,7 +54,7 @@
 ### Task 1: 마이그레이션과 자료 저장소
 
 **Files:**
-- Create: `supabase/migrations/0019_assistant_sources.sql`
+- Create: `supabase/migrations/0020_assistant_sources.sql`
 - Create: `lib/assistant-sources.ts`
 - Test: `tests/lib/assistant-sources.test.ts`
 
@@ -73,7 +73,7 @@
 
 - [ ] **Step 1: 마이그레이션 작성**
 
-`supabase/migrations/0019_assistant_sources.sql`:
+`supabase/migrations/0020_assistant_sources.sql`:
 
 ```sql
 -- 운영 어시스턴트 자료 연결: 게임마다 구글 시트·문서를 여러 개 붙인다. games.sheet_id를 대체한다.
@@ -268,7 +268,7 @@ Expected: PASS (8 tests)
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add supabase/migrations/0019_assistant_sources.sql lib/assistant-sources.ts tests/lib/assistant-sources.test.ts
+git add supabase/migrations/0020_assistant_sources.sql lib/assistant-sources.ts tests/lib/assistant-sources.test.ts
 git commit -m "feat: assistant_sources table and store for linking sheets and docs"
 ```
 
@@ -1437,7 +1437,7 @@ Expected: FAIL
     return NextResponse.json({ success: false, status: "failed", failureReason: reason });
   };
 
-  // 0019 이전에 저장된 제안은 sourceId가 없다. 자료가 해제됐거나 다른 게임·문서를 가리켜도 적용하지 않는다.
+  // 0020 이전에 저장된 제안은 sourceId가 없다. 자료가 해제됐거나 다른 게임·문서를 가리켜도 적용하지 않는다.
   const sourceId = typeof message.proposal.sourceId === "string" ? message.proposal.sourceId : null;
   const source = sourceId ? await getSource(supabase, sourceId) : null;
   if (!conversation || !source || source.kind !== "sheet" || source.gameId !== conversation.gameId) {
@@ -1949,7 +1949,7 @@ Expected: 모두 통과. 다른 세션의 미커밋 변경 때문에 실패하�
 `CLAUDE.md` 8번 항목을 다음으로 바꾼다:
 
 ```
-8. **운영 시트 어시스턴트** — 문의함 보기 열의 "운영 어시스턴트 ↗"가 새 탭으로 `/games/{gameId}/assistant`를 연다(`app/(assistant)/`, 레일 없음). 게임에 연결한 구글 스프레드시트·구글 문서(`assistant_sources`, 사이드바의 "+ 자료 추가"에 URL 입력, 여러 개 가능, 마이그레이션 0019)를 서비스 계정(`GOOGLE_SERVICE_ACCOUNT_JSON`, 각 자료를 그 계정에 편집자로 공유)으로 매번 통째로 읽어 `# 시트: 제목`/`# 문서: 제목` 구간의 텍스트로 만들고 OpenAI(`OPENAI_API_KEY`, `OPENAI_MODEL` 기본 `gpt-5-mini`)에 시스템 프롬프트로 싣는다(`lib/assistant-sources.ts`, `lib/sheets.ts`, `lib/docs.ts`, `lib/assistant.ts`). 임베딩 검색은 쓰지 않고 자료 합계 30만 자까지다. 자료 제목은 등록 시 구글에서 읽어 저장하며, 공유가 안 돼 있으면 등록이 거절된다. "52009 VIP4로 올려줘" 같은 수정 요청은 모델이 `propose_update`/`propose_append` 도구(`spreadsheet` 인자로 시트 제목 지정)로 제안만 만들고, 서버가 자료·탭·열·행을 검증해 `sourceId`를 붙여 `assistant_messages`에 `pending`으로 저장하며, 관리자가 카드의 [적용]을 눌러야 그 시트를 다시 읽어 충돌을 확인한 뒤 Sheets API로 쓴다(마이그레이션 0017). 문서는 읽기 전용이고, 시트는 첫 줄이 열 이름인 탭만 수정할 수 있다. 대화는 게임별로 저장되고 ChatGPT식 사이드바에서 고른다(`?c=`). 설계는 `docs/superpowers/specs/2026-09-04-sheet-assistant-design.md`와 `docs/superpowers/specs/2026-09-07-assistant-sources-design.md`.
+8. **운영 시트 어시스턴트** — 문의함 보기 열의 "운영 어시스턴트 ↗"가 새 탭으로 `/games/{gameId}/assistant`를 연다(`app/(assistant)/`, 레일 없음). 게임에 연결한 구글 스프레드시트·구글 문서(`assistant_sources`, 사이드바의 "+ 자료 추가"에 URL 입력, 여러 개 가능, 마이그레이션 0020)를 서비스 계정(`GOOGLE_SERVICE_ACCOUNT_JSON`, 각 자료를 그 계정에 편집자로 공유)으로 매번 통째로 읽어 `# 시트: 제목`/`# 문서: 제목` 구간의 텍스트로 만들고 OpenAI(`OPENAI_API_KEY`, `OPENAI_MODEL` 기본 `gpt-5-mini`)에 시스템 프롬프트로 싣는다(`lib/assistant-sources.ts`, `lib/sheets.ts`, `lib/docs.ts`, `lib/assistant.ts`). 임베딩 검색은 쓰지 않고 자료 합계 30만 자까지다. 자료 제목은 등록 시 구글에서 읽어 저장하며, 공유가 안 돼 있으면 등록이 거절된다. "52009 VIP4로 올려줘" 같은 수정 요청은 모델이 `propose_update`/`propose_append` 도구(`spreadsheet` 인자로 시트 제목 지정)로 제안만 만들고, 서버가 자료·탭·열·행을 검증해 `sourceId`를 붙여 `assistant_messages`에 `pending`으로 저장하며, 관리자가 카드의 [적용]을 눌러야 그 시트를 다시 읽어 충돌을 확인한 뒤 Sheets API로 쓴다(마이그레이션 0018). 문서는 읽기 전용이고, 시트는 첫 줄이 열 이름인 탭만 수정할 수 있다. 대화는 게임별로 저장되고 ChatGPT식 사이드바에서 고른다(`?c=`). 설계는 `docs/superpowers/specs/2026-09-04-sheet-assistant-design.md`와 `docs/superpowers/specs/2026-09-07-assistant-sources-design.md`.
 ```
 
 "운영 시트 어시스턴트 설정 절차"를 다음으로 바꾼다:
@@ -1957,7 +1957,7 @@ Expected: 모두 통과. 다른 세션의 미커밋 변경 때문에 실패하�
 ```
 1. Google Cloud 콘솔 → 프로젝트 선택 → "Google Sheets API"와 "Google Docs API" 사용 설정 → IAM → 서비스 계정 만들기 → 키(JSON) 발급
 2. 키 파일 내용을 한 줄로 만들어 `GOOGLE_SERVICE_ACCOUNT_JSON`에, OpenAI 키를 `OPENAI_API_KEY`에 넣고 재배포. Node 22 이상에서 실행한다(`openai` 패키지 요구사항; Vercel 프로젝트의 Node 버전을 확인)
-3. Supabase SQL Editor에서 `0017_assistant.sql`, `0018_assistant_attachments.sql`, `0019_assistant_sources.sql`을 순서대로 실행. 0017는 anon의 games 조회를 열 단위로 제한한다 — 접수 폼은 id/name/logo_path만 읽는다. 0019은 기존 `games.sheet_id`를 자료 표로 옮기고 열을 지운다
+3. Supabase SQL Editor에서 `0018_assistant.sql`, `0019_assistant_attachments.sql`, `0020_assistant_sources.sql`을 순서대로 실행. 0018은 anon의 games 조회를 열 단위로 제한한다 — 접수 폼은 id/name/logo_path만 읽는다. 0020은 기존 `games.sheet_id`를 자료 표로 옮기고 열을 지운다
 4. 게임 운영 시트·문서를 만든다. 시트를 수정까지 쓰려면 탭 첫 줄에 열 이름을 둔다(예: VIP 탭 = 이메일 / ID / 서버 / 닉네임 / VIP 단계 / 갱신일)
 5. 안내된 서비스 계정 이메일에 각 시트·문서를 편집자로 공유한 뒤, 관리자 페이지 → 게임 문의함 → "운영 어시스턴트" → 사이드바 "+ 자료 추가"에 URL을 넣는다
 6. 시트는 "52009 VIP 몇이야"로 읽기, "52009 VIP4로 올려줘" → 제안 카드 → [적용] → 시트 반영 확인. 문서는 "환불 정책이 뭐야"처럼 물어 근거에 문서 이름이 붙는지 확인

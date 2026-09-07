@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import InboxConversation from "@/components/inbox/InboxConversation";
 import type { InquiryRow } from "@/lib/inquiries";
@@ -28,7 +28,9 @@ const inquiry: InquiryRow = {
   replyContent: null,
   repliedAt: null,
   gmailThreadId: null,
+  unreadReplyAt: null,
   locale: null,
+  translations: {},
   paymentNo: null,
   occurredAt: null,
   deviceInfo: null,
@@ -36,7 +38,7 @@ const inquiry: InquiryRow = {
 };
 
 const labels = { groupLabels: { game_usage: "게임 이용 문의" }, typeLabels: { payment_refund: "결제/환불" }, typeOrder: ["payment_refund"] };
-const entries: TimelineEntry[] = [{ kind: "inquiry", id: "inq-1", at: inquiry.createdAt, author: "luna_park", body: "본문", details: [], attachments: [] }];
+const entries: TimelineEntry[] = [{ kind: "inquiry", id: "inq-1", at: inquiry.createdAt, author: "luna_park", body: "본문", details: [], attachments: [], translations: {} }];
 
 function renderIt(overrides: Partial<InquiryRow> = {}) {
   return render(
@@ -45,6 +47,22 @@ function renderIt(overrides: Partial<InquiryRow> = {}) {
 }
 
 describe("InboxConversation", () => {
+  beforeEach(() => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) }) as never;
+  });
+
+  it("marks an unread reply as read when the inquiry is opened", async () => {
+    renderIt({ unreadReplyAt: "2026-09-07T01:00:00.000Z" });
+    await vi.waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith("/api/inquiries/inq-1/mark-read", expect.objectContaining({ method: "POST" }))
+    );
+  });
+
+  it("does not call mark-read when there is nothing unread", () => {
+    renderIt();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("renders the header with number, title, badge, category, and prev/next", () => {
     renderIt();
     expect(screen.getByText("R-20260903-0007")).toBeInTheDocument();

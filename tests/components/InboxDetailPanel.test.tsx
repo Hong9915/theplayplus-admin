@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import InboxDetailPanel from "@/components/inbox/InboxDetailPanel";
@@ -7,7 +7,11 @@ import type { InquiryRow } from "@/lib/inquiries";
 import type { EventRow } from "@/lib/events";
 import type { AccountHistoryEntry } from "@/lib/account-history";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+let searchParams = new URLSearchParams();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+  useSearchParams: () => searchParams,
+}));
 
 const inquiry: InquiryRow = {
   id: "inq-1",
@@ -27,7 +31,9 @@ const inquiry: InquiryRow = {
   replyContent: null,
   repliedAt: null,
   gmailThreadId: null,
+  unreadReplyAt: null,
   locale: null,
+  translations: {},
   paymentNo: null,
   occurredAt: null,
   deviceInfo: null,
@@ -40,10 +46,15 @@ const events: EventRow[] = [
 ];
 
 const history: AccountHistoryEntry[] = [
-  { id: "inq-0", inquiryNo: null, title: "예전 문의", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "payment_refund", occurredAt: null, paymentNo: null, deviceInfo: null, createdAt: "2026-07-21T00:00:00.000Z" },
+  { id: "inq-0", inquiryNo: null, title: "예전 문의", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "payment_refund", occurredAt: null, paymentNo: null, deviceInfo: null, translations: {}, createdAt: "2026-07-21T00:00:00.000Z" },
 ];
 
 describe("InboxDetailPanel", () => {
+  beforeEach(() => {
+    searchParams = new URLSearchParams();
+    window.history.replaceState(null, "", "/games/game-1/inquiries/inq-1");
+  });
+
   it("shows processing controls, meta rows, and the event log on the 상세 tab", () => {
     render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
     expect(screen.getByLabelText("상태")).toHaveValue("in_progress");
@@ -74,5 +85,34 @@ describe("InboxDetailPanel", () => {
     expect(screen.getByText("회사명")).toBeInTheDocument();
     expect(screen.getByText("플레이컴퍼니")).toBeInTheDocument();
     expect(screen.queryByText("게임 계정")).not.toBeInTheDocument();
+  });
+  it("opens on the history tab when the URL says ?tab=history", () => {
+    searchParams = new URLSearchParams("tab=history");
+    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+    expect(screen.getByRole("tab", { name: /계정 이력/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /예전 문의/ })).toBeInTheDocument();
+  });
+
+  it("writes the open tab into the URL without a navigation", async () => {
+    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+    await userEvent.click(screen.getByRole("tab", { name: /계정 이력/ }));
+    expect(window.location.search).toBe("?tab=history");
+    await userEvent.click(screen.getByRole("tab", { name: "상세" }));
+    expect(window.location.search).toBe("");
+  });
+
+  it("moves between tabs with the arrow keys and keeps only the active tab in the Tab order", async () => {
+    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+    const detail = screen.getByRole("tab", { name: "상세" });
+    const historyTab = screen.getByRole("tab", { name: /계정 이력/ });
+    expect(detail).toHaveAttribute("tabindex", "0");
+    expect(historyTab).toHaveAttribute("tabindex", "-1");
+
+    detail.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(historyTab).toHaveAttribute("aria-selected", "true");
+    expect(historyTab).toHaveFocus();
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", historyTab.id);
+    expect(historyTab).toHaveAttribute("aria-controls", screen.getByRole("tabpanel").id);
   });
 });

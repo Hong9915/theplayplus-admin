@@ -6,14 +6,16 @@ import type { InboxScope } from "@/lib/inbox-scope";
 import InboxSearch from "@/components/inbox/InboxSearch";
 import DeleteGameButton from "@/components/games/DeleteGameButton";
 
-type ViewKey = InquiryStatus | "all" | "stale";
+type ViewKey = InquiryStatus | "all" | "stale" | "unread";
 
 const VIEWS: Array<{ key: ViewKey; label: string; patch: Partial<InquiryListQuery> }> = [
-  { key: "new", label: "접수", patch: { status: "new", stale: false } },
-  { key: "in_progress", label: "처리중", patch: { status: "in_progress", stale: false } },
-  { key: "resolved", label: "완료", patch: { status: "resolved", stale: false } },
-  { key: "all", label: "전체", patch: { status: null, stale: false, priority: null, type: null, group: null } },
-  { key: "stale", label: "3일 이상 미처리", patch: { status: null, stale: true } },
+  { key: "new", label: "접수", patch: { status: "new", stale: false, unread: false } },
+  { key: "in_progress", label: "처리중", patch: { status: "in_progress", stale: false, unread: false } },
+  { key: "resolved", label: "완료", patch: { status: "resolved", stale: false, unread: false } },
+  { key: "all", label: "전체", patch: { status: null, stale: false, unread: false, priority: null, type: null, group: null } },
+  { key: "stale", label: "3일 이상 미처리", patch: { status: null, stale: true, unread: false } },
+  // 자동 동기화가 가져온 사용자 회신을 아직 열어 보지 않은 건.
+  { key: "unread", label: "회신 도착", patch: { status: null, stale: false, unread: true } },
 ];
 
 const PRIORITY_VIEWS: Array<{ key: InquiryPriority; label: string; dot: string }> = [
@@ -23,8 +25,22 @@ const PRIORITY_VIEWS: Array<{ key: InquiryPriority; label: string; dot: string }
 
 function isViewActive(key: ViewKey, query: InquiryListQuery): boolean {
   if (key === "stale") return query.stale;
-  if (key === "all") return !query.status && !query.stale && !query.priority && !query.type;
-  return query.status === key && !query.stale;
+  if (key === "unread") return query.unread;
+  if (key === "all") return !query.status && !query.stale && !query.unread && !query.priority && !query.type;
+  return query.status === key && !query.stale && !query.unread;
+}
+
+function viewCount(key: ViewKey, counts: InquiryFacetCounts): number {
+  switch (key) {
+    case "all":
+      return counts.total;
+    case "stale":
+      return counts.stale;
+    case "unread":
+      return counts.unread;
+    default:
+      return counts.status[key];
+  }
 }
 
 const ITEM = "flex items-center justify-between gap-2 h-[34px] px-2.5 rounded-lg text-[13px] transition-colors";
@@ -92,21 +108,19 @@ export default function InboxNav({
       <ul className="flex flex-col gap-0.5" aria-label="보기">
         {VIEWS.map((view) => {
           const active = isViewActive(view.key, query);
-          let count: number | null = null;
-          if (counts) {
-            count = view.key === "all" ? counts.total : view.key === "stale" ? counts.stale : counts.status[view.key];
-          }
+          const count = counts ? viewCount(view.key, counts) : null;
+          const highlight = (view.key === "stale" || view.key === "unread") && count !== null && count > 0;
           return (
             <li key={view.key}>
               <Link href={href(view.patch)} aria-current={active ? "true" : undefined} className={`${ITEM} ${active ? ITEM_ACTIVE : ITEM_IDLE}`}>
                 <span>{view.label}</span>
                 {count !== null && view.key === "new" && count > 0 && (
-                  <span className="inline-flex min-w-[20px] h-[18px] px-1.5 rounded-full bg-accent/10 text-accent text-[11px] font-semibold leading-[18px] justify-center">
+                  <span className="inline-flex min-w-[20px] h-[18px] px-1.5 rounded-full bg-accent/10 text-accent text-[11px] font-semibold leading-[18px] justify-center tabular-nums">
                     {count}
                   </span>
                 )}
                 {count !== null && view.key !== "new" && (
-                  <span className={`text-xs font-normal ${view.key === "stale" && count > 0 ? "text-accent font-semibold" : "text-muted"}`}>
+                  <span className={`text-xs font-normal tabular-nums ${highlight ? "text-accent font-semibold" : "text-muted"}`}>
                     {count}
                   </span>
                 )}
@@ -125,7 +139,7 @@ export default function InboxNav({
               <li key={key}>
                 <Link href={href({ type: key, group: null })} aria-current={active ? "true" : undefined} className={`${ITEM} h-8 ${active ? ITEM_ACTIVE : ITEM_IDLE}`}>
                   <span className="truncate">{labels.typeLabels[key] ?? key}</span>
-                  {counts && <span className="text-xs font-normal text-muted">{counts.type[key] ?? 0}</span>}
+                  {counts && <span className="text-xs font-normal text-muted tabular-nums">{counts.type[key] ?? 0}</span>}
                 </Link>
               </li>
             );
@@ -145,7 +159,7 @@ export default function InboxNav({
                     <span className={`w-2 h-2 rounded-full ${item.dot}`} aria-hidden="true" />
                     <span>{item.label}</span>
                   </span>
-                  {counts && <span className="text-xs font-normal text-muted">{counts.priority[item.key]}</span>}
+                  {counts && <span className="text-xs font-normal text-muted tabular-nums">{counts.priority[item.key]}</span>}
                 </Link>
               </li>
             );

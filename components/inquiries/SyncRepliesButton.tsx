@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import StatusMessage from "@/components/ui/StatusMessage";
 
 const ERROR_MESSAGES: Record<string, string> = {
   no_thread: "아직 보낸 답변이 없어 확인할 스레드가 없습니다.",
@@ -42,7 +43,7 @@ export default function SyncRepliesButton({ inquiryId }: { inquiryId: string }) 
 
   return (
     <div className="flex items-center gap-2 text-xs">
-      {message && <span className="text-muted">{message}</span>}
+      <StatusMessage tone="muted">{message}</StatusMessage>
       <button
         type="button"
         onClick={handleSync}

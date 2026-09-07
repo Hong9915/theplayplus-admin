@@ -14,6 +14,8 @@ export interface InquiryListQuery {
   priority: InquiryPriority | null;
   /** 완료가 아니면서 접수 후 72시간 지난 건만. */
   stale: boolean;
+  /** 아직 열어 보지 않은 사용자 회신이 있는 건만(unread_reply_at 있음). */
+  unread: boolean;
   q: string;
   sort: InquirySort;
   page: number;
@@ -37,6 +39,7 @@ export const DEFAULT_QUERY: InquiryListQuery = {
   status: null,
   priority: null,
   stale: false,
+  unread: false,
   q: "",
   sort: "newest",
   page: 1,
@@ -71,6 +74,7 @@ export function parseInquiryListQuery(params: RawParams): InquiryListQuery {
     status: STATUSES.includes(status as InquiryStatus) ? (status as InquiryStatus) : null,
     priority: PRIORITIES.includes(priority as InquiryPriority) ? (priority as InquiryPriority) : null,
     stale: readParam(params, "stale") === "1",
+    unread: readParam(params, "unread") === "1",
     q: (readParam(params, "q") ?? "").trim(),
     sort: SORTS.includes(sort as InquirySort) ? (sort as InquirySort) : "newest",
     page: Number.isFinite(page) && page >= 1 ? page : 1,
@@ -85,6 +89,7 @@ export function toInquiryListSearch(query: InquiryListQuery): string {
   if (query.status) params.set("status", query.status);
   if (query.priority) params.set("priority", query.priority);
   if (query.stale) params.set("stale", "1");
+  if (query.unread) params.set("unread", "1");
   if (query.q) params.set("q", query.q);
   if (query.sort !== "newest") params.set("sort", query.sort);
   if (query.page > 1) params.set("page", String(query.page));

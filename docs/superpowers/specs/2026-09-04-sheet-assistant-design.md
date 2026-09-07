@@ -85,12 +85,12 @@
 - 입력창 왼쪽의 📎로 파일을 고르면 입력창 위에 칩(이름 · 크기 · ×)으로 쌓이고, 보내면 메시지와 함께 간다. 글 없이 파일만 보낼 수 있고, 그때 새 대화의 제목은 첫 파일 이름이다.
 - 허용: txt, md, csv, tsv, json, xlsx. 파일당 4MB, 메시지당 합계 4MB(파일이 메시지와 한 요청으로 가므로 Vercel 서버리스 요청 본문 상한 4.5MB 아래), 메시지당 5개, 대화당 첨부 텍스트 합계 200,000자(`lib/attachment-rules.ts`). 화면은 형식·크기를 고르는 즉시 거르고, 서버가 다시 검사해 `unsupported_type` / `file_too_large` / `message_too_large` / `too_many_files` / `attachments_too_large` / `file_unreadable`로 400을 돌려준다. 합계 초과는 저장 전에 거절하므로 파일을 빼고 다시 보낼 수 있다.
 - 서버(`lib/attachments.ts`)는 원본을 보관하지 않고 텍스트만 뽑는다. 텍스트 파일은 utf-8로 읽고 깨지면 EUC-KR로 다시 읽는다(BOM 제거). xlsx는 `exceljs`로 열어 시트와 같은 `serializeSheets` 형식(탭 제목 · 행 번호 · `|`)으로 바꾼다.
-- 저장: `assistant_messages.attachments jsonb` = `[{ name, size, text }]`(마이그레이션 0018). 화면에는 이름·크기만 내려간다.
+- 저장: `assistant_messages.attachments jsonb` = `[{ name, size, text }]`(마이그레이션 0019). 화면에는 이름·크기만 내려간다.
 - 프롬프트: 그 대화의 모든 메시지 첨부를 순서대로 `# 첨부 파일` 섹션(`## 파일명` 아래 본문)으로 시트 내용 뒤에 붙이고, 첨부가 있을 때만 "첨부 파일도 근거로 쓰되 파일은 수정할 수 없다"는 규칙을 더한다. 이력의 사용자 메시지에는 `[첨부: a.txt, b.csv]`를 붙여 어느 메시지가 어떤 파일을 가져왔는지 알린다.
 - 메시지 라우트는 파일이 있을 때 `multipart/form-data`(`content` + `files[]`)를, 없을 때 기존 JSON을 받는다.
 - 보낸 메시지의 말풍선 아래에 파일 칩이 남는다. 파일 수정 제안은 없다.
 
-## 데이터 모델 (마이그레이션 0017)
+## 데이터 모델 (마이그레이션 0018)
 
 ```sql
 alter table games add column if not exists sheet_id text;
@@ -294,7 +294,7 @@ GOOGLE_SERVICE_ACCOUNT_JSON=
 
 1. Google Cloud 콘솔에서 프로젝트 선택 → Google Sheets API 사용 설정 → 서비스 계정 생성 → 키(JSON) 발급.
 2. 키 파일 내용을 한 줄로 만들어 `GOOGLE_SERVICE_ACCOUNT_JSON`에 넣는다. `OPENAI_API_KEY`도 넣고 재배포.
-3. 마이그레이션 `0017_assistant.sql` 실행.
+3. 마이그레이션 `0018_assistant.sql` 실행.
 4. 게임 운영 시트를 만든다. 수정까지 쓰려면 탭 첫 줄에 열 이름을 둔다(예: VIP 탭 = 이메일 / ID / 서버 / 닉네임 / VIP 단계 / 갱신일).
 5. 관리자 페이지 → 게임 문의함 → "운영 어시스턴트" → 시트 설정에 URL을 넣고, 안내된 서비스 계정 이메일에 시트를 편집자로 공유한다.
 6. "52009 VIP 몇이야"로 읽기, "52009 VIP4로 올려줘"로 제안 카드 → 적용 → 시트 반영을 확인한다.

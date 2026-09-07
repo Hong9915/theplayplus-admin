@@ -30,16 +30,19 @@ describe("formatElapsed", () => {
 });
 
 describe("formatReceivedAt", () => {
-  it("formats an afternoon time in Korean", () => {
-    // 2026-07-23 22:55 KST
-    expect(formatReceivedAt("2026-07-23T13:55:00.000Z")).toContain("2026. 07. 23.");
+  it("formats in Asia/Seoul regardless of the process time zone", () => {
+    // 2026-07-23 13:55 UTC = 22:55 KST
+    expect(formatReceivedAt("2026-07-23T13:55:00.000Z")).toBe("2026. 07. 23. 오후 10:55");
+  });
+
+  it("rolls the date forward when KST crosses midnight", () => {
+    // 2026-07-23 16:30 UTC = 07-24 01:30 KST
+    expect(formatReceivedAt("2026-07-23T16:30:00.000Z")).toBe("2026. 07. 24. 오전 1:30");
   });
 
   it("renders noon as 오후 12 and midnight as 오전 12", () => {
-    const noon = new Date(2026, 6, 23, 12, 0).toISOString();
-    const midnight = new Date(2026, 6, 23, 0, 0).toISOString();
-    expect(formatReceivedAt(noon)).toBe("2026. 07. 23. 오후 12:00");
-    expect(formatReceivedAt(midnight)).toBe("2026. 07. 23. 오전 12:00");
+    expect(formatReceivedAt("2026-07-23T03:00:00.000Z")).toBe("2026. 07. 23. 오후 12:00");
+    expect(formatReceivedAt("2026-07-22T15:00:00.000Z")).toBe("2026. 07. 23. 오전 12:00");
   });
 });
 
@@ -114,7 +117,9 @@ describe("inquiryMetaRows", () => {
     replyContent: null,
     repliedAt: null,
     gmailThreadId: null,
+    unreadReplyAt: null,
     locale: null,
+    translations: {},
     paymentNo: null,
     occurredAt: null,
     deviceInfo: null,
@@ -137,6 +142,7 @@ describe("inquiryMetaRows", () => {
       ...base,
       meta: {},
       locale: "zh",
+      translations: {},
       paymentNo: "imp_20260903_001",
       occurredAt: "2026-09-03T14:05",
       deviceInfo: "Galaxy S24 / Android 14",

@@ -103,7 +103,7 @@ describe("POST /api/auto-reply/run", () => {
 
   it("skips an inquiry that already got a reply while it was waiting", async () => {
     vi.mocked(messagesModule.listMessages).mockResolvedValue([
-      { id: "m1", direction: "outbound", authorEmail: "admin@theplayplus.com", body: "x", gmailMessageId: "g", rfcMessageId: null, sentAt: "2026-09-04T00:00:00.000Z", autoSent: false },
+      { id: "m1", direction: "outbound", authorEmail: "admin@theplayplus.com", body: "x", gmailMessageId: "g", rfcMessageId: null, sentAt: "2026-09-04T00:00:00.000Z", autoSent: false, translations: {} },
     ]);
     const response = await POST(makeRequest());
     await expect(response.json()).resolves.toEqual({ success: true, claimed: 1, sent: 0, skipped: 1, failed: 0 });

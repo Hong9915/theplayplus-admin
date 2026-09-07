@@ -68,7 +68,7 @@ export default function InboxShell({
   return (
     <div className="flex h-screen min-w-[1180px] flex-1">
       <InboxNav scope={scope} title={title} game={game} query={query} labels={labels} counts={counts} selectedId={selectedId} />
-      <InboxList scope={scope} page={listPage} query={query} labels={labels} selectedId={selectedId} viewLabel={describeView(query)} />
+      <InboxList scope={scope} page={listPage} query={query} labels={labels} selectedId={selectedId} viewLabel={describeView(query)} now={Date.now()} />
       {selected ? (
         <>
           <InboxConversation

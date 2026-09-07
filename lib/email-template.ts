@@ -103,7 +103,14 @@ export function renderReplyEmailHtml(input: ReplyEmailInput): string {
           <td style="background-color:${COLORS.dark};padding:28px 40px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td align="left" valign="middle"><img src="cid:${input.logoCid}" alt="THE PLAY+" height="36" style="height:36px;width:auto;display:block;border:0;"></td>
+                <td align="left" valign="middle">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td valign="middle" style="padding-right:12px;"><img src="cid:${input.logoCid}" alt="THE PLAY+" width="47" height="44" style="height:44px;width:47px;display:block;border:0;"></td>
+                      <td valign="middle" style="font-family:${FONT};font-size:17px;font-weight:700;color:#FFFFFF;letter-spacing:0.06em;white-space:nowrap;">THE PLAY<span style="color:${COLORS.accent};">+</span></td>
+                    </tr>
+                  </table>
+                </td>
                 <td align="right" valign="middle" style="font-family:${FONT};font-size:13px;font-weight:500;color:${COLORS.mutedOnDark};letter-spacing:0.02em;">고객센터</td>
               </tr>
             </table>

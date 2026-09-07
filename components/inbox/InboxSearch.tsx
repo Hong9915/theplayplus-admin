@@ -48,9 +48,11 @@ export default function InboxSearch({
       </svg>
       <input
         type="search"
+        name="q"
+        autoComplete="off"
         value={value}
         onChange={(e) => handleChange(e.target.value)}
-        placeholder="제목·접수번호·계정·본문 검색"
+        placeholder="제목·접수번호·계정·본문 검색…"
         aria-label="검색"
         className="flex-1 min-w-0 bg-transparent text-[13px] text-ink placeholder:text-muted focus:outline-none"
       />

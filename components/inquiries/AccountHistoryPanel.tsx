@@ -61,7 +61,7 @@ export default function AccountHistoryPanel({
                   className="block rounded-lg border border-line bg-ground/60 px-3 py-2 hover:border-accent hover:bg-ground transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="text-sm font-medium text-ink">{entry.title}</span>
+                    <span className="text-sm font-medium text-ink min-w-0 break-words">{entry.title}</span>
                     <StatusBadge status={entry.status} />
                   </div>
                   {entry.content && entry.content.trim() !== entry.title.trim() && (

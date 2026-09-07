@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ReplySaveError, sendInquiryReply, type ReplyableInquiry } from "@/lib/send-reply";
+import { REPLY_EMAIL_SUBJECT, ReplySaveError, sendInquiryReply, type ReplyableInquiry } from "@/lib/send-reply";
 import * as gmailModule from "@/lib/gmail";
 import * as eventsModule from "@/lib/events";
 import * as messagesModule from "@/lib/messages";
@@ -71,7 +71,7 @@ describe("sendInquiryReply", () => {
     const result = await sendInquiryReply(supabase, { inquiry, body: "환불 처리했습니다", mode: "manual", actor: ADMIN });
 
     expect(gmailModule.sendReplyEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ to: "luna@example.com", subject: "[R-20260903-0001] Re: 중복 결제", threadId: null })
+      expect.objectContaining({ to: "luna@example.com", subject: REPLY_EMAIL_SUBJECT, threadId: null })
     );
     const sendInput = vi.mocked(gmailModule.sendReplyEmail).mock.calls[0][0];
     expect(sendInput.mailbox).toBe("game");
@@ -185,5 +185,33 @@ describe("sendInquiryReply", () => {
     const result = await sendInquiryReply(supabase, { inquiry, body: "환불 처리했습니다", mode: "manual", actor: ADMIN });
 
     expect(result.recorded).toBe(true);
+  });
+});
+
+// --- 회신 자동 동기화(마이그레이션 0017): 수동 답변은 "읽지 않은 회신" 표시를 지운다. main의 테스트를 옮겨 왔다.
+describe("sendInquiryReply (unread reply mark)", () => {
+  beforeEach(() => {
+    vi.mocked(gmailModule.sendReplyEmail).mockReset().mockResolvedValue(SENT);
+    vi.mocked(eventsModule.recordEvent).mockReset().mockResolvedValue(undefined);
+    vi.mocked(messagesModule.createOutboundMessage).mockReset().mockResolvedValue(true);
+    vi.mocked(messagesModule.listRfcMessageIds).mockReset().mockResolvedValue([]);
+    vi.mocked(embeddingsModule.ensureInquiryEmbedding).mockReset().mockResolvedValue([0.1]);
+  });
+
+  it("clears the unread reply mark when an admin sends a reply", async () => {
+    const { supabase, update } = mockSupabase();
+
+    await sendInquiryReply(supabase, { inquiry, body: "답변", mode: "manual", actor: ADMIN });
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ status: "in_progress", unread_reply_at: null }));
+  });
+
+  it("leaves the unread mark alone for automatic replies", async () => {
+    const { supabase, update } = mockSupabase();
+
+    await sendInquiryReply(supabase, { inquiry, body: "접수됐습니다", mode: "auto" });
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(expect.not.objectContaining({ unread_reply_at: null }));
   });
 });

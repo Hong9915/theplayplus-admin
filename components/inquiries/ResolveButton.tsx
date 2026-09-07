@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { InquiryStatus } from "@/lib/inquiries";
+import StatusMessage from "@/components/ui/StatusMessage";
 
 /**
  * 답변을 보내면 처리중이 기본이라 완료로 바꾸는 손이 한 번 더 간다.
@@ -49,7 +50,7 @@ export default function ResolveButton({
 
   return (
     <div className="flex items-center gap-2">
-      {error && <span className="text-red-600 text-sm">{error}</span>}
+      <StatusMessage className="text-sm">{error}</StatusMessage>
       <button
         type="button"
         onClick={handleClick}
