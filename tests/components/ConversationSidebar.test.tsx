@@ -4,8 +4,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ConversationSidebar from "@/components/assistant/ConversationSidebar";
 
+const push = vi.fn();
 const refresh = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh, replace: vi.fn() }) }));
 
 const sources = [
   { id: "s1", gameId: "g1", kind: "sheet" as const, externalId: "1AbC", title: "VIP 원장", createdAt: "" },
@@ -18,8 +19,37 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Conversati
   );
 }
 
+describe("ConversationSidebar conversations", () => {
+  const conversations = [
+    { id: "c1", gameId: "g1", title: "VIP 확인", createdBy: "a@b", createdAt: "", updatedAt: "" },
+    { id: "c2", gameId: "g1", title: "보상 코드", createdBy: "a@b", createdAt: "", updatedAt: "" },
+  ];
+
+  beforeEach(() => {
+    push.mockReset();
+    refresh.mockReset();
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) }) as never;
+  });
+
+  it("lists conversations linking to ?c= and marks the selected one", () => {
+    renderSidebar({ conversations, selectedId: "c2" });
+    expect(screen.getByText("여신 키우기")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "VIP 확인" })).toHaveAttribute("href", "/games/g1/assistant?c=c1");
+    expect(screen.getByRole("link", { name: "보상 코드" })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("link", { name: /새 대화/ })).toHaveAttribute("href", "/games/g1/assistant");
+  });
+
+  it("deletes a conversation and navigates away when it was selected", async () => {
+    renderSidebar({ conversations, selectedId: "c1" });
+    await userEvent.click(screen.getByRole("button", { name: "VIP 확인 삭제" }));
+    expect(global.fetch).toHaveBeenCalledWith("/api/assistant/conversations/c1", { method: "DELETE" });
+    expect(push).toHaveBeenCalledWith("/games/g1/assistant");
+  });
+});
+
 describe("ConversationSidebar sources", () => {
   beforeEach(() => {
+    push.mockReset();
     refresh.mockReset();
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) }) as never;
   });
