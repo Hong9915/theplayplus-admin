@@ -28,7 +28,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
     return NextResponse.json({ success: false, status: "failed", failureReason: reason });
   };
 
-  // 0017 이전에 저장된 제안은 sourceId가 없다. 자료가 해제됐거나 다른 게임·문서를 가리켜도 적용하지 않는다.
+  // 0019 이전에 저장된 제안은 sourceId가 없다. 자료가 해제됐거나 다른 게임·문서를 가리켜도 적용하지 않는다.
   const sourceId = typeof message.proposal.sourceId === "string" ? message.proposal.sourceId : null;
   const source = sourceId ? await getSource(supabase, sourceId) : null;
   if (!conversation || !source || source.kind !== "sheet" || source.gameId !== conversation.gameId) {

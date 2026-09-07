@@ -3664,7 +3664,7 @@ git commit -m "feat: inbox nav links to the operations assistant in a new tab"
 - [ ] **Step 1: `CLAUDE.md` 핵심 기능 목록 끝(7번 뒤)에 추가**
 
 ```markdown
-8. **운영 시트 어시스턴트** — 문의함 보기 열의 "운영 어시스턴트 ↗"가 새 탭으로 `/games/{gameId}/assistant`를 연다(`app/(assistant)/`, 레일 없음). 게임에 연결한 구글 스프레드시트(`games.sheet_id`, 화면의 "시트 설정"에서 URL 입력)를 서비스 계정(`GOOGLE_SERVICE_ACCOUNT_JSON`, 시트를 그 계정에 편집자로 공유)으로 매번 통째로 읽어 텍스트 표로 만들고 OpenAI(`OPENAI_API_KEY`, `OPENAI_MODEL` 기본 `gpt-5-mini`)에 시스템 프롬프트로 싣는다(`lib/sheets.ts`, `lib/assistant.ts`). 임베딩 검색은 쓰지 않는다. "52009 VIP4로 올려줘" 같은 수정 요청은 모델이 `propose_update`/`propose_append` 도구로 제안만 만들고, 서버가 탭·열·행을 검증해 `assistant_messages`에 `pending`으로 저장하며, 관리자가 카드의 [적용]을 눌러야 그 행을 다시 읽어 충돌을 확인한 뒤 Sheets API로 쓴다(마이그레이션 0015). 첫 줄이 열 이름인 탭만 수정할 수 있고 줄글 탭은 읽기 전용이다. 대화는 게임별로 저장되고 ChatGPT식 사이드바에서 고른다(`?c=`). 설계는 `docs/superpowers/specs/2026-09-04-sheet-assistant-design.md`.
+8. **운영 시트 어시스턴트** — 문의함 보기 열의 "운영 어시스턴트 ↗"가 새 탭으로 `/games/{gameId}/assistant`를 연다(`app/(assistant)/`, 레일 없음). 게임에 연결한 구글 스프레드시트(`games.sheet_id`, 화면의 "시트 설정"에서 URL 입력)를 서비스 계정(`GOOGLE_SERVICE_ACCOUNT_JSON`, 시트를 그 계정에 편집자로 공유)으로 매번 통째로 읽어 텍스트 표로 만들고 OpenAI(`OPENAI_API_KEY`, `OPENAI_MODEL` 기본 `gpt-5-mini`)에 시스템 프롬프트로 싣는다(`lib/sheets.ts`, `lib/assistant.ts`). 임베딩 검색은 쓰지 않는다. "52009 VIP4로 올려줘" 같은 수정 요청은 모델이 `propose_update`/`propose_append` 도구로 제안만 만들고, 서버가 탭·열·행을 검증해 `assistant_messages`에 `pending`으로 저장하며, 관리자가 카드의 [적용]을 눌러야 그 행을 다시 읽어 충돌을 확인한 뒤 Sheets API로 쓴다(마이그레이션 0017). 첫 줄이 열 이름인 탭만 수정할 수 있고 줄글 탭은 읽기 전용이다. 대화는 게임별로 저장되고 ChatGPT식 사이드바에서 고른다(`?c=`). 설계는 `docs/superpowers/specs/2026-09-04-sheet-assistant-design.md`.
 ```
 
 "자동 답변 설정 절차" 절 뒤에 추가:

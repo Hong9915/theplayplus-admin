@@ -273,9 +273,9 @@ Supabase(Postgres)에 저장하며 `theplayplus-contact`와 **동일한 프로�
 | `inquiry_events` | 변경 이력 (감사 로그) | 0003 |
 | `reply_templates` | 답변 템플릿 | 0004 |
 | `inquiry_messages` | 답변·회신 대화 기록 | 0005 |
-| `assistant_conversations` | 운영 시트 어시스턴트 대화 | 0015 |
-| `assistant_messages` | 어시스턴트 메시지·수정 제안 | 0015 |
-| `assistant_sources` | 게임별 운영 자료(구글 시트·문서) 연결. `id`, `game_id`, `kind`(sheet\|doc), `external_id`, `title`, `created_at`, `unique(game_id, kind, external_id)` | 0017 |
+| `assistant_conversations` | 운영 시트 어시스턴트 대화 | 0017 |
+| `assistant_messages` | 어시스턴트 메시지·수정 제안 | 0017 |
+| `assistant_sources` | 게임별 운영 자료(구글 시트·문서) 연결. `id`, `game_id`, `kind`(sheet\|doc), `external_id`, `title`, `created_at`, `unique(game_id, kind, external_id)` | 0019 |
 
 ### `inquiries` 주요 컬럼
 

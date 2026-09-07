@@ -29,7 +29,7 @@
 - 자료별 켜고 끄기, 순서 바꾸기. 등록 순서대로 싣는다.
 - 자료 제목 자동 갱신. 구글에서 이름을 바꾸면 삭제 후 다시 등록한다.
 
-## 데이터 모델 (마이그레이션 0017 — 0016은 첨부 파일용으로 이미 쓰였다)
+## 데이터 모델 (마이그레이션 0019 — 0018은 첨부 파일용으로 이미 쓰였다)
 
 ```sql
 create table if not exists assistant_sources (
@@ -52,7 +52,7 @@ on conflict do nothing;
 alter table games drop column if exists sheet_id;
 ```
 
-`lib/categories.ts`의 `Game.sheetId`는 없앤다. 0015가 anon에 준 열 단위 `select` 권한은 `sheet_id`를 포함하지 않으므로 그대로 둔다.
+`lib/categories.ts`의 `Game.sheetId`는 없앤다. 0017가 anon에 준 열 단위 `select` 권한은 `sheet_id`를 포함하지 않으므로 그대로 둔다.
 
 ### 제안(proposal) JSON
 
@@ -64,7 +64,7 @@ type Proposal =
   | { kind: "append"; sourceId: string; sourceTitle: string; sheet: string; values: Record<string, string> };
 ```
 
-0017 이전에 저장된 `pending` 제안은 `sourceId`가 없다. 적용 라우트는 이를 `invalid_proposal`로 실패시킨다. 개발 중 데이터뿐이라 별도 변환은 하지 않는다.
+0019 이전에 저장된 `pending` 제안은 `sourceId`가 없다. 적용 라우트는 이를 `invalid_proposal`로 실패시킨다. 개발 중 데이터뿐이라 별도 변환은 하지 않는다.
 
 ## 자료 읽기
 
@@ -187,7 +187,7 @@ props의 `game.sheetId` 대신 `sources: SourceRow[]`를 받는다. 자료가 �
 
 ## 문서·설정
 
-- CLAUDE.md 8번 항목과 "운영 시트 어시스턴트 설정 절차"를 갱신: 시트·문서 여러 개, Cloud 콘솔에서 "Google Docs API"도 사용 설정, 0017 실행.
+- CLAUDE.md 8번 항목과 "운영 시트 어시스턴트 설정 절차"를 갱신: 시트·문서 여러 개, Cloud 콘솔에서 "Google Docs API"도 사용 설정, 0019 실행.
 - `.env.example`의 `GOOGLE_SERVICE_ACCOUNT_JSON` 주석에 "문서도 이 계정에 공유"를 덧붙인다.
 
 ## 테스트
