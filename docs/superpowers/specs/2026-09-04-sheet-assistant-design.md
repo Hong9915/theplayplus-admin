@@ -294,7 +294,7 @@ GOOGLE_SERVICE_ACCOUNT_JSON=
 
 1. Google Cloud 콘솔에서 프로젝트 선택 → Google Sheets API 사용 설정 → 서비스 계정 생성 → 키(JSON) 발급.
 2. 키 파일 내용을 한 줄로 만들어 `GOOGLE_SERVICE_ACCOUNT_JSON`에 넣는다. `OPENAI_API_KEY`도 넣고 재배포.
-3. 마이그레이션 `0015_assistant.sql` 실행.
+3. 마이그레이션 `0017_assistant.sql` 실행.
 4. 게임 운영 시트를 만든다. 수정까지 쓰려면 탭 첫 줄에 열 이름을 둔다(예: VIP 탭 = 이메일 / ID / 서버 / 닉네임 / VIP 단계 / 갱신일).
 5. 관리자 페이지 → 게임 문의함 → "운영 어시스턴트" → 시트 설정에 URL을 넣고, 안내된 서비스 계정 이메일에 시트를 편집자로 공유한다.
 6. "52009 VIP 몇이야"로 읽기, "52009 VIP4로 올려줘"로 제안 카드 → 적용 → 시트 반영을 확인한다.

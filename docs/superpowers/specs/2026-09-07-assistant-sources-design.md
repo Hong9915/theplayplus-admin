@@ -207,6 +207,6 @@ props의 `game.sheetId` 대신 `sources: SourceRow[]`를 받는다. 자료가 �
 
 1. Google Cloud 콘솔 → 프로젝트 → "Google Sheets API"와 "Google Docs API" 사용 설정 → 서비스 계정 키(JSON).
 2. `GOOGLE_SERVICE_ACCOUNT_JSON`, `OPENAI_API_KEY` 설정 후 재배포.
-3. Supabase SQL Editor에서 `0015_assistant.sql`, `0017_assistant_sources.sql` 순서로 실행.
+3. Supabase SQL Editor에서 `0017_assistant.sql`, `0019_assistant_sources.sql` 순서로 실행.
 4. 관리자 페이지 → 게임 문의함 → "운영 어시스턴트" → "+ 자료 추가"에 시트·문서 URL을 넣는다. 그 전에 안내된 서비스 계정 이메일에 각 자료를 편집자로 공유한다.
 5. 시트는 "52009 VIP 몇이야" → "52009 VIP4로 올려줘" → 제안 카드 → [적용]. 문서는 "환불 정책이 뭐야"처럼 물어 근거에 문서 이름이 붙는지 확인한다.
