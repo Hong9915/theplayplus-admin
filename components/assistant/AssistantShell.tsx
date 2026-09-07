@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ConversationRow } from "@/lib/assistant-store";
-import type { SourceRow } from "@/lib/assistant-sources";
+import type { SourceRow } from "@/lib/source-url";
 import ConversationSidebar from "@/components/assistant/ConversationSidebar";
 import ChatPane from "@/components/assistant/ChatPane";
 import SourceAddDialog from "@/components/assistant/SourceAddDialog";

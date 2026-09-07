@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ConversationRow } from "@/lib/assistant-store";
-import { sourceUrl, type SourceRow } from "@/lib/assistant-sources";
+import { sourceUrl, type SourceRow } from "@/lib/source-url";
 
 export default function ConversationSidebar({
   gameId,
