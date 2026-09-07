@@ -5,7 +5,8 @@
  * 바꿔 내보낸다. 도구 호출은 조각을 모아 스트림이 끝난 뒤 검증한다.
  */
 import OpenAI from "openai";
-import { prepareProposal, type Proposal, type SheetErrorReason, type SheetTab } from "@/lib/sheets";
+import { prepareProposal, type Proposal, type SheetErrorReason } from "@/lib/sheets";
+import type { LoadedSource } from "@/lib/assistant-sources";
 
 export type AssistantErrorReason = SheetErrorReason | "model_failed";
 
@@ -38,17 +39,18 @@ export function formatToday(date: Date = new Date()): string {
   return `${mm}.${dd}`;
 }
 
-export function buildAssistantPrompt(input: { gameName: string; today: string; sheetText: string; attachmentsText?: string }): string {
+export function buildAssistantPrompt(input: { gameName: string; today: string; sourcesText: string; attachmentsText?: string }): string {
   const attachmentsText = input.attachmentsText?.trim() ?? "";
   return [
     `당신은 게임 "${input.gameName}"의 운영 담당자를 돕는 어시스턴트입니다.`,
-    "아래 시트 내용만 근거로 한국어로 답하세요.",
+    "아래 연결된 자료(구글 시트·문서) 내용만 근거로 한국어로 답하세요.",
     "",
     "규칙:",
-    '- 답할 때 근거가 된 탭과 행 번호를 짧게 덧붙이세요. 예: "VIP 탭 7행".',
-    '- 시트에 없는 내용은 "시트에서 찾지 못했습니다"라고 말하고 추측하지 마세요.',
-    "- 사용자가 시트를 바꾸자고 하면 본문으로 설명하지 말고 propose_update 또는 propose_append 도구를 부르세요.",
-    "  row와 before는 표에서 본 값을 그대로 넣으세요. 첫 줄이 열 이름인 탭에서만 수정할 수 있습니다.",
+    '- 답할 때 근거가 된 자료를 짧게 덧붙이세요. 시트는 "VIP 시트 VIP 탭 7행", 문서는 "운영 가이드 문서"처럼.',
+    '- 자료에 없는 내용은 "자료에서 찾지 못했습니다"라고 말하고 추측하지 마세요.',
+    "- 시트는 propose_update 또는 propose_append 도구로 수정을 제안할 수 있습니다. 사용자가 시트를 바꾸자고 하면 본문으로 설명하지 말고 도구를 부르세요.",
+    "  spreadsheet에는 `# 시트:` 뒤의 시트 제목을, row와 before는 표에서 본 값을 그대로 넣으세요. 첫 줄이 열 이름인 탭에서만 수정할 수 있습니다.",
+    "- 문서는 읽기만 합니다. 문서를 고치자고 하면 도구를 부르지 말고 구글 문서에서 직접 수정해야 한다고 안내하세요.",
     `- 갱신일·날짜 같은 열이 있으면 오늘 날짜(${input.today})도 함께 넣으세요.`,
     "- 대상 행이 여럿이거나 특정할 수 없으면 도구를 부르지 말고 어느 것인지 되묻으세요.",
     "- 표의 행 번호는 시트의 실제 행 번호입니다(1행이 열 이름).",
@@ -60,9 +62,9 @@ export function buildAssistantPrompt(input: { gameName: string; today: string; s
     "",
     `오늘 날짜: ${input.today}`,
     "",
-    "# 시트 내용",
+    "# 연결된 자료",
     "",
-    input.sheetText,
+    input.sourcesText,
     ...(attachmentsText ? ["", "# 첨부 파일", "", attachmentsText] : []),
   ].join("\n");
 }
@@ -77,14 +79,15 @@ const STATUS_LABELS: Record<ProposalStatus, string> = {
 /** 제안을 한 줄 텍스트로. 화면 요약과 모델 이력 양쪽에서 쓴다. */
 export function describeProposal(proposal: Proposal, status: ProposalStatus | null): string {
   const suffix = ` (${STATUS_LABELS[status ?? "pending"]})`;
+  const where = `${proposal.sourceTitle} 시트 ${proposal.sheet} 탭`;
   if (proposal.kind === "update") {
     const changes = proposal.updates.map((update) => `${update.column} '${update.before}' → '${update.after}'`).join(", ");
-    return `시트 수정 제안: ${proposal.sheet} 탭 ${proposal.row}행 ${changes}${suffix}`;
+    return `시트 수정 제안: ${where} ${proposal.row}행 ${changes}${suffix}`;
   }
   const values = Object.entries(proposal.values)
     .map(([column, value]) => `${column} '${value}'`)
     .join(", ");
-  return `시트 수정 제안: ${proposal.sheet} 탭에 행 추가 ${values}${suffix}`;
+  return `시트 수정 제안: ${where}에 행 추가 ${values}${suffix}`;
 }
 
 export function historyToMessages(history: HistoryMessage[]): Array<{ role: "user" | "assistant"; content: string }> {
@@ -109,6 +112,7 @@ const PROPOSAL_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
+          spreadsheet: { type: "string", description: "`# 시트:` 뒤에 적힌 시트 제목" },
           sheet: { type: "string", description: "탭 이름" },
           row: { type: "integer", description: "표에 적힌 행 번호(1행은 열 이름)" },
           updates: {
@@ -124,7 +128,7 @@ const PROPOSAL_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             },
           },
         },
-        required: ["sheet", "row", "updates"],
+        required: ["spreadsheet", "sheet", "row", "updates"],
       },
     },
   },
@@ -136,10 +140,11 @@ const PROPOSAL_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
+          spreadsheet: { type: "string", description: "`# 시트:` 뒤에 적힌 시트 제목" },
           sheet: { type: "string", description: "탭 이름" },
           values: { type: "object", description: "열 이름 → 값", additionalProperties: { type: "string" } },
         },
-        required: ["sheet", "values"],
+        required: ["spreadsheet", "sheet", "values"],
       },
     },
   },
@@ -161,7 +166,7 @@ function toolCallToRaw(name: string, args: string): unknown | null {
 export async function* streamAssistant(input: {
   system: string;
   history: HistoryMessage[];
-  tabs: SheetTab[];
+  sources: LoadedSource[];
 }): AsyncGenerator<AssistantEvent> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -202,12 +207,23 @@ export async function* streamAssistant(input: {
   }
 
   for (const call of toolCalls.values()) {
-    const raw = toolCallToRaw(call.name, call.args);
-    const proposal = raw ? prepareProposal(input.tabs, raw) : null;
+    const proposal = proposalFromToolCall(input.sources, call.name, call.args);
     if (!proposal) {
       yield { type: "error", reason: "invalid_proposal" };
       return;
     }
     yield { type: "proposal", proposal };
   }
+}
+
+/** 도구 인자의 spreadsheet(시트 제목)로 자료를 고르고, 그 시트의 탭으로 검증해 sourceId를 붙인다. 같은 제목이면 먼저 등록된 것. */
+function proposalFromToolCall(sources: LoadedSource[], name: string, args: string): Proposal | null {
+  const raw = toolCallToRaw(name, args);
+  if (!raw || typeof raw !== "object") return null;
+  const { spreadsheet, ...rest } = raw as { spreadsheet?: unknown } & Record<string, unknown>;
+  const match = sources.find((entry): entry is Extract<LoadedSource, { kind: "sheet" }> => entry.kind === "sheet" && entry.source.title === spreadsheet);
+  if (!match) return null;
+  const prepared = prepareProposal(match.tabs, rest);
+  if (!prepared) return null;
+  return { ...prepared, sourceId: match.source.id, sourceTitle: match.source.title };
 }
