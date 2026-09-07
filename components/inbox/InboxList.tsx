@@ -29,7 +29,7 @@ const SELECT =
 const PAGE_BTN = "border border-line rounded-lg px-2 py-0.5 transition-colors";
 
 function hasFilter(query: InquiryListQuery): boolean {
-  return Boolean(query.group || query.type || query.status || query.priority || query.stale || query.q);
+  return Boolean(query.group || query.type || query.status || query.priority || query.stale || query.unread || query.q);
 }
 
 function firstLine(content: string): string {
@@ -213,6 +213,11 @@ export default function InboxList({
                     <span className="block text-xs text-muted truncate">{firstLine(inquiry.content)}</span>
                     <span className="flex items-center gap-1.5 mt-0.5 text-xs">
                       <StatusBadge status={inquiry.status} />
+                      {inquiry.unreadReplyAt && (
+                        <span className="inline-flex items-center h-[18px] px-1.5 rounded-full bg-accent/10 text-accent text-[11px] font-semibold whitespace-nowrap shrink-0">
+                          회신 옴
+                        </span>
+                      )}
                       <span className="text-muted truncate">{labels.typeLabels[inquiry.typeKey] ?? inquiry.typeKey}</span>
                       {priority && <span className={`ml-auto ${priority.className}`}>{priority.label}</span>}
                     </span>

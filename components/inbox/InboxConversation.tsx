@@ -9,6 +9,7 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import ResolveButton from "@/components/inquiries/ResolveButton";
 import SyncRepliesButton from "@/components/inquiries/SyncRepliesButton";
 import InboxPrevNext from "@/components/inbox/InboxPrevNext";
+import MarkReadOnOpen from "@/components/inbox/MarkReadOnOpen";
 import InboxTimeline from "@/components/inbox/InboxTimeline";
 import ReplyComposer from "@/components/inbox/ReplyComposer";
 
@@ -34,6 +35,7 @@ export default function InboxConversation({
   const received = `접수 ${formatReceivedAt(inquiry.createdAt)} · 경과 ${formatElapsed(inquiry.createdAt)}`;
   return (
     <section className="flex-1 min-w-0 h-full bg-panel border-r border-line flex flex-col overflow-hidden" aria-label="대화">
+      {inquiry.unreadReplyAt && <MarkReadOnOpen inquiryId={inquiry.id} />}
       <header className="flex items-center justify-between gap-4 h-16 px-5 border-b border-line shrink-0">
         <div className="flex flex-col gap-0.5 min-w-0">
           <div className="flex items-baseline gap-2.5 min-w-0">

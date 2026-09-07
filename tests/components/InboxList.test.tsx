@@ -47,6 +47,7 @@ function makeInquiry(overrides: Partial<InquiryRow>): InquiryRow {
     replyContent: null,
     repliedAt: null,
     gmailThreadId: null,
+    unreadReplyAt: null,
     locale: null,
     translations: {},
     paymentNo: null,
@@ -95,6 +96,11 @@ describe("InboxList", () => {
     expect(screen.getByText("접수")).toBeInTheDocument();
     expect(screen.getByText("버그·오류 신고")).toBeInTheDocument();
     expect(screen.getByText("긴급")).toBeInTheDocument();
+  });
+
+  it("marks rows that have an unread user reply", () => {
+    renderList(makePage([makeInquiry({ unreadReplyAt: "2026-09-07T01:00:00.000Z" }), makeInquiry({ id: "other", title: "다른 문의" })]));
+    expect(screen.getAllByText("회신 옴")).toHaveLength(1);
   });
 
   it("hides normal and low priority", () => {
