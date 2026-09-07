@@ -28,7 +28,7 @@ export default function TemplatePicker({
           onPick(picked.content);
         }
       }}
-      className="bg-panel border border-line rounded-lg px-2.5 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-colors"
+      className="bg-panel border border-line rounded-lg px-2.5 py-1.5 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent transition-colors"
     >
       <option value="">템플릿 선택</option>
       {usable.map((template) => (

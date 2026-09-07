@@ -63,7 +63,7 @@ function Attachments({ attachments }: { attachments: AttachmentWithUrl[] }) {
             <>
               <a href={attachment.signedUrl} target="_blank" rel="noreferrer" title="원본 크기로 열기" className="block border border-line rounded-lg overflow-hidden bg-black/5">
                 {/* 첨부 버킷은 이미지 MIME만 허용하므로 항상 <img>로 렌더링한다. */}
-                <img src={attachment.signedUrl} alt={attachment.fileName} loading="lazy" className="max-h-48 w-auto object-contain" />
+                <img src={attachment.signedUrl} alt={attachment.fileName} loading="lazy" width={240} height={192} className="max-h-48 w-auto max-w-full object-contain" />
               </a>
               <span className="text-muted truncate">{attachment.fileName}</span>
             </>

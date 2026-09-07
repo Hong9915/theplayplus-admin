@@ -13,7 +13,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   return (
     <div className="min-h-screen flex">
       <GameRail games={games} newCounts={newCounts} />
-      <main className="flex-1 min-w-0 h-screen overflow-hidden flex">{children}</main>
+      <main id="main" tabIndex={-1} className="flex-1 min-w-0 h-screen overflow-x-auto overflow-y-hidden flex focus:outline-none">
+        {children}
+      </main>
     </div>
   );
 }

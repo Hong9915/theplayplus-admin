@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { readNdjson } from "@/lib/ndjson";
 import type { SuggestEvent } from "@/lib/suggest";
+import StatusMessage from "@/components/ui/StatusMessage";
 
 // 실패 원인을 구분해 보여줘야 관리자가 무엇을 고쳐야 할지 안다.
 const ERROR_MESSAGES: Record<string, string> = {
@@ -81,17 +82,18 @@ export default function SuggestButton({
         {loading ? "추천 생성 중…" : "AI 답변 추천"}
       </button>
 
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      <StatusMessage className="text-sm">{error}</StatusMessage>
 
       {/* 작성 중인 글을 말없이 덮어쓰지 않도록 미리보기를 거친다. */}
       {suggestion && (
-        <div className="border border-line rounded-lg p-3 bg-ground" aria-live="polite">
-          <p className="text-xs text-muted mb-2">
+        <div className="border border-line rounded-lg p-3 bg-ground">
+          {/* 살아 있는 영역은 상태 줄에만 둔다. 본문까지 live면 조각이 올 때마다 전체를 다시 읽는다. */}
+          <p className="text-xs text-muted mb-2" role="status" aria-live="polite">
             {loading ? "추천 답변 생성 중…" : "추천 답변 (아직 적용되지 않았습니다)"}
           </p>
-          <p className="whitespace-pre-wrap text-sm">
+          <p className="whitespace-pre-wrap break-words text-sm" aria-busy={loading || undefined}>
             {suggestion}
-            {loading && <span className="inline-block w-[2px] h-[1em] align-text-bottom bg-accent ml-0.5 animate-pulse" aria-hidden />}
+            {loading && <span className="inline-block w-[2px] h-[1em] align-text-bottom bg-accent ml-0.5 animate-pulse motion-reduce:animate-none" aria-hidden="true" />}
           </p>
           {/* 생성이 끝나기 전에는 적용하지 못하게 한다. 반쯤 온 글을 적용하면
               나머지가 어디로 갔는지 관리자가 알 수 없다. */}

@@ -2,23 +2,34 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import type { GameRow } from "@/lib/categories";
+import StatusMessage from "@/components/ui/StatusMessage";
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
-function formatBytes(bytes: number): string {
+const byteFormat = new Intl.NumberFormat("ko-KR", { style: "unit", unit: "byte", unitDisplay: "short", maximumFractionDigits: 0 });
+const kilobyteFormat = new Intl.NumberFormat("ko-KR", { style: "unit", unit: "kilobyte", unitDisplay: "short", maximumFractionDigits: 1 });
+const megabyteFormat = new Intl.NumberFormat("ko-KR", { style: "unit", unit: "megabyte", unitDisplay: "short", maximumFractionDigits: 1 });
+
+export function formatBytes(bytes: number): string {
   if (bytes < 1024) {
-    return `${bytes} B`;
+    return byteFormat.format(bytes);
   }
   if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
+    return kilobyteFormat.format(bytes / 1024);
   }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return megabyteFormat.format(bytes / (1024 * 1024));
 }
+
+const INPUT =
+  "bg-panel border border-line rounded px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent transition-colors";
 
 export default function GameForm({
   onCreated,
+  onDirtyChange,
 }: {
   onCreated: (game: GameRow, warning?: string) => void;
+  /** 입력이 하나라도 있으면 true. 대화상자가 바깥 클릭·Esc로 닫히기 전에 확인할 때 쓴다. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"active" | "ended">("active");
@@ -27,8 +38,14 @@ export default function GameForm({
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"success" | "warning" | "error">("success");
   const [submitting, setSubmitting] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const dirty = name !== "" || ownerName !== "" || logo !== null;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   useEffect(() => {
     if (!logo || typeof URL.createObjectURL !== "function") {
@@ -68,6 +85,11 @@ export default function GameForm({
     setLogo(picked);
   }
 
+  function fail(text: string) {
+    setMessageTone("error");
+    setMessage(text);
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!name.trim()) {
@@ -91,13 +113,13 @@ export default function GameForm({
       json = await response.json();
     } catch {
       setSubmitting(false);
-      setMessage("게임 추가에 실패했습니다. 다시 시도해주세요.");
+      fail("게임 추가에 실패했습니다. 다시 시도해주세요.");
       return;
     }
     setSubmitting(false);
 
     if (!json.success || !json.game) {
-      setMessage("게임 추가에 실패했습니다. 다시 시도해주세요.");
+      fail("게임 추가에 실패했습니다. 다시 시도해주세요.");
       return;
     }
 
@@ -106,17 +128,20 @@ export default function GameForm({
     clearLogo();
 
     if (json.warning === "logo_upload_failed") {
+      setMessageTone("warning");
       setMessage("게임은 추가되었지만 로고 업로드에 실패했습니다. 로고는 나중에 다시 등록해주세요.");
       onCreated(json.game, json.warning);
       return;
     }
 
     if (json.warning === "template_seed_failed") {
+      setMessageTone("warning");
       setMessage("게임은 추가되었지만 기본 답변 템플릿 생성에 실패했습니다. 답변 템플릿 화면에서 직접 추가해주세요.");
       onCreated(json.game, json.warning);
       return;
     }
 
+    setMessageTone("success");
     setMessage("게임이 추가되었습니다.");
     onCreated(json.game);
   }
@@ -125,31 +150,18 @@ export default function GameForm({
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-w-sm">
       <label className="flex flex-col gap-1">
         <span>게임명</span>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          className="bg-panel border border-line rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
-        />
+        <input name="name" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} required data-autofocus className={INPUT} />
       </label>
       <label className="flex flex-col gap-1">
         <span>상태</span>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as "active" | "ended")}
-          className="bg-panel border border-line rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
-        >
+        <select name="status" value={status} onChange={(e) => setStatus(e.target.value as "active" | "ended")} className={INPUT}>
           <option value="active">서비스중</option>
           <option value="ended">종료</option>
         </select>
       </label>
       <label className="flex flex-col gap-1">
         <span>담당자</span>
-        <input
-          value={ownerName}
-          onChange={(e) => setOwnerName(e.target.value)}
-          className="bg-panel border border-line rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
-        />
+        <input name="ownerName" autoComplete="off" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} className={INPUT} />
       </label>
 
       <div className="flex flex-col gap-1">
@@ -157,6 +169,7 @@ export default function GameForm({
         <input
           ref={logoInputRef}
           type="file"
+          name="logo"
           accept="image/*"
           aria-label="로고 이미지 파일"
           onChange={handleLogoChange}
@@ -168,7 +181,7 @@ export default function GameForm({
             <span className="w-10 h-10 shrink-0 rounded-lg overflow-hidden bg-ground border border-line flex items-center justify-center">
               {logoPreview ? (
                 // eslint-disable-next-line @next/next/no-img-element -- local object URL, no remote loader needed
-                <img src={logoPreview} alt="" className="w-10 h-10 object-cover" />
+                <img src={logoPreview} alt="" width={40} height={40} className="w-10 h-10 object-cover" />
               ) : null}
             </span>
             <span className="min-w-0 flex-1">
@@ -187,22 +200,24 @@ export default function GameForm({
           <button
             type="button"
             onClick={() => logoInputRef.current?.click()}
-            className="border border-dashed border-line rounded-lg px-3 py-4 text-sm text-muted hover:text-accent hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent/50 transition-colors"
+            className="border border-dashed border-line rounded-lg px-3 py-4 text-sm text-muted hover:text-accent hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 transition-colors"
           >
-            이미지 선택 <span className="text-xs">(PNG · JPG, 최대 2MB)</span>
+            이미지 선택 <span className="text-xs">(PNG · JPG, 최대 2&nbsp;MB)</span>
           </button>
         )}
 
-        {logoError && <p className="text-sm text-red-600">{logoError}</p>}
+        <StatusMessage className="text-sm">{logoError}</StatusMessage>
       </div>
 
-      {message && <p className="text-sm">{message}</p>}
+      <StatusMessage tone={messageTone} className="text-sm">
+        {message}
+      </StatusMessage>
       <button
         type="submit"
         disabled={submitting}
-        className="bg-accent text-white rounded px-4 py-2 hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50 transition-colors"
+        className="bg-accent text-white rounded px-4 py-2 hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-panel disabled:opacity-50 transition-colors"
       >
-        게임 추가
+        {submitting ? "추가 중…" : "게임 추가"}
       </button>
     </form>
   );

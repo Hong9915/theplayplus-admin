@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -8,20 +8,21 @@ import type { GameRow } from "@/lib/categories";
 import { getGameLogoPublicUrl } from "@/lib/storage";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import GameForm from "@/components/games/GameForm";
+import Dialog from "@/components/ui/Dialog";
 import { SERVICE_RAIL_KEY, SERVICE_SCOPE_TITLE } from "@/lib/inbox-scope";
 
-const TILE = "relative w-10 h-10 rounded-xl flex items-center justify-center transition-all";
+const TILE =
+  "relative w-10 h-10 rounded-xl flex items-center justify-center transition-[opacity,box-shadow] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-panel";
 const TILE_ACTIVE = "ring-2 ring-accent ring-offset-2 ring-offset-panel";
 const TILE_IDLE = "opacity-70 hover:opacity-100 hover:ring-2 hover:ring-line hover:ring-offset-2 hover:ring-offset-panel";
 
 function NewBadge({ pending }: { pending: number }) {
   if (pending <= 0) return null;
   return (
-    <span
-      className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-white text-[10px] font-semibold leading-[18px] text-center ring-2 ring-panel"
-      aria-label={`접수 ${pending}건`}
-    >
-      {pending > 99 ? "99+" : pending}
+    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-white text-[10px] font-semibold leading-[18px] text-center ring-2 ring-panel tabular-nums">
+      {/* 눈에는 숫자만, 보조기기에는 뜻까지. span의 aria-label은 읽히지 않는 경우가 많다. */}
+      <span aria-hidden="true">{pending > 99 ? "99+" : pending}</span>
+      <span className="sr-only">접수 {pending}건</span>
     </span>
   );
 }
@@ -59,6 +60,25 @@ export default function GameRail({
   const router = useRouter();
   const pathname = usePathname();
   const [showAddModal, setShowAddModal] = useState(false);
+  // 입력이 있는 채로 바깥을 눌렀을 때 바로 버리지 않고 한 번 묻는다.
+  const [formDirty, setFormDirty] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+
+  const handleDirtyChange = useCallback((dirty: boolean) => setFormDirty(dirty), []);
+
+  function closeAddModal() {
+    setShowAddModal(false);
+    setConfirmClose(false);
+    setFormDirty(false);
+  }
+
+  function requestCloseAddModal() {
+    if (formDirty) {
+      setConfirmClose(true);
+      return;
+    }
+    closeAddModal();
+  }
 
   async function handleLogout() {
     const supabase = getSupabaseBrowserClient();
@@ -71,7 +91,7 @@ export default function GameRail({
     <>
       <aside className="w-16 shrink-0 h-screen sticky top-0 bg-panel border-r border-line flex flex-col items-center py-3 gap-2">
         <div className="w-10 h-10 rounded-xl bg-ink flex items-center justify-center select-none" title="THE PLAY+ Admin">
-          <img src="/brand/theplayplus-mark-white.png" alt="THE PLAY+" className="w-7 h-7 object-contain" draggable={false} />
+          <img src="/brand/theplayplus-mark-white.png" alt="THE PLAY+" width={160} height={160} className="w-7 h-7 object-contain" draggable={false} />
         </div>
 
         <div className="w-8 border-t border-line my-1" />
@@ -109,9 +129,10 @@ export default function GameRail({
             type="button"
             onClick={() => setShowAddModal(true)}
             title="게임 추가"
-            className="w-10 h-10 rounded-xl border border-dashed border-line text-muted hover:text-accent hover:border-accent flex items-center justify-center text-xl leading-none transition-colors"
+            aria-label="게임 추가"
+            className="w-10 h-10 rounded-xl border border-dashed border-line text-muted hover:text-accent hover:border-accent flex items-center justify-center text-xl leading-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            +
+            <span aria-hidden="true">+</span>
           </button>
         </nav>
 
@@ -119,7 +140,7 @@ export default function GameRail({
           type="button"
           onClick={handleLogout}
           title="로그아웃"
-          className="w-10 h-10 rounded-xl text-muted hover:text-ink hover:bg-ground flex items-center justify-center transition-colors"
+          className="w-10 h-10 rounded-xl text-muted hover:text-ink hover:bg-ground flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -131,43 +152,45 @@ export default function GameRail({
       </aside>
 
       {showAddModal && (
-        <div
-          className="fixed inset-0 z-50 bg-ink/40 flex items-center justify-center p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-label="게임 추가"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowAddModal(false);
-            }
-          }}
-        >
-          <div className="bg-panel rounded-2xl border border-line shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">게임 추가</h2>
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="text-muted hover:text-ink text-xl leading-none"
-                aria-label="닫기"
-              >
-                ×
+        <Dialog labelledBy="add-game-title" onClose={requestCloseAddModal} className="max-w-md">
+          <div className="flex items-center justify-between mb-4">
+            <h2 id="add-game-title" className="text-lg font-bold">
+              게임 추가
+            </h2>
+            <button
+              type="button"
+              onClick={requestCloseAddModal}
+              className="text-muted hover:text-ink text-xl leading-none rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              aria-label="닫기"
+            >
+              ×
+            </button>
+          </div>
+          {confirmClose && (
+            <div role="alertdialog" aria-label="닫기 확인" className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <span className="flex-1 min-w-0">작성 중인 내용이 사라집니다. 닫을까요?</span>
+              <button type="button" onClick={closeAddModal} className="rounded-md bg-amber-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-800 transition-colors">
+                닫기
+              </button>
+              <button type="button" onClick={() => setConfirmClose(false)} className="rounded-md px-2.5 py-1 text-xs hover:bg-amber-100 transition-colors">
+                계속 작성
               </button>
             </div>
-            <GameForm
-              onCreated={(game, warning) => {
-                if (warning) {
-                  // Keep the dialog open so the inline warning stays readable.
-                  router.refresh();
-                  return;
-                }
-                setShowAddModal(false);
-                router.push(`/games/${game.id}/inquiries`);
+          )}
+          <GameForm
+            onDirtyChange={handleDirtyChange}
+            onCreated={(game, warning) => {
+              if (warning) {
+                // Keep the dialog open so the inline warning stays readable.
                 router.refresh();
-              }}
-            />
-          </div>
-        </div>
+                return;
+              }
+              closeAddModal();
+              router.push(`/games/${game.id}/inquiries`);
+              router.refresh();
+            }}
+          />
+        </Dialog>
       )}
     </>
   );

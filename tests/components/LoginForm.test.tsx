@@ -49,7 +49,14 @@ describe("LoginForm", () => {
     await userEvent.type(screen.getByLabelText("비밀번호"), "wrong-password");
     await userEvent.click(screen.getByRole("button", { name: "로그인" }));
 
-    expect(await screen.findByText("이메일 또는 비밀번호가 올바르지 않습니다.")).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("이메일 또는 비밀번호가 올바르지 않습니다. 다시 확인한 뒤 시도하세요.");
+    expect(screen.getByLabelText("이메일")).toHaveFocus();
     expect(pushMock).not.toHaveBeenCalled();
+  });
+  it("lets password managers and browsers fill the fields", () => {
+    render(<LoginForm />);
+    expect(screen.getByLabelText("이메일")).toHaveAttribute("autocomplete", "email");
+    expect(screen.getByLabelText("이메일")).toHaveAttribute("spellcheck", "false");
+    expect(screen.getByLabelText("비밀번호")).toHaveAttribute("autocomplete", "current-password");
   });
 });

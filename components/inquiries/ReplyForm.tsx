@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { TemplateRow } from "@/lib/templates";
 import TemplatePicker from "@/components/inquiries/TemplatePicker";
 import SuggestButton from "@/components/inquiries/SuggestButton";
+import StatusMessage from "@/components/ui/StatusMessage";
 
 const AUTOSAVE_DELAY_MS = 2000;
 
@@ -176,29 +177,24 @@ export default function ReplyForm({
           aria-label로 접근성만 남기고 시각적 중복을 없앤다. */}
       <textarea
         ref={textareaRef}
+        name="replyContent"
         value={replyContent}
         onChange={(e) => setReplyContent(e.target.value)}
         onKeyDown={handleKeyDown}
         required
         rows={12}
         aria-label="답변 내용"
-        placeholder="사용자에게 전달할 답변을 작성합니다."
-        className="bg-ground border border-line rounded-lg px-3 py-2 text-sm leading-relaxed min-h-[18rem] resize-y overflow-hidden focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-colors"
+        placeholder="사용자에게 전달할 답변을 작성합니다…"
+        className="bg-ground border border-line rounded-lg px-3 py-2 text-sm leading-relaxed min-h-[18rem] resize-y overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent transition-colors"
       />
-      {message && (
-        <p
-          className={`text-sm ${
-            messageTone === "success"
-              ? "text-emerald-700"
-              : messageTone === "warning"
-                ? "text-amber-700"
-                : "text-red-600"
-          }`}
-        >
-          {message}
+      <StatusMessage tone={messageTone} className="text-sm">
+        {message}
+      </StatusMessage>
+      {!message && autosavedAt && (
+        <p className="text-xs text-muted">
+          초안 자동 저장됨 · <span className="tabular-nums">{autosavedAt}</span>
         </p>
       )}
-      {!message && autosavedAt && <p className="text-xs text-muted">초안 자동 저장됨 · {autosavedAt}</p>}
       <div className="flex flex-wrap items-start gap-2">
         <TemplatePicker templates={templates} typeKey={typeKey} onPick={applyText} />
         <SuggestButton inquiryId={inquiryId} onApply={applyText} />
@@ -210,16 +206,18 @@ export default function ReplyForm({
           disabled={savingDraft || submitting}
           className="border border-line rounded-lg px-3 py-1.5 text-sm hover:bg-ground disabled:opacity-50 transition-colors"
         >
-          초안 저장
+          {savingDraft ? "저장 중…" : "초안 저장"}
         </button>
         <button
           type="submit"
           disabled={submitting || savingDraft}
-          className="bg-accent text-white rounded-lg px-4 py-1.5 text-sm hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50 transition-colors"
+          className="bg-accent text-white rounded-lg px-4 py-1.5 text-sm hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-panel disabled:opacity-50 transition-colors"
         >
-          답변 발송
+          {submitting ? "발송 중…" : "답변 발송"}
         </button>
-        <span className="text-xs text-muted hidden sm:inline">⌘/Ctrl + Enter</span>
+        <span className="text-xs text-muted hidden sm:inline">
+          <kbd className="font-sans">⌘</kbd>/<kbd className="font-sans">Ctrl</kbd>&nbsp;+&nbsp;<kbd className="font-sans">Enter</kbd>
+        </span>
       </div>
     </form>
   );

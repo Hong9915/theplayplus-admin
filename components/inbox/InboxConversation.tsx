@@ -38,7 +38,7 @@ export default function InboxConversation({
         <div className="flex flex-col gap-0.5 min-w-0">
           <div className="flex items-baseline gap-2.5 min-w-0">
             <span className="font-mono text-[13px] text-muted shrink-0">{inquiry.inquiryNo ?? "—"}</span>
-            <h1 className="text-base font-bold truncate">{inquiry.title}</h1>
+            <h2 className="text-base font-bold truncate">{inquiry.title}</h2>
           </div>
           {/* 창이 좁아 폭이 모자라면 줄바꿈 대신 말줄임. 헤더 높이가 고정이라 줄이 늘면 위아래가 잘린다. */}
           <div className="flex items-center gap-2.5 min-w-0 text-xs text-muted">

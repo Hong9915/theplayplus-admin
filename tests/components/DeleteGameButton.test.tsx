@@ -22,7 +22,7 @@ describe("DeleteGameButton", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "게임 삭제" }));
 
-    expect(screen.getByRole("dialog", { name: "게임 삭제 확인" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "게임 삭제" })).toBeInTheDocument();
     expect(screen.getByText("5건")).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -56,7 +56,29 @@ describe("DeleteGameButton", () => {
     await userEvent.click(screen.getByRole("button", { name: "삭제" }));
 
     expect(await screen.findByText("삭제에 실패했습니다. 다시 시도해주세요.")).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "게임 삭제 확인" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "게임 삭제" })).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
+  });
+  it("focuses 취소 first, closes on Escape, and returns focus to the opener", async () => {
+    render(<DeleteGameButton gameId="game-1" gameName="여신 키우기" inquiryCount={0} />);
+    const opener = screen.getByRole("button", { name: "게임 삭제" });
+
+    await userEvent.click(opener);
+    expect(screen.getByRole("button", { name: "취소" })).toHaveFocus();
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("announces the failure through a live region", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: false }) }) as never;
+    render(<DeleteGameButton gameId="game-1" gameName="여신 키우기" inquiryCount={0} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "게임 삭제" }));
+    await userEvent.click(screen.getByRole("button", { name: "삭제" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("삭제에 실패했습니다. 다시 시도해주세요.");
   });
 });

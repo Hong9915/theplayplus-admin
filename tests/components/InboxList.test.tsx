@@ -12,6 +12,21 @@ const replace = vi.fn();
 const refresh = vi.fn();
 const prefetch = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace, refresh, prefetch }) }));
+// 라우터 컨텍스트 없는 next/link는 클릭을 그대로 흘려 jsdom이 "navigation not implemented"를 찍는다.
+vi.mock("next/link", () => ({
+  default: ({ href, children, prefetch: _prefetch, onClick, ...rest }: React.ComponentProps<"a"> & { prefetch?: boolean }) => (
+    <a
+      href={href}
+      {...rest}
+      onClick={(event) => {
+        event.preventDefault();
+        onClick?.(event);
+      }}
+    >
+      {children}
+    </a>
+  ),
+}));
 
 function makeInquiry(overrides: Partial<InquiryRow>): InquiryRow {
   return {
@@ -87,10 +102,29 @@ describe("InboxList", () => {
     expect(screen.queryByText("낮음")).not.toBeInTheDocument();
   });
 
-  it("navigates to the inquiry keeping the query when a row is clicked", async () => {
+  it("renders each row as a real link to the inquiry that keeps the query", () => {
     renderList(makePage([makeInquiry({})]), { ...DEFAULT_QUERY, status: "new" });
-    await userEvent.click(screen.getByText("버그 신고합니다"));
-    expect(push).toHaveBeenCalledWith("/games/g1/inquiries/aaaabbbb-0000-0000-0000-000000000000?status=new");
+    expect(screen.getByRole("link", { name: /버그 신고합니다/ })).toHaveAttribute(
+      "href",
+      "/games/g1/inquiries/aaaabbbb-0000-0000-0000-000000000000?status=new"
+    );
+  });
+
+  it("measures elapsed time from the clock the server passed so hydration matches", () => {
+    const now = Date.parse("2026-09-07T10:00:00.000Z");
+    const { unmount } = render(
+      <InboxList
+        scope={gameScope("g1")}
+        page={makePage([makeInquiry({ createdAt: "2026-09-07T09:55:00.000Z" })])}
+        query={DEFAULT_QUERY}
+        labels={labels}
+        selectedId={null}
+        viewLabel="전체"
+        now={now}
+      />
+    );
+    expect(screen.getByText("5분")).toBeInTheDocument();
+    unmount();
   });
 
   it("highlights the clicked row right away while the navigation is pending", async () => {
@@ -133,20 +167,24 @@ describe("InboxList", () => {
       expect(screen.queryByRole("button", { name: "다음" })).not.toBeInTheDocument();
     });
 
-    it("moves between pages without resetting filters", async () => {
+    it("links to the neighbouring pages without resetting filters", () => {
       renderList(makePage([makeInquiry({})], 120, 2), { ...DEFAULT_QUERY, status: "new", page: 2 });
       expect(screen.getByText("51–100 / 120건")).toBeInTheDocument();
       expect(screen.getByText("2 / 3")).toBeInTheDocument();
-      await userEvent.click(screen.getByRole("button", { name: "다음" }));
-      expect(replace).toHaveBeenCalledWith("/games/g1/inquiries?status=new&page=3");
-      await userEvent.click(screen.getByRole("button", { name: "이전" }));
-      expect(replace).toHaveBeenCalledWith("/games/g1/inquiries?status=new");
+      expect(screen.getByRole("link", { name: "다음" })).toHaveAttribute("href", "/games/g1/inquiries?status=new&page=3");
+      expect(screen.getByRole("link", { name: "이전" })).toHaveAttribute("href", "/games/g1/inquiries?status=new");
     });
 
-    it("disables the edge buttons", () => {
+    it("keeps the selected inquiry in the page links", () => {
+      renderList(makePage([makeInquiry({})], 120, 1), DEFAULT_QUERY, "i1");
+      expect(screen.getByRole("link", { name: "다음" })).toHaveAttribute("href", "/games/g1/inquiries/i1?page=2");
+    });
+
+    it("renders the edge controls as disabled text instead of links", () => {
       renderList(makePage([makeInquiry({})], 120, 3), { ...DEFAULT_QUERY, page: 3 });
-      expect(screen.getByRole("button", { name: "다음" })).toBeDisabled();
-      expect(screen.getByRole("button", { name: "이전" })).not.toBeDisabled();
+      expect(screen.queryByRole("link", { name: "다음" })).not.toBeInTheDocument();
+      expect(screen.getByText("다음")).toHaveAttribute("aria-disabled", "true");
+      expect(screen.getByRole("link", { name: "이전" })).toBeInTheDocument();
     });
   });
 
@@ -194,10 +232,10 @@ describe("InboxList", () => {
       expect(body).toEqual({ ids: ["11111111-0000-0000-0000-000000000000"], status: "in_progress" });
     });
 
-    it("does not navigate when the checkbox is clicked", async () => {
+    it("does not mark the row pending when only the checkbox is clicked", async () => {
       renderList(makePage(rows));
       await userEvent.click(screen.getByLabelText("첫째 선택"));
-      expect(push).not.toHaveBeenCalled();
+      expect(screen.getAllByRole("listitem")[0]).not.toHaveAttribute("aria-busy");
     });
 
     it("shows an error and keeps the selection when the request fails", async () => {
