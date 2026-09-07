@@ -110,6 +110,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       today: formatToday(),
       sourcesText: serializeSources(loaded),
       attachmentsText: serializeAttachments(messages.flatMap((message) => message.attachments)),
+      editable: loaded.some((source) => source.kind === "sheet"),
     });
 
     let text = "";

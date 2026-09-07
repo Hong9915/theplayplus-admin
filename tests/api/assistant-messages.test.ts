@@ -142,6 +142,17 @@ describe("POST /api/assistant/conversations/[id]/messages", () => {
     expect(call.sources).toBe(loaded);
   });
 
+  it("omits the sheet-editing rules when only doc sources are linked", async () => {
+    vi.mocked(sourcesModule.listSources).mockResolvedValue([docSource]);
+    vi.mocked(sourcesModule.loadSources).mockResolvedValue([{ source: docSource, kind: "doc" as const, text: "환불은 7일" }]);
+    vi.mocked(assistantModule.streamAssistant).mockReturnValue(stream({ type: "text", text: "네" }));
+
+    await events(await POST(request({ content: "환불 정책?" }), { params: { id: "c1" } }));
+
+    const call = vi.mocked(assistantModule.streamAssistant).mock.calls[0][0];
+    expect(call.system).not.toContain("propose_update");
+  });
+
   it("stores proposals as pending and streams their message id", async () => {
     vi.mocked(assistantModule.streamAssistant).mockReturnValue(stream({ type: "text", text: "바꿀게요" }, { type: "proposal", proposal }));
 
@@ -165,6 +176,7 @@ describe("POST /api/assistant/conversations/[id]/messages", () => {
     const response = await POST(request({ content: "hi" }), { params: { id: "c1" } });
     expect(await events(response)).toEqual([{ type: "error", reason: "source_forbidden", sourceTitle: "운영 가이드" }]);
     expect(storeModule.insertMessage).toHaveBeenCalledTimes(1);
+    expect(assistantModule.streamAssistant).not.toHaveBeenCalled();
   });
 
   it("stores multipart attachments with the user message and puts their text in the prompt", async () => {

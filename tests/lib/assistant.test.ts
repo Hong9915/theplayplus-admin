@@ -67,6 +67,14 @@ describe("buildAssistantPrompt", () => {
     expect(system).not.toContain("# 첨부 파일");
   });
 
+  it("replaces the sheet-editing rules with a read-only note when editable is false", () => {
+    const system = buildAssistantPrompt({ gameName: "여신 키우기", today: "09.04", sourcesText: "## 가이드", editable: false });
+    expect(system).toContain("연결된 시트가 없어 수정 제안은 할 수 없습니다");
+    expect(system).not.toContain("propose_update");
+    expect(system).not.toContain("propose_append");
+    expect(system).toContain("문서는 읽기만");
+  });
+
   it("adds an attachments section and rule when files are attached", () => {
     const system = buildAssistantPrompt({ gameName: "여신 키우기", today: "09.04", sourcesText: "## VIP", attachmentsText: "## 보상.txt\n52009 VIP3" });
     expect(system).toContain("# 첨부 파일");
@@ -161,6 +169,15 @@ describe("streamAssistant", () => {
     expect(tools[0].function.parameters.required).toContain("spreadsheet");
   });
 
+  it("omits tools when no sheet source is linked", async () => {
+    createMock.mockResolvedValue(chunks({ content: "네" }));
+    const docOnly = [{ source: { id: "d1", gameId: "g1", kind: "doc" as const, externalId: "doc1", title: "운영 가이드", createdAt: "" }, kind: "doc" as const, text: "환불은 7일" }];
+    await collect(streamAssistant({ system: "s", history, sources: docOnly }));
+    const args = createMock.mock.calls[0][0];
+    expect(args.tools).toBeUndefined();
+    expect(args.tool_choice).toBeUndefined();
+  });
+
   it("uses OPENAI_MODEL when set", async () => {
     process.env.OPENAI_MODEL = "gpt-5";
     createMock.mockResolvedValue(chunks({ content: "x" }));
@@ -222,13 +239,36 @@ describe("streamAssistant", () => {
     ]);
   });
 
-  it("yields invalid_proposal when the spreadsheet title matches no linked sheet", async () => {
+  it("yields invalid_proposal when the spreadsheet title matches none of two linked sheets", async () => {
     process.env.OPENAI_API_KEY = "k";
+    const other = { source: { ...vipSource, id: "s2", externalId: "sh2", title: "다른 시트" }, kind: "sheet" as const, tabs: [vip] };
     createMock.mockResolvedValue(
       chunks({ tool_calls: [{ index: 0, function: { name: "propose_update", arguments: JSON.stringify({ spreadsheet: "없는 시트", sheet: "VIP", row: 2, updates: [{ column: "VIP 단계", before: "VIP3", after: "VIP4" }] }) } }] })
     );
-    const events = await collect(streamAssistant({ system: "s", history: [], sources }));
+    const events = await collect(streamAssistant({ system: "s", history: [], sources: [...sources, other] }));
     expect(events).toEqual([{ type: "error", reason: "invalid_proposal" }]);
+  });
+
+  it("matches the spreadsheet title regardless of surrounding whitespace or case", async () => {
+    process.env.OPENAI_API_KEY = "k";
+    createMock.mockResolvedValue(
+      chunks({ tool_calls: [{ index: 0, function: { name: "propose_append", arguments: JSON.stringify({ spreadsheet: "  vip 원장  ", sheet: "VIP", values: { 이메일: "c@x.com" } }) } }] })
+    );
+    const events = await collect(streamAssistant({ system: "s", history: [], sources }));
+    expect(events).toEqual([
+      { type: "proposal", proposal: { kind: "append", sheet: "VIP", values: { 이메일: "c@x.com" }, sourceId: "s1", sourceTitle: "VIP 원장" } },
+    ]);
+  });
+
+  it("falls back to the only linked sheet when the title matches none", async () => {
+    process.env.OPENAI_API_KEY = "k";
+    createMock.mockResolvedValue(
+      chunks({ tool_calls: [{ index: 0, function: { name: "propose_append", arguments: JSON.stringify({ spreadsheet: "없는 시트", sheet: "VIP", values: { 이메일: "c@x.com" } }) } }] })
+    );
+    const events = await collect(streamAssistant({ system: "s", history: [], sources }));
+    expect(events).toEqual([
+      { type: "proposal", proposal: { kind: "append", sheet: "VIP", values: { 이메일: "c@x.com" }, sourceId: "s1", sourceTitle: "VIP 원장" } },
+    ]);
   });
 
   it("picks the first linked sheet when two share a title", async () => {

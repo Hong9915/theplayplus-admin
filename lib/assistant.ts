@@ -39,8 +39,9 @@ export function formatToday(date: Date = new Date()): string {
   return `${mm}.${dd}`;
 }
 
-export function buildAssistantPrompt(input: { gameName: string; today: string; sourcesText: string; attachmentsText?: string }): string {
+export function buildAssistantPrompt(input: { gameName: string; today: string; sourcesText: string; attachmentsText?: string; editable?: boolean }): string {
   const attachmentsText = input.attachmentsText?.trim() ?? "";
+  const editable = input.editable ?? true;
   return [
     `당신은 게임 "${input.gameName}"의 운영 담당자를 돕는 어시스턴트입니다.`,
     "아래 연결된 자료(구글 시트·문서) 내용만 근거로 한국어로 답하세요.",
@@ -48,8 +49,12 @@ export function buildAssistantPrompt(input: { gameName: string; today: string; s
     "규칙:",
     '- 답할 때 근거가 된 자료를 짧게 덧붙이세요. 시트는 "VIP 시트 VIP 탭 7행", 문서는 "운영 가이드 문서"처럼.',
     '- 자료에 없는 내용은 "자료에서 찾지 못했습니다"라고 말하고 추측하지 마세요.',
-    "- 시트는 propose_update 또는 propose_append 도구로 수정을 제안할 수 있습니다. 사용자가 시트를 바꾸자고 하면 본문으로 설명하지 말고 도구를 부르세요.",
-    "  spreadsheet에는 `# 시트:` 뒤의 시트 제목을, row와 before는 표에서 본 값을 그대로 넣으세요. 첫 줄이 열 이름인 탭에서만 수정할 수 있습니다.",
+    ...(editable
+      ? [
+          "- 시트는 propose_update 또는 propose_append 도구로 수정을 제안할 수 있습니다. 사용자가 시트를 바꾸자고 하면 본문으로 설명하지 말고 도구를 부르세요.",
+          "  spreadsheet에는 `# 시트:` 뒤의 시트 제목을, row와 before는 표에서 본 값을 그대로 넣으세요. 첫 줄이 열 이름인 탭에서만 수정할 수 있습니다.",
+        ]
+      : ["- 연결된 시트가 없어 수정 제안은 할 수 없습니다. 바꿔 달라는 요청에는 시트를 연결하라고 안내하세요."]),
     "- 문서는 읽기만 합니다. 문서를 고치자고 하면 도구를 부르지 말고 구글 문서에서 직접 수정해야 한다고 안내하세요.",
     `- 갱신일·날짜 같은 열이 있으면 오늘 날짜(${input.today})도 함께 넣으세요.`,
     "- 대상 행이 여럿이거나 특정할 수 없으면 도구를 부르지 말고 어느 것인지 되묻으세요.",
@@ -177,14 +182,15 @@ export async function* streamAssistant(input: {
   const client = new OpenAI({ apiKey });
   // tool call은 index별로 이름과 인자 조각이 따로 온다. 끝까지 모아야 파싱된다.
   const toolCalls = new Map<number, { name: string; args: string }>();
+  // 시트가 하나도 없는 게임(문서만 연결)은 수정 도구를 보여줄 필요가 없다.
+  const editable = input.sources.some((source) => source.kind === "sheet");
 
   try {
     const stream = await client.chat.completions.create({
       model: process.env.OPENAI_MODEL ?? DEFAULT_MODEL,
       stream: true,
       messages: [{ role: "system", content: input.system }, ...historyToMessages(input.history)],
-      tools: PROPOSAL_TOOLS,
-      tool_choice: "auto",
+      ...(editable ? { tools: PROPOSAL_TOOLS, tool_choice: "auto" as const } : {}),
     });
 
     for await (const chunk of stream) {
@@ -216,12 +222,20 @@ export async function* streamAssistant(input: {
   }
 }
 
-/** 도구 인자의 spreadsheet(시트 제목)로 자료를 고르고, 그 시트의 탭으로 검증해 sourceId를 붙인다. 같은 제목이면 먼저 등록된 것. */
+/**
+ * 도구 인자의 spreadsheet(시트 제목)로 자료를 고르고, 그 시트의 탭으로 검증해 sourceId를 붙인다.
+ * 제목은 공백·대소문자를 무시하고 비교한다(모델이 살짝 다르게 옮겨 적을 수 있어서). 같은 제목이면
+ * 먼저 등록된 것. 제목이 어느 것과도 안 맞아도 연결된 시트가 정확히 하나면 그것으로 본다 — 게임에
+ * 시트가 하나뿐이면 헷갈릴 일이 없다. 시트가 없거나 둘 이상인데도 못 찾으면 invalid_proposal.
+ */
 function proposalFromToolCall(sources: LoadedSource[], name: string, args: string): Proposal | null {
   const raw = toolCallToRaw(name, args);
   if (!raw || typeof raw !== "object") return null;
   const { spreadsheet, ...rest } = raw as { spreadsheet?: unknown } & Record<string, unknown>;
-  const match = sources.find((entry): entry is Extract<LoadedSource, { kind: "sheet" }> => entry.kind === "sheet" && entry.source.title === spreadsheet);
+  const wanted = (typeof spreadsheet === "string" ? spreadsheet : "").trim().toLowerCase();
+  const sheetSources = sources.filter((entry): entry is Extract<LoadedSource, { kind: "sheet" }> => entry.kind === "sheet");
+  let match = sheetSources.find((entry) => entry.source.title.trim().toLowerCase() === wanted);
+  if (!match && sheetSources.length === 1) match = sheetSources[0];
   if (!match) return null;
   const prepared = prepareProposal(match.tabs, rest);
   if (!prepared) return null;
