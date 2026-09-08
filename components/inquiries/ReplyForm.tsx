@@ -82,9 +82,8 @@ export default function ReplyForm({
     }
   }
 
-  // 템플릿 삽입과 추천 적용은 작성 중인 글을 말없이 덮어쓰지 않는다.
-  // 비어 있으면 그냥 넣고, 내용이 있으면 한 번 경고한 뒤 두 번째에 대체한다.
-  // 브라우저 confirm()은 쓰지 않는다.
+  // 템플릿 삽입은 작성 중인 글을 말없이 덮어쓰지 않는다. 비어 있으면 그냥 넣고,
+  // 내용이 있으면 한 번 경고한 뒤 두 번째에 대체한다. 브라우저 confirm()은 쓰지 않는다.
   function applyText(next: string) {
     if (replyContent.trim() === "" || pendingReplace === next) {
       setReplyContent(next);
@@ -95,6 +94,14 @@ export default function ReplyForm({
     setPendingReplace(next);
     setMessageTone("warning");
     setMessage("작성 중인 내용을 대체합니다. 한 번 더 선택하면 대체됩니다.");
+  }
+
+  // AI 추천은 작성란의 초안을 바탕으로 만든 것이라 초안을 덮어쓰는 게 목적이다.
+  // 미리보기에서 이미 확인하고 누르는 것이니 경고 없이 바로 넣는다.
+  function applySuggestion(next: string) {
+    setReplyContent(next);
+    setPendingReplace(null);
+    setMessage(null);
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -197,7 +204,7 @@ export default function ReplyForm({
       )}
       <div className="flex flex-wrap items-start gap-2">
         <TemplatePicker templates={templates} typeKey={typeKey} onPick={applyText} />
-        <SuggestButton inquiryId={inquiryId} draft={replyContent} onApply={applyText} />
+        <SuggestButton inquiryId={inquiryId} draft={replyContent} onApply={applySuggestion} />
       </div>
       <div className="flex items-center gap-2">
         <button

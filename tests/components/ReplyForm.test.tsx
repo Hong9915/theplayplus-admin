@@ -160,6 +160,33 @@ describe("ReplyForm", () => {
     expect(await screen.findByText("완성된 답변")).toBeInTheDocument();
   });
 
+  it("applies the AI suggestion over the typed draft on the first click, without the replace warning", async () => {
+    const encoder = new TextEncoder();
+    global.fetch = vi.fn().mockImplementation((url: string) =>
+      Promise.resolve(
+        String(url).endsWith("/suggest")
+          ? {
+              ok: true,
+              status: 200,
+              body: new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(encoder.encode(JSON.stringify({ type: "text", text: "안녕하세요. 누락분 지급했습니다." }) + "\n"));
+                  controller.close();
+                },
+              }),
+            }
+          : { ok: true, json: () => Promise.resolve({ success: true }) }
+      )
+    ) as never;
+    render(<ReplyForm inquiryId="inq-1" initialDraft="누락분 지급했습니다" templates={[]} typeKey="payment_refund" autosaveDelayMs={60_000} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
+    await userEvent.click(await screen.findByRole("button", { name: "적용" }));
+
+    expect(screen.getByLabelText("답변 내용")).toHaveValue("안녕하세요. 누락분 지급했습니다.");
+    expect(screen.queryByText(/한 번 더 선택하면 대체됩니다/)).not.toBeInTheDocument();
+  });
+
   it("submits with Cmd+Enter from the textarea", async () => {
     global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: true }) }) as never;
     render(<ReplyForm inquiryId="inq-1" initialDraft={null} templates={[]} typeKey="payment_refund" />);

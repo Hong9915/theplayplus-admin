@@ -233,7 +233,7 @@ export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<Sug
   - `similar_unavailable`: "유사 문의 검색이 안 돼 같은 유형의 최근 답변만 참고했습니다."
 - 오류 문구의 `not_configured`는 "OPENAI_API_KEY가 설정되지 않았습니다."로.
 - 생성 중 "적용" 비활성, 미리보기 후 적용/버리기 흐름은 그대로.
-- (2026-09-08 추가) `draft` prop으로 `ReplyForm`의 현재 `replyContent`를 받아 요청 본문 `{ draft }`로 보낸다. 적용은 지금처럼 통째 교체(글이 있으면 확인 뒤).
+- (2026-09-08 추가) `draft` prop으로 `ReplyForm`의 현재 `replyContent`를 받아 요청 본문 `{ draft }`로 보낸다. 적용은 확인 없이 바로 통째 교체한다 — 추천이 그 초안을 바탕으로 만든 것이고 미리보기에서 이미 봤기 때문이다("한 번 더 선택하면 대체" 경고는 템플릿 선택에만 남는다).
 
 ## 백필 — `scripts/backfill-inquiry-embeddings.js`
 
