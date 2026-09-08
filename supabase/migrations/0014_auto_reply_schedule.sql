@@ -2,6 +2,7 @@
 --
 -- 접수 직후 자동 답변이 나가면 기계가 보낸 티가 난다. 대신 접수 시 DB 트리거가
 -- inquiries.auto_reply_due_at을 30분~1시간 뒤 랜덤으로 채우고, pg_cron이 매분
+-- (지연 범위는 0016에서 5분~30분으로 바꿨다.)
 -- /api/auto-reply/run 을 호출해 그 시각이 지난 건만 보낸다.
 --
 -- 이전 방식(inquiries INSERT 웹훅 → /api/auto-reply/inquiry 즉시 발송)은

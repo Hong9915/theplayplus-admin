@@ -1,6 +1,6 @@
 # 유형별 매크로 자동 답변 설계
 
-새 문의가 들어오면 그 유형에 등록된 "자동 발송" 템플릿을 브랜드 이메일로 보낸다. 2026-09-04부터는 접수 직후가 아니라 30분~1시간 뒤 랜덤으로 나간다 (아래 "지연 발송" 절).
+새 문의가 들어오면 그 유형에 등록된 "자동 발송" 템플릿을 브랜드 이메일로 보낸다. 2026-09-04부터는 접수 직후가 아니라 뒤늦게 랜덤으로 나간다 (아래 "지연 발송" 절). 처음엔 30분~1시간이었고 2026-09-07(마이그레이션 0016)부터 5분~30분이다.
 수동 답변과 같은 발송·기록 경로를 쓰되, 상태는 `접수`로 남기고 타임라인에 "자동 발송"으로 구분해 보여준다.
 
 ## 결정 사항
@@ -45,12 +45,12 @@ sendInquiryReply(supabase, {
 
 ## 지연 발송 (마이그레이션 0014, 2026-09-04)
 
-접수 직후 자동 답변이 나가면 기계가 보낸 티가 난다. 대신 30분~1시간 뒤 랜덤으로 보낸다. 서버리스 함수는 몇 분씩 기다릴 수 없으므로 "예정 시각을 DB에 적고 매분 도는 작업이 때가 된 것만 보내는" 구조다.
+접수 직후 자동 답변이 나가면 기계가 보낸 티가 난다. 대신 5분~30분 뒤 랜덤으로 보낸다(0014에서는 30분~1시간이었고 0016에서 줄였다). 서버리스 함수는 몇 분씩 기다릴 수 없으므로 "예정 시각을 DB에 적고 매분 도는 작업이 때가 된 것만 보내는" 구조다.
 
 | 구성 | 내용 |
 |---|---|
 | `inquiries.auto_reply_due_at timestamptz` | 자동 답변 예정 시각. 보내면 null |
-| 트리거 `inquiries_assign_auto_reply_due` (before insert) | 게임에 자동 발송 템플릿이 하나라도 있으면 `now() + 30분 + random()*30분`. insert에 값을 명시하면 그대로 둔다 |
+| 트리거 `inquiries_assign_auto_reply_due` (before insert) | 게임에 자동 발송 템플릿이 하나라도 있으면 `now() + 5분 + random()*25분` (0016 이전에는 `30분 + random()*30분`). insert에 값을 명시하면 그대로 둔다 |
 | RPC `claim_due_auto_replies(p_limit)` | `due_at <= now()`인 행을 `for update skip locked`로 잡아 `due_at`을 null로 바꾸며 돌려준다. 한 문장이라 호출이 겹쳐도 같은 건을 두 번 주지 않는다. 돌려주는 컬럼은 `REPLYABLE_INQUIRY_COLUMNS`와 같다. service_role만 실행 가능 |
 | `pg_cron` 잡 `auto-reply-run` (`* * * * *`) | `pg_net`으로 `POST https://admin.theplayplus.com/api/auto-reply/run`. `x-webhook-secret`은 Vault의 `inquiry_webhook_secret`에서 읽는다 |
 

@@ -9,8 +9,8 @@ import { sendInquiryReply, type ReplyableInquiry } from "@/lib/send-reply";
  * 예정 시각이 지난 자동 답변을 보내는 엔드포인트. Supabase pg_cron이 매분
  * 호출한다 (마이그레이션 0014).
  *
- * 새 문의는 접수 시 DB 트리거가 inquiries.auto_reply_due_at을 30분~1시간 뒤
- * 랜덤으로 채운다. 여기서는 그 시각이 지난 건을 claim_due_auto_replies RPC로
+ * 새 문의는 접수 시 DB 트리거가 inquiries.auto_reply_due_at을 5분~30분 뒤
+ * 랜덤으로 채운다 (마이그레이션 0016). 여기서는 그 시각이 지난 건을 claim_due_auto_replies RPC로
  * 가져오는데, RPC가 due_at을 지우면서 행을 돌려주므로 두 호출이 겹쳐도 같은
  * 문의를 두 번 보내지 않는다.
  *

@@ -220,7 +220,7 @@ export default function TemplateManager({
         <h2 className="font-semibold mb-1">등록된 템플릿</h2>
         {/* 툴팁(title)은 마우스로만 볼 수 있어 눈에 보이는 도움말로 둔다. */}
         <p id="auto-send-help" className="text-xs text-muted mb-3">
-          자동 발송을 켜면 그 유형의 새 문의에 이 템플릿이 30분~1시간 뒤 자동으로 발송됩니다. 같은 유형에는 하나만 켤 수 있습니다.
+          자동 발송을 켜면 그 유형의 새 문의에 이 템플릿이 5분~30분 뒤 자동으로 발송됩니다. 같은 유형에는 하나만 켤 수 있습니다.
         </p>
         {templates.length === 0 ? (
           <p className="text-sm text-muted">등록된 템플릿이 없습니다.</p>
