@@ -13,9 +13,11 @@ import {
 } from "@/lib/replies";
 import { listSources, loadSources, serializeSources, type SourceRow } from "@/lib/assistant-sources";
 import { ensureInquiryEmbedding } from "@/lib/embeddings";
-import { streamSuggestion, type SuggestEvent } from "@/lib/suggest";
+import { listMessages, type MessageRow } from "@/lib/messages";
+import { listNotes, type NoteRow } from "@/lib/notes";
+import { streamSuggestion, type ConversationEntry, type SuggestEvent } from "@/lib/suggest";
 
-export async function POST(_request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: { id: string } }) {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
   }
@@ -46,13 +48,20 @@ export async function POST(_request: Request, { params }: { params: { id: string
 
   // 서비스 문의(game_id null)는 게임·템플릿·운영 자료가 없다. 라벨과 과거 답변은 서비스 스코프로 찾는다.
   const scope = scopeForGameId(inquiry.gameId);
-  const [labels, games, templates, sources, embedding] = await Promise.all([
+  // 작성란의 초안은 관리자가 원하는 답변이라 화면에서 그대로 받는다. DB의 draft_reply는
+  // 자동 저장이 몇 초 늦어 버튼을 누른 순간의 글과 다를 수 있다.
+  const draft = await readDraft(request);
+
+  const [labels, games, templates, sources, embedding, messages, notes] = await Promise.all([
     listCategoryLabelsForScope(supabase, scope),
     scope.kind === "game" ? listGames(supabase) : Promise.resolve([]),
     scope.kind === "game" ? listTemplates(supabase, scope.gameId) : Promise.resolve([] as TemplateRow[]),
     scope.kind === "game" ? listSources(supabase, scope.gameId).catch(() => [] as SourceRow[]) : Promise.resolve([] as SourceRow[]),
     // 지금 문의의 임베딩을 여기서 만들어 둔다. 답변이 붙으면 바로 다음 문의의 근거가 된다.
     ensureInquiryEmbedding(supabase, inquiry),
+    // 이 문의에 이미 오간 답변·회신·메모. 못 읽어도 추천은 만든다 — 근거가 하나 빠질 뿐이다.
+    listMessages(supabase, inquiry.id).catch(() => [] as MessageRow[]),
+    listNotes(supabase, inquiry.id).catch(() => [] as NoteRow[]),
   ]);
 
   const game = scope.kind === "game" ? games.find((entry) => entry.id === scope.gameId) : undefined;
@@ -100,6 +109,8 @@ export async function POST(_request: Request, { params }: { params: { id: string
       templates: relevant.map((template) => ({ title: template.title, content: template.content })),
       pastReplies,
       sourcesText,
+      conversation: buildConversation(messages, notes),
+      draft,
     })
   );
 
@@ -115,6 +126,35 @@ export async function POST(_request: Request, { params }: { params: { id: string
       "Cache-Control": "no-cache, no-transform",
     },
   });
+}
+
+/** 본문의 `draft`. 본문이 없거나 JSON이 아니거나 문자열이 아니면 빈 초안으로 본다. */
+async function readDraft(request: Request): Promise<string> {
+  try {
+    const json: unknown = await request.json();
+    if (typeof json === "object" && json !== null && "draft" in json) {
+      const draft = (json as { draft?: unknown }).draft;
+      if (typeof draft === "string") return draft;
+    }
+  } catch {
+    // 본문 없음 또는 JSON 아님
+  }
+  return "";
+}
+
+/** 메시지와 메모를 시간순 한 줄기로 합친다. 같은 시각이면 메시지가 먼저다(안정 정렬). */
+function buildConversation(messages: MessageRow[], notes: NoteRow[]): ConversationEntry[] {
+  const entries: ConversationEntry[] = [
+    ...messages.map(
+      (message): ConversationEntry => ({
+        kind: message.direction === "inbound" ? "inbound" : message.autoSent ? "auto" : "outbound",
+        at: message.sentAt,
+        body: message.body,
+      })
+    ),
+    ...notes.map((note): ConversationEntry => ({ kind: "note", at: note.createdAt, body: note.content })),
+  ];
+  return entries.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 }
 
 /**

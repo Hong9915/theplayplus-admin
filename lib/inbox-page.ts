@@ -14,7 +14,6 @@ import { listCategoryLabelsForScope, listGames, type CategoryLabelMaps, type Gam
 import { getAccountHistory, type AccountHistoryEntry } from "@/lib/account-history";
 import { listNotes, listNotesByInquiryIds } from "@/lib/notes";
 import { listEvents } from "@/lib/events";
-import { listTemplates, type TemplateRow } from "@/lib/templates";
 import { listMessages, listMessagesByInquiryIds } from "@/lib/messages";
 import type { AccountThread } from "@/lib/timeline";
 import type { InboxSelection } from "@/components/inbox/InboxShell";
@@ -46,10 +45,10 @@ export async function loadInboxPage(
   searchParams: Record<string, string | string[] | undefined>
 ): Promise<InboxPageData | null> {
   const query = parseInquiryListQuery(searchParams);
-  // 계정 이력·같은 계정 이어보기·답변 템플릿은 게임에 딸린 것이라 서비스 문의에는 없다.
+  // 계정 이력·같은 계정 이어보기는 게임에 딸린 것이라 서비스 문의에는 없다.
   const gameId = scope.kind === "game" ? scope.gameId : null;
 
-  const [games, labels, counts, listPage, inquiry, notes, events, templates, messages, siblingIds] = await Promise.all([
+  const [games, labels, counts, listPage, inquiry, notes, events, messages, siblingIds] = await Promise.all([
     gameId ? listGames(supabase) : Promise.resolve([] as GameRow[]),
     listCategoryLabelsForScope(supabase, scope),
     getInquiryFacetCounts(supabase, scope),
@@ -57,7 +56,6 @@ export async function loadInboxPage(
     inquiryId ? getInquiryById(supabase, inquiryId) : Promise.resolve(null),
     inquiryId ? listNotes(supabase, inquiryId) : Promise.resolve([]),
     inquiryId ? listEvents(supabase, inquiryId) : Promise.resolve([]),
-    inquiryId && gameId ? listTemplates(supabase, gameId) : Promise.resolve([] as TemplateRow[]),
     inquiryId ? listMessages(supabase, inquiryId) : Promise.resolve([]),
     inquiryId ? listInquiryIds(supabase, scope, query) : Promise.resolve([] as string[]),
   ]);
@@ -98,7 +96,6 @@ export async function loadInboxPage(
       history,
       notes,
       events,
-      templates,
       messages,
       siblingIds,
       pastThreads,

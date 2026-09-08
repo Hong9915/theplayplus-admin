@@ -1,6 +1,22 @@
 import OpenAI from "openai";
 import type { PastReply } from "@/lib/replies";
 import { EVIDENCE_DELIMITER } from "@/lib/suggest-evidence";
+import { DISPLAY_TIME_ZONE } from "@/lib/format";
+
+/** 이 문의에 이미 오간 것 하나. 프롬프트에 시간순으로 싣는다. */
+export interface ConversationEntry {
+  /** outbound: 관리자가 보낸 답변, auto: 매크로 자동 답변, inbound: 사용자 회신, note: 내부 메모 */
+  kind: "outbound" | "auto" | "inbound" | "note";
+  at: string;
+  body: string;
+}
+
+/** 대화 항목 하나의 길이 상한. 첨부 본문이 통째로 회신에 붙어 오는 경우가 있다. */
+export const CONVERSATION_ENTRY_MAX_CHARS = 2000;
+/** 실어 보내는 대화 항목 수. 오래된 것부터 뺀다. */
+export const CONVERSATION_MAX_ENTRIES = 20;
+/** 초안 상한. 초안 저장 라우트(`/draft`)의 스키마와 같은 값이다. */
+export const DRAFT_MAX_CHARS = 5000;
 
 export interface SuggestInput {
   gameName: string;
@@ -14,6 +30,10 @@ export interface SuggestInput {
   pastReplies: PastReply[];
   /** serializeSources 결과. 자료가 없거나 서비스 문의면 "". */
   sourcesText: string;
+  /** 이 문의의 보낸 답변·자동 답변·사용자 회신·내부 메모, 시간순. */
+  conversation: ConversationEntry[];
+  /** 작성란에 지금 적혀 있는 답변 초안. 없으면 "". */
+  draft: string;
 }
 
 export type SuggestErrorReason = "not_configured" | "refused" | "failed";
@@ -49,6 +69,13 @@ const SYSTEM_RULES = [
   "- 과거 문의와 답변이 주어지면 표현 방식과 처리 방향을 참고하되, 그때의 계정·금액·날짜를",
   "  이번 답변에 옮겨 적지 마세요.",
   "- 서명이나 발신자 정보는 붙이지 마세요. 발송 시스템이 처리합니다.",
+  "- '작성 중인 답변 초안'이 주어지면 그것이 관리자가 원하는 답변입니다. 가장 우선합니다.",
+  "  초안에 적힌 사실·결정·방향을 그대로 유지하고, 정중한 메일 문장으로 다듬고 빠진 인사·맺음만",
+  "  채우세요. 초안과 다른 내용을 새로 지어 붙이거나 초안의 결정을 뒤집지 마세요.",
+  "- '이 문의의 대화 이력'이 주어지면 이번 답변은 그 뒤에 이어지는 후속 답변입니다.",
+  "  마지막 사용자 회신에 답하고, 이미 안내한 내용을 처음부터 다시 설명하지 마세요.",
+  "- 대화 이력의 '내부 메모'는 관리자끼리 적은 사실 확인용입니다. 거기 적힌 사실은 참고하되",
+  "  메모 문장을 답변에 옮겨 적지 마세요.",
   "",
   "출력 형식:",
   `- 본문을 다 쓴 뒤 다음 줄에 ${EVIDENCE_DELIMITER}를 쓰고, 그 아래에 참고한 자료를 한 줄에 하나씩 적으세요.`,
@@ -78,6 +105,15 @@ export function buildSuggestPrompt(input: SuggestInput): { system: string; userM
 
   lines.push("", `제목: ${input.title}`, "", "문의 내용:", input.content);
 
+  if (input.conversation.length > 0) {
+    lines.push("", "---", "이 문의의 대화 이력 (시간순):");
+    const dropped = Math.max(0, input.conversation.length - CONVERSATION_MAX_ENTRIES);
+    if (dropped > 0) lines.push(`(앞의 ${dropped}건은 생략)`);
+    input.conversation.slice(dropped).forEach((entry) => {
+      lines.push("", `[${CONVERSATION_LABELS[entry.kind]} · ${formatPromptTime(entry.at)}]`, clip(entry.body, CONVERSATION_ENTRY_MAX_CHARS));
+    });
+  }
+
   if (input.templates.length > 0) {
     lines.push("", "---", "참고 템플릿:");
     input.templates.forEach((template, index) => {
@@ -101,7 +137,41 @@ export function buildSuggestPrompt(input: SuggestInput): { system: string; userM
     });
   }
 
+  // 초안은 맨 마지막에 둔다. 규칙이 최우선이라고 못 박고, 위치로도 가장 가까운 문맥이 되게 한다.
+  const draft = clip(input.draft.trim(), DRAFT_MAX_CHARS);
+  if (draft !== "") {
+    lines.push("", "---", "작성 중인 답변 초안 (관리자가 원하는 답변, 이 내용을 유지해 완성하세요):", draft);
+  }
+
   return { system, userMessage: lines.join("\n") };
+}
+
+const CONVERSATION_LABELS: Record<ConversationEntry["kind"], string> = {
+  outbound: "보낸 답변",
+  auto: "자동 답변",
+  inbound: "사용자 회신",
+  note: "내부 메모",
+};
+
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)} (이하 생략)` : text;
+}
+
+const promptTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: DISPLAY_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+/** "2026-09-02 09:10" (Asia/Seoul). 모델이 순서와 간격을 읽을 수 있을 만큼만 적는다. */
+function formatPromptTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return promptTimeFormatter.format(date);
 }
 
 export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<SuggestEvent> {

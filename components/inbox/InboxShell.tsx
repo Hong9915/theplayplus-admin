@@ -3,7 +3,6 @@ import type { AttachmentWithUrl, InquiryFacetCounts, InquiryPage, InquiryRow } f
 import type { AccountHistoryEntry } from "@/lib/account-history";
 import type { NoteRow } from "@/lib/notes";
 import type { EventRow } from "@/lib/events";
-import type { TemplateRow } from "@/lib/templates";
 import type { MessageRow } from "@/lib/messages";
 import type { InquiryListQuery } from "@/lib/inquiry-filters";
 import { buildAccountTimeline, type AccountThread } from "@/lib/timeline";
@@ -21,7 +20,6 @@ export interface InboxSelection {
   history: AccountHistoryEntry[] | null;
   notes: NoteRow[];
   events: EventRow[];
-  templates: TemplateRow[];
   messages: MessageRow[];
   siblingIds: string[];
   /** 같은 게임·같은 계정의 다른 문의와 그 대화. 접수 순 정렬은 buildAccountTimeline이 한다. */
@@ -84,7 +82,6 @@ export default function InboxShell({
               ],
               selected.inquiry.id
             )}
-            templates={selected.templates}
           />
           <InboxDetailPanel inquiry={selected.inquiry} events={selected.events} history={selected.history} />
         </>
