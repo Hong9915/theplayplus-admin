@@ -137,14 +137,41 @@ export function buildSuggestPrompt(input: SuggestInput): { system: string; userM
     });
   }
 
-  // 초안은 맨 마지막에 둔다. 규칙이 최우선이라고 못 박고, 위치로도 가장 가까운 문맥이 되게 한다.
   const draft = clip(input.draft.trim(), DRAFT_MAX_CHARS);
-  if (draft !== "") {
-    lines.push("", "---", "작성 중인 답변 초안 (관리자가 원하는 답변, 이 내용을 유지해 완성하세요):", draft);
+  if (draft === "") {
+    return { system, userMessage: lines.join("\n") };
   }
 
-  return { system, userMessage: lines.join("\n") };
+  // 초안이 있으면 작업 자체가 달라진다. 초안을 자료 뒤에 한 구간으로 덧붙이면
+  // gpt-5-mini(reasoning minimal)는 템플릿·대화 이력으로 새 답변을 쓰고 초안의
+  // 결정("해결했다")을 뒤집었다(실측). 맨 앞에서 "초안 다듬기"로 작업을 정의하고
+  // 초안을 자료보다 먼저 보여준 뒤, 긴 자료 뒤에서 한 번 더 상기시켜야 따라온다.
+  const userMessage = [
+    ...DRAFT_TASK,
+    "",
+    "초안:",
+    draft,
+    "",
+    "---",
+    "참고 정보 (말투와 사실 확인에만 쓰세요):",
+    ...lines,
+    "",
+    "---",
+    "다시 한 번: 위 '초안'을 다듬은 메일 본문만 출력하세요. 초안에 없는 내용을 덧붙이지 마세요.",
+  ].join("\n");
+
+  return { system, userMessage };
 }
+
+/** 초안이 있을 때 user 메시지 맨 앞에 두는 작업 정의. system은 캐시를 위해 그대로 둔다. */
+const DRAFT_TASK = [
+  "## 이번 작업: 초안 다듬기",
+  "관리자가 아래 '초안'을 이미 썼습니다. 새 답변을 쓰는 것이 아니라 이 초안을 정중한 메일 문장으로 다듬는 것이 당신의 일입니다.",
+  "- 초안에 적힌 사실·결정·방향을 그대로 유지하세요. 초안이 '해결했다'면 해결했다고, '안 된다'면 안 된다고 쓰세요.",
+  "- 초안에 없는 안내·요청·절차(추가 정보 요청, 확인 중 안내, 보상 조건 등)를 덧붙이지 마세요.",
+  "- 빠진 인사와 맺음말만 채우고, 길이는 초안의 3배를 넘기지 마세요.",
+  "- 아래 참고 정보(문의 내용·대화 이력·템플릿·과거 답변)는 말투와 사실 확인에만 쓰세요.",
+];
 
 const CONVERSATION_LABELS: Record<ConversationEntry["kind"], string> = {
   outbound: "보낸 답변",

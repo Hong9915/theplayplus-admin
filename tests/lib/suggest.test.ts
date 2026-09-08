@@ -133,27 +133,39 @@ describe("buildSuggestPrompt", () => {
     expect(system).toContain("내부 메모");
   });
 
-  it("puts the draft last under its own heading so it is the closest context", () => {
+  it("reframes the whole task as polishing the draft when a draft is present", () => {
     const { userMessage } = buildSuggestPrompt(
       makeInput({
         templates: [{ title: "환불 안내", content: "환불 절차는 다음과 같습니다." }],
         draft: "확인해 보니 다이아 300개가 누락돼 있어 방금 지급해 드렸습니다",
       })
     );
-    const heading = userMessage.indexOf("작성 중인 답변 초안");
-    expect(heading).toBeGreaterThan(userMessage.indexOf("참고 템플릿"));
-    expect(userMessage.slice(heading)).toContain("다이아 300개가 누락돼 있어 방금 지급해 드렸습니다");
+    // 초안은 참고 자료 중 하나가 아니라 작업 자체다. 맨 앞에서 작업을 정의하고
+    // 자료보다 먼저 초안을 보여줘야 모델이 템플릿·이력으로 새 답변을 쓰지 않는다.
+    expect(userMessage.startsWith("## 이번 작업: 초안 다듬기")).toBe(true);
+    const draftAt = userMessage.indexOf("다이아 300개가 누락돼 있어 방금 지급해 드렸습니다");
+    expect(draftAt).toBeGreaterThan(-1);
+    expect(draftAt).toBeLessThan(userMessage.indexOf("참고 템플릿"));
+    expect(draftAt).toBeLessThan(userMessage.indexOf("문의 내용:"));
+    // 초안에 없는 안내·요청을 덧붙이지 말라고 못 박고, 자료는 참고용임을 밝힌다.
+    expect(userMessage).toContain("초안에 없는");
+    expect(userMessage).toContain("참고 정보");
+    // 긴 자료 뒤에서도 작업을 잊지 않게 마지막에 한 번 더 상기시킨다.
+    expect(userMessage.trimEnd().endsWith("덧붙이지 마세요.")).toBe(true);
   });
 
-  it("omits the draft section when the draft is blank", () => {
-    expect(buildSuggestPrompt(makeInput({ draft: "   \n" })).userMessage).not.toContain("작성 중인 답변 초안");
+  it("keeps the plain inquiry-first layout when there is no draft", () => {
+    const { userMessage } = buildSuggestPrompt(makeInput({ draft: "" }));
+    expect(userMessage.startsWith("게임: ")).toBe(true);
+    expect(userMessage).not.toContain("초안");
   });
 
   it("caps the draft at the same length the draft route accepts", () => {
     const { userMessage } = buildSuggestPrompt(makeInput({ draft: "가".repeat(6000) }));
-    const section = userMessage.slice(userMessage.indexOf("작성 중인 답변 초안"));
+    const section = userMessage.slice(userMessage.indexOf("\n초안:\n"), userMessage.indexOf("\n---\n참고 정보"));
     expect(section.length).toBeLessThan(5200);
     expect(section).toContain("가".repeat(5000));
+    expect(section).not.toContain("가".repeat(5001));
   });
 
   it("lists this inquiry's conversation in order with a label and time per entry", () => {
