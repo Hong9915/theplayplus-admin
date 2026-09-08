@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { assistantChatEnabled } from "@/lib/assistant-flags";
 import type { GameRow, CategoryLabelMaps } from "@/lib/categories";
 import type { InquiryFacetCounts, InquiryPriority, InquiryStatus } from "@/lib/inquiries";
 import { inboxHref, type InquiryListQuery } from "@/lib/inquiry-filters";
@@ -99,7 +100,7 @@ export default function InboxNav({
         >
           <span className="flex items-center gap-1.5">
             <span aria-hidden="true">✦</span>
-            <span>운영 어시스턴트</span>
+            <span>{assistantChatEnabled() ? "운영 어시스턴트" : "운영 자료"}</span>
           </span>
           <span className="text-xs text-muted" aria-hidden="true">↗</span>
         </Link>

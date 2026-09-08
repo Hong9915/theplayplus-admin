@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "@/app/api/assistant/conversations/[id]/messages/route";
 import { readNdjson } from "@/lib/ndjson";
 import * as supabaseModule from "@/lib/supabase";
@@ -68,6 +68,7 @@ function stream(...items: assistantModule.AssistantEvent[]) {
 
 describe("POST /api/assistant/conversations/[id]/messages", () => {
   beforeEach(() => {
+    process.env.ASSISTANT_CHAT_ENABLED = "1";
     vi.mocked(sessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
     vi.mocked(categoriesModule.listGames).mockReset().mockResolvedValue([game] as never);
     vi.mocked(storeModule.getConversation).mockReset().mockResolvedValue(conversation);
@@ -90,6 +91,18 @@ describe("POST /api/assistant/conversations/[id]/messages", () => {
     vi.mocked(assistantModule.streamAssistant).mockReset();
     vi.mocked(sourcesModule.listSources).mockReset().mockResolvedValue([sheetSource, docSource]);
     vi.mocked(sourcesModule.loadSources).mockReset().mockResolvedValue(loaded);
+  });
+
+  afterEach(() => {
+    delete process.env.ASSISTANT_CHAT_ENABLED;
+  });
+
+  it("returns 404 assistant_chat_disabled when the chat flag is off, storing nothing", async () => {
+    delete process.env.ASSISTANT_CHAT_ENABLED;
+    const response = await POST(request({ content: "x" }), { params: { id: "c1" } });
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ success: false, error: "assistant_chat_disabled" });
+    expect(storeModule.insertMessage).not.toHaveBeenCalled();
   });
 
   it("returns 401 without a session", async () => {

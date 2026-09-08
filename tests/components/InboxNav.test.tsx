@@ -118,17 +118,28 @@ describe("InboxNav", () => {
     expect(screen.getByRole("button", { name: /삭제/ })).toBeInTheDocument();
   });
 
-  it("links to the operations assistant in a new tab for a game", () => {
+  it("links to the operations sources page in a new tab for a game while the assistant chat is off", () => {
     renderNav();
-    const link = screen.getByRole("link", { name: /운영 어시스턴트/ });
+    const link = screen.getByRole("link", { name: /운영 자료/ });
     expect(link).toHaveAttribute("href", "/games/g1/assistant");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener");
+    expect(screen.queryByRole("link", { name: /운영 어시스턴트/ })).not.toBeInTheDocument();
   });
 
-  it("does not show the assistant link for service inquiries", () => {
+  it("calls the link the operations assistant when the chat flag is on", () => {
+    process.env.ASSISTANT_CHAT_ENABLED = "1";
+    try {
+      renderNav();
+      expect(screen.getByRole("link", { name: /운영 어시스턴트/ })).toHaveAttribute("href", "/games/g1/assistant");
+    } finally {
+      delete process.env.ASSISTANT_CHAT_ENABLED;
+    }
+  });
+
+  it("does not show the sources link for service inquiries", () => {
     renderServiceNav();
-    expect(screen.queryByRole("link", { name: /운영 어시스턴트/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /운영 자료|운영 어시스턴트/ })).not.toBeInTheDocument();
   });
 
   describe("service scope", () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "@/app/api/assistant/conversations/route";
 import { DELETE } from "@/app/api/assistant/conversations/[id]/route";
 import * as supabaseModule from "@/lib/supabase";
@@ -16,6 +16,7 @@ const conversation = { id: "c1", gameId: "g1", title: "VIP 확인", createdBy: "
 
 describe("POST /api/assistant/conversations", () => {
   beforeEach(() => {
+    process.env.ASSISTANT_CHAT_ENABLED = "1";
     vi.mocked(sessionModule.getAdminSession).mockReset().mockResolvedValue({ id: "u1", email: "a@b" });
     vi.mocked(storeModule.createConversation).mockReset().mockResolvedValue(conversation);
   });
@@ -23,6 +24,19 @@ describe("POST /api/assistant/conversations", () => {
   function request(body: unknown) {
     return new Request("http://localhost/api/assistant/conversations", { method: "POST", body: JSON.stringify(body) });
   }
+
+  afterEach(() => {
+    delete process.env.ASSISTANT_CHAT_ENABLED;
+  });
+
+  it("returns 404 assistant_chat_disabled when the chat flag is off, before touching the session", async () => {
+    delete process.env.ASSISTANT_CHAT_ENABLED;
+    const response = await POST(request({ gameId: "g1", message: "안녕" }));
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ success: false, error: "assistant_chat_disabled" });
+    expect(sessionModule.getAdminSession).not.toHaveBeenCalled();
+    expect(storeModule.createConversation).not.toHaveBeenCalled();
+  });
 
   it("returns 401 without a session", async () => {
     vi.mocked(sessionModule.getAdminSession).mockResolvedValue(null);
@@ -53,8 +67,20 @@ describe("POST /api/assistant/conversations", () => {
 
 describe("DELETE /api/assistant/conversations/[id]", () => {
   beforeEach(() => {
+    process.env.ASSISTANT_CHAT_ENABLED = "1";
     vi.mocked(sessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
     vi.mocked(storeModule.deleteConversation).mockReset().mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    delete process.env.ASSISTANT_CHAT_ENABLED;
+  });
+
+  it("returns 404 assistant_chat_disabled when the chat flag is off", async () => {
+    delete process.env.ASSISTANT_CHAT_ENABLED;
+    const response = await DELETE(new Request("http://localhost/x", { method: "DELETE" }), { params: { id: "c1" } });
+    expect(response.status).toBe(404);
+    expect(storeModule.deleteConversation).not.toHaveBeenCalled();
   });
 
   it("returns 401 without a session", async () => {

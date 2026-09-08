@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
+import { assistantChatEnabled, ASSISTANT_CHAT_DISABLED } from "@/lib/assistant-flags";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { getAdminSession } from "@/lib/require-admin-session";
 import { conversationTitle, createConversation } from "@/lib/assistant-store";
 
 export async function POST(request: Request) {
+  if (!assistantChatEnabled()) {
+    return NextResponse.json(ASSISTANT_CHAT_DISABLED, { status: 404 });
+  }
   const session = await getAdminSession();
   if (!session) {
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });

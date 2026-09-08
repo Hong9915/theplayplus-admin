@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST as apply } from "@/app/api/assistant/messages/[id]/apply/route";
 import { POST as cancel } from "@/app/api/assistant/messages/[id]/cancel/route";
 import * as sessionModule from "@/lib/require-admin-session";
@@ -24,12 +24,25 @@ const req = () => new Request("http://localhost/x", { method: "POST" });
 
 describe("POST /api/assistant/messages/[id]/apply", () => {
   beforeEach(() => {
+    process.env.ASSISTANT_CHAT_ENABLED = "1";
     vi.mocked(sessionModule.getAdminSession).mockReset().mockResolvedValue({ id: "u1", email: "a@b" });
     vi.mocked(storeModule.getMessage).mockReset().mockResolvedValue(message);
     vi.mocked(storeModule.getConversation).mockReset().mockResolvedValue(conversation);
     vi.mocked(storeModule.updateProposalStatus).mockReset().mockResolvedValue(true);
     vi.mocked(sourcesModule.getSource).mockReset().mockResolvedValue(source);
     vi.mocked(sheetsModule.applyProposal).mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    delete process.env.ASSISTANT_CHAT_ENABLED;
+  });
+
+  it("returns 404 assistant_chat_disabled when the chat flag is off, writing nothing", async () => {
+    delete process.env.ASSISTANT_CHAT_ENABLED;
+    const response = await apply(new Request("http://localhost/x", { method: "POST" }), { params: { id: "m1" } });
+    expect(response.status).toBe(404);
+    expect(sheetsModule.applyProposal).not.toHaveBeenCalled();
+    expect(storeModule.updateProposalStatus).not.toHaveBeenCalled();
   });
 
   it("returns 401 without a session", async () => {
@@ -92,9 +105,21 @@ describe("POST /api/assistant/messages/[id]/apply", () => {
 
 describe("POST /api/assistant/messages/[id]/cancel", () => {
   beforeEach(() => {
+    process.env.ASSISTANT_CHAT_ENABLED = "1";
     vi.mocked(sessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
     vi.mocked(storeModule.getMessage).mockReset().mockResolvedValue(message);
     vi.mocked(storeModule.updateProposalStatus).mockReset().mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    delete process.env.ASSISTANT_CHAT_ENABLED;
+  });
+
+  it("returns 404 assistant_chat_disabled when the chat flag is off", async () => {
+    delete process.env.ASSISTANT_CHAT_ENABLED;
+    const response = await cancel(new Request("http://localhost/x", { method: "POST" }), { params: { id: "m1" } });
+    expect(response.status).toBe(404);
+    expect(storeModule.updateProposalStatus).not.toHaveBeenCalled();
   });
 
   it("cancels a pending proposal", async () => {

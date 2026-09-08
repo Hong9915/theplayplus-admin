@@ -5,12 +5,14 @@ import { listConversations, listMessages } from "@/lib/assistant-store";
 import { listSources } from "@/lib/assistant-sources";
 import { serviceAccountEmail } from "@/lib/sheets";
 import AssistantShell from "@/components/assistant/AssistantShell";
+import SourcesShell from "@/components/assistant/SourcesShell";
+import { assistantChatEnabled } from "@/lib/assistant-flags";
 
 export const dynamic = "force-dynamic";
 
 /**
  * 운영 시트 어시스턴트. 관리자 레일 없이 전체 화면을 쓴다(문의함에서 새 탭으로 연다).
- * ?c={conversationId}로 대화를 고른다.
+ * ?c={conversationId}로 대화를 고른다. 채팅이 꺼져 있으면(기본) 자료 관리 화면만 보인다.
  */
 export default async function AssistantPage({
   params,
@@ -24,6 +26,12 @@ export default async function AssistantPage({
   const game = games.find((entry) => entry.id === params.gameId);
   if (!game) {
     notFound();
+  }
+
+  // 채팅이 꺼져 있으면 자료 관리 화면만 그린다. 대화는 읽지 않는다.
+  if (!assistantChatEnabled()) {
+    const sources = await listSources(supabase, game.id);
+    return <SourcesShell game={{ id: game.id, name: game.name }} sources={sources} serviceAccountEmail={serviceAccountEmail()} />;
   }
 
   const [conversations, sources] = await Promise.all([listConversations(supabase, game.id), listSources(supabase, game.id)]);
