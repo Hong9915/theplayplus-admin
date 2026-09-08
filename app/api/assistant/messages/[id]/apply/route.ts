@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assistantChatEnabled, ASSISTANT_CHAT_DISABLED } from "@/lib/assistant-flags";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { getAdminSession } from "@/lib/require-admin-session";
 import { getConversation, getMessage, updateProposalStatus } from "@/lib/assistant-store";
@@ -7,6 +8,9 @@ import { getSource } from "@/lib/assistant-sources";
 
 /** 관리자가 [적용]을 누르면 시트에 쓴다. 실패는 200으로 사유를 돌려주고 카드에 남긴다. */
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
+  if (!assistantChatEnabled()) {
+    return NextResponse.json(ASSISTANT_CHAT_DISABLED, { status: 404 });
+  }
   const session = await getAdminSession();
   if (!session) {
     return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });

@@ -210,3 +210,13 @@ props의 `game.sheetId` 대신 `sources: SourceRow[]`를 받는다. 자료가 �
 3. Supabase SQL Editor에서 `0018_assistant.sql`, `0020_assistant_sources.sql` 순서로 실행.
 4. 관리자 페이지 → 게임 문의함 → "운영 어시스턴트" → "+ 자료 추가"에 시트·문서 URL을 넣는다. 그 전에 안내된 서비스 계정 이메일에 각 자료를 편집자로 공유한다.
 5. 시트는 "52009 VIP 몇이야" → "52009 VIP4로 올려줘" → 제안 카드 → [적용]. 문서는 "환불 정책이 뭐야"처럼 물어 근거에 문서 이름이 붙는지 확인한다.
+
+## 후기 — 채팅 비활성화 (2026-09-08)
+
+어시스턴트 답변 품질이 운영에 쓸 만하지 않아 채팅을 끈다. 자료 연결은 AI 답변 추천의 근거라 남긴다.
+
+- `lib/assistant-flags.ts`의 `assistantChatEnabled()`: 환경변수 `ASSISTANT_CHAT_ENABLED === "1"`일 때만 true. 기본 꺼짐.
+- 꺼짐일 때 `/games/{gameId}/assistant`는 `components/assistant/SourcesShell.tsx`(게임명·안내·`SourceList`·자료 추가 다이얼로그)만 그리고 대화를 읽지 않는다. 문의함의 링크 이름은 "운영 자료".
+- 채팅 API 다섯 개(`/api/assistant/conversations`, `…/[id]`, `…/[id]/messages`, `/api/assistant/messages/[id]/apply`, `…/cancel`)는 세션 확인보다 먼저 404 `{ success: false, error: "assistant_chat_disabled" }`를 돌려준다. 자료 API(`/api/games/{id}/sources`)와 `assistant_sources` 표는 그대로.
+- 사이드바의 자료 목록은 `components/assistant/SourceList.tsx`로 뽑아 `ConversationSidebar`와 `SourcesShell`이 같이 쓴다.
+- 채팅 코드·표·마이그레이션은 지우지 않는다. 다시 켜려면 환경변수만 주면 된다.
