@@ -19,6 +19,7 @@ const record = {
   type_key: "payment_error",
   game_account: "player#1",
   title: "결제 오류입니다",
+  priority: "urgent",
 };
 
 function mockSupabase(game: { name: string } | null = { name: "여신의 검" }) {
@@ -153,6 +154,45 @@ describe("POST /api/notify/inquiry", () => {
     const [, message] = vi.mocked(slackModule.sendSlackMessage).mock.calls[0];
     expect(message.text).toBe("[서비스 문의] 새 문의 · 사업 제휴 문의 > 퍼블리싱 제휴 · 퍼블리싱 제안");
     expect(JSON.stringify(message.blocks)).toContain("https://admin.theplayplus.com/service/inquiries/inq-1");
+  });
+
+  it("skips game inquiries that are not urgent", async () => {
+    const response = await POST(
+      makeRequest({ type: "INSERT", table: "inquiries", record: { ...record, priority: "normal" } })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ success: true, notified: false, skipped: "not_urgent" });
+    expect(slackModule.sendSlackMessage).not.toHaveBeenCalled();
+  });
+
+  it("skips game inquiries whose payload has no priority", async () => {
+    const { priority: _omitted, ...withoutPriority } = record;
+    const response = await POST(makeRequest({ type: "INSERT", table: "inquiries", record: withoutPriority }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ success: true, notified: false, skipped: "not_urgent" });
+    expect(slackModule.sendSlackMessage).not.toHaveBeenCalled();
+  });
+
+  it("notifies service inquiries regardless of priority", async () => {
+    vi.mocked(categoriesModule.listCategoryLabelsForScope).mockResolvedValue({
+      groupLabels: { business: "사업 제휴 문의" },
+      typeLabels: { publishing: "퍼블리싱 제휴" },
+      typeOrder: ["publishing"],
+    });
+
+    const response = await POST(
+      makeRequest({
+        type: "INSERT",
+        table: "inquiries",
+        record: { ...record, game_id: null, group_key: "business", type_key: "publishing", priority: "normal" },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ success: true, notified: true });
+    expect(slackModule.sendSlackMessage).toHaveBeenCalledTimes(1);
   });
 
   it("still accepts payloads that omit game_id entirely", async () => {
