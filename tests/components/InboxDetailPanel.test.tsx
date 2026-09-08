@@ -53,6 +53,7 @@ describe("InboxDetailPanel", () => {
   beforeEach(() => {
     searchParams = new URLSearchParams();
     window.history.replaceState(null, "", "/games/game-1/inquiries/inq-1");
+    window.localStorage.clear();
   });
 
   it("shows processing controls, meta rows, and the event log on the 상세 tab", () => {
@@ -99,6 +100,28 @@ describe("InboxDetailPanel", () => {
     expect(window.location.search).toBe("?tab=history");
     await userEvent.click(screen.getByRole("tab", { name: "상세" }));
     expect(window.location.search).toBe("");
+  });
+
+  describe("collapse", () => {
+    it("hides the panel content and shows an expand button when collapsed", async () => {
+      render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+      await userEvent.click(screen.getByRole("button", { name: "상세 접기" }));
+      expect(screen.queryByText("접수 정보")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "상세 펼치기" })).toBeInTheDocument();
+    });
+
+    it("shows the panel again after expanding", async () => {
+      render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+      await userEvent.click(screen.getByRole("button", { name: "상세 접기" }));
+      await userEvent.click(screen.getByRole("button", { name: "상세 펼치기" }));
+      expect(screen.getByText("접수 정보")).toBeInTheDocument();
+    });
+
+    it("remembers the collapsed state across remounts", () => {
+      window.localStorage.setItem("inbox-detail-collapsed", "true");
+      render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+      expect(screen.queryByText("접수 정보")).not.toBeInTheDocument();
+    });
   });
 
   it("moves between tabs with the arrow keys and keeps only the active tab in the Tab order", async () => {

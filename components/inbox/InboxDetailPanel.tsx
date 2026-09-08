@@ -8,6 +8,7 @@ import type { AccountHistoryEntry } from "@/lib/account-history";
 import { describeEvent } from "@/lib/events";
 import { emailLocalPart, formatReceivedAt, inquiryMetaRows } from "@/lib/format";
 import { handleTabListKeyDown, tabPanelProps, tabProps } from "@/components/ui/tabs";
+import { usePersistedBoolean } from "@/components/ui/usePersistedBoolean";
 import StatusSelect from "@/components/inquiries/StatusSelect";
 import PrioritySelect from "@/components/inquiries/PrioritySelect";
 import AccountHistoryPanel from "@/components/inquiries/AccountHistoryPanel";
@@ -16,6 +17,7 @@ type Tab = "detail" | "history";
 const TABS: readonly Tab[] = ["detail", "history"];
 const TAB_PREFIX = "inbox-detail";
 const TAB_PARAM = "tab";
+const COLLAPSE_KEY = "inbox-detail-collapsed";
 
 const DOT: Record<EventRow["kind"], string> = {
   status_changed: "bg-ink",
@@ -43,6 +45,7 @@ export default function InboxDetailPanel({
   history: AccountHistoryEntry[] | null;
 }) {
   const searchParams = useSearchParams();
+  const [collapsed, setCollapsed] = usePersistedBoolean(COLLAPSE_KEY, false);
   const [tab, setTab] = useState<Tab>(history !== null && searchParams?.get(TAB_PARAM) === "history" ? "history" : "detail");
   const rows = inquiryMetaRows(inquiry);
   const showHistory = history !== null && tab === "history";
@@ -109,26 +112,53 @@ export default function InboxDetailPanel({
     </>
   );
 
+  if (collapsed) {
+    return (
+      <aside className="w-8 shrink-0 h-full bg-panel flex flex-col items-center pt-3" aria-label="문의 상세 (접힘)">
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          aria-label="상세 펼치기"
+          title="상세 펼치기"
+          className="w-6 h-6 flex items-center justify-center rounded-md border border-line text-muted hover:text-ink hover:bg-ground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        >
+          ‹
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="w-[300px] shrink-0 h-full bg-panel flex flex-col overflow-hidden" aria-label="문의 상세">
-      {history !== null && (
-        <div
-          className="flex items-center gap-1 h-[52px] px-3 border-b border-line shrink-0"
-          role="tablist"
-          aria-label="상세 보기"
-          onKeyDown={(event) => handleTabListKeyDown(event, TABS, tab, TAB_PREFIX, changeTab)}
+      <div className="flex items-center gap-1 h-[52px] px-3 border-b border-line shrink-0">
+        {history !== null && (
+          <div
+            className="flex items-center gap-1 flex-1 min-w-0"
+            role="tablist"
+            aria-label="상세 보기"
+            onKeyDown={(event) => handleTabListKeyDown(event, TABS, tab, TAB_PREFIX, changeTab)}
+          >
+            <button {...tabProps(TAB_PREFIX, "detail", tab === "detail")} onClick={() => changeTab("detail")} className={tabClass(tab === "detail")}>
+              상세
+            </button>
+            <button {...tabProps(TAB_PREFIX, "history", tab === "history")} onClick={() => changeTab("history")} className={tabClass(tab === "history")}>
+              계정 이력
+              <span className="inline-flex min-w-[18px] h-4 px-1.5 rounded-full bg-ground text-muted text-[11px] leading-4 justify-center font-normal tabular-nums">
+                {history.length}
+              </span>
+            </button>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          aria-label="상세 접기"
+          title="상세 접기"
+          className="ml-auto shrink-0 w-6 h-6 flex items-center justify-center rounded-md border border-line text-muted hover:text-ink hover:bg-ground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         >
-          <button {...tabProps(TAB_PREFIX, "detail", tab === "detail")} onClick={() => changeTab("detail")} className={tabClass(tab === "detail")}>
-            상세
-          </button>
-          <button {...tabProps(TAB_PREFIX, "history", tab === "history")} onClick={() => changeTab("history")} className={tabClass(tab === "history")}>
-            계정 이력
-            <span className="inline-flex min-w-[18px] h-4 px-1.5 rounded-full bg-ground text-muted text-[11px] leading-4 justify-center font-normal tabular-nums">
-              {history.length}
-            </span>
-          </button>
-        </div>
-      )}
+          ›
+        </button>
+      </div>
 
       <div className="flex-1 overflow-y-auto">
         {history === null ? (

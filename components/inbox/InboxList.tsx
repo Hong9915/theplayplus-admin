@@ -9,7 +9,10 @@ import { SORT_OPTIONS, inboxHref, inquiryHref, type InquiryListQuery } from "@/l
 import type { InboxScope } from "@/lib/inbox-scope";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatusMessage from "@/components/ui/StatusMessage";
+import { usePersistedBoolean } from "@/components/ui/usePersistedBoolean";
 import { formatElapsed } from "@/lib/format";
+
+const COLLAPSE_KEY = "inbox-list-collapsed";
 
 const STATUS_OPTIONS: Array<{ value: InquiryStatus; label: string }> = [
   { value: "new", label: "접수" },
@@ -59,6 +62,7 @@ export default function InboxList({
   now?: number;
 }) {
   const router = useRouter();
+  const [collapsed, setCollapsed] = usePersistedBoolean(COLLAPSE_KEY, false);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<InquiryStatus>("resolved");
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -143,6 +147,22 @@ export default function InboxList({
     router.refresh();
   }
 
+  if (collapsed) {
+    return (
+      <section className="w-8 shrink-0 h-full bg-panel border-r border-line flex flex-col items-center pt-3" aria-label="문의 목록 (접힘)">
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          aria-label="목록 펼치기"
+          title="목록 펼치기"
+          className="w-6 h-6 flex items-center justify-center rounded-md border border-line text-muted hover:text-ink hover:bg-ground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        >
+          ›
+        </button>
+      </section>
+    );
+  }
+
   return (
     <section className="w-[340px] shrink-0 h-full bg-panel border-r border-line flex flex-col overflow-hidden" aria-label="문의 목록">
       <header className="flex items-center justify-between gap-2 h-[52px] px-4 border-b border-line shrink-0">
@@ -152,18 +172,29 @@ export default function InboxList({
             <span>{viewLabel}</span> <span className="text-muted font-normal tabular-nums">{total}건</span>
           </span>
         </div>
-        <select
-          value={query.sort}
-          onChange={(e) => navigate({ sort: e.target.value as InquiryListQuery["sort"] })}
-          className={SELECT}
-          aria-label="정렬"
-        >
-          {SORT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2 shrink-0">
+          <select
+            value={query.sort}
+            onChange={(e) => navigate({ sort: e.target.value as InquiryListQuery["sort"] })}
+            className={SELECT}
+            aria-label="정렬"
+          >
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            aria-label="목록 접기"
+            title="목록 접기"
+            className="w-6 h-6 flex items-center justify-center rounded-md border border-line text-muted hover:text-ink hover:bg-ground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          >
+            ‹
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto">

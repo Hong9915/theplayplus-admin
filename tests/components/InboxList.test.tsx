@@ -78,6 +78,7 @@ describe("InboxList", () => {
     replace.mockReset();
     prefetch.mockReset();
     refresh.mockReset();
+    window.localStorage.clear();
   });
 
   it("shows the view label and total", () => {
@@ -191,6 +192,28 @@ describe("InboxList", () => {
       expect(screen.queryByRole("link", { name: "다음" })).not.toBeInTheDocument();
       expect(screen.getByText("다음")).toHaveAttribute("aria-disabled", "true");
       expect(screen.getByRole("link", { name: "이전" })).toBeInTheDocument();
+    });
+  });
+
+  describe("collapse", () => {
+    it("hides the list and shows an expand button when collapsed", async () => {
+      renderList(makePage([makeInquiry({})], 37));
+      await userEvent.click(screen.getByRole("button", { name: "목록 접기" }));
+      expect(screen.queryByText("37건")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "목록 펼치기" })).toBeInTheDocument();
+    });
+
+    it("shows the list again after expanding", async () => {
+      renderList(makePage([makeInquiry({})], 37));
+      await userEvent.click(screen.getByRole("button", { name: "목록 접기" }));
+      await userEvent.click(screen.getByRole("button", { name: "목록 펼치기" }));
+      expect(screen.getByText("37건")).toBeInTheDocument();
+    });
+
+    it("remembers the collapsed state across remounts", () => {
+      window.localStorage.setItem("inbox-list-collapsed", "true");
+      renderList(makePage([makeInquiry({})], 37));
+      expect(screen.queryByText("37건")).not.toBeInTheDocument();
     });
   });
 
