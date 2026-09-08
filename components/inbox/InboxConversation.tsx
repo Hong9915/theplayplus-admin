@@ -1,6 +1,5 @@
 import type { InquiryRow } from "@/lib/inquiries";
 import type { CategoryLabelMaps } from "@/lib/categories";
-import type { TemplateRow } from "@/lib/templates";
 import type { TimelineEntry } from "@/lib/timeline";
 import type { InquiryListQuery } from "@/lib/inquiry-filters";
 import type { InboxScope } from "@/lib/inbox-scope";
@@ -21,7 +20,6 @@ export default function InboxConversation({
   query,
   siblingIds,
   entries,
-  templates,
 }: {
   scope: InboxScope;
   inquiry: InquiryRow;
@@ -29,7 +27,6 @@ export default function InboxConversation({
   query: InquiryListQuery;
   siblingIds: string[];
   entries: TimelineEntry[];
-  templates: TemplateRow[];
 }) {
   const category = `${labels.groupLabels[inquiry.groupKey] ?? inquiry.groupKey} · ${labels.typeLabels[inquiry.typeKey] ?? inquiry.typeKey}`;
   const received = `접수 ${formatReceivedAt(inquiry.createdAt)} · 경과 ${formatElapsed(inquiry.createdAt)}`;
@@ -68,8 +65,6 @@ export default function InboxConversation({
         inquiryId={inquiry.id}
         replyEmail={inquiry.replyEmail}
         initialDraft={inquiry.draftReply}
-        templates={templates}
-        typeKey={inquiry.typeKey}
       />
     </section>
   );

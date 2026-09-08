@@ -35,3 +35,16 @@ function trimPartialDelimiter(text: string): string {
   }
   return text;
 }
+
+export type EvidenceKind = "sheet" | "doc" | "reply" | "other";
+
+/**
+ * 근거 한 줄이 무엇을 가리키는지. 프롬프트가 요구한 표기("~시트 ~탭 N행", "~문서 ~항목",
+ * "과거 답변 R-…")를 따른다. 화면은 종류별 아이콘만 다르게 그리므로 틀려도 글자는 그대로 보인다.
+ */
+export function evidenceKind(item: string): EvidenceKind {
+  if (/^\s*과거 답변/.test(item)) return "reply";
+  if (item.includes("시트")) return "sheet";
+  if (item.includes("문서")) return "doc";
+  return "other";
+}

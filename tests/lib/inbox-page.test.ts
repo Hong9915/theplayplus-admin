@@ -6,7 +6,6 @@ import * as categoriesModule from "@/lib/categories";
 import * as historyModule from "@/lib/account-history";
 import * as notesModule from "@/lib/notes";
 import * as eventsModule from "@/lib/events";
-import * as templatesModule from "@/lib/templates";
 import * as messagesModule from "@/lib/messages";
 
 vi.mock("@/lib/inquiries", () => ({
@@ -20,7 +19,6 @@ vi.mock("@/lib/categories", () => ({ listCategoryLabelsForScope: vi.fn(), listGa
 vi.mock("@/lib/account-history", () => ({ getAccountHistory: vi.fn() }));
 vi.mock("@/lib/notes", () => ({ listNotes: vi.fn(), listNotesByInquiryIds: vi.fn() }));
 vi.mock("@/lib/events", () => ({ listEvents: vi.fn() }));
-vi.mock("@/lib/templates", () => ({ listTemplates: vi.fn() }));
 vi.mock("@/lib/messages", () => ({ listMessages: vi.fn(), listMessagesByInquiryIds: vi.fn() }));
 
 const game = { id: "g1", name: "아르카나 사가", status: "active" as const, logoPath: null, ownerName: null, createdAt: "2026-01-01T00:00:00.000Z" };
@@ -70,7 +68,6 @@ describe("loadInboxPage", () => {
     vi.mocked(notesModule.listNotes).mockReset().mockResolvedValue([]);
     vi.mocked(notesModule.listNotesByInquiryIds).mockReset().mockResolvedValue({});
     vi.mocked(eventsModule.listEvents).mockReset().mockResolvedValue([]);
-    vi.mocked(templatesModule.listTemplates).mockReset().mockResolvedValue([]);
     vi.mocked(messagesModule.listMessages).mockReset().mockResolvedValue([]);
     vi.mocked(messagesModule.listMessagesByInquiryIds).mockReset().mockResolvedValue({});
   });
@@ -105,7 +102,7 @@ describe("loadInboxPage", () => {
     await expect(loadInboxPage({} as never, SERVICE_SCOPE, "inq-1", {})).resolves.toBeNull();
   });
 
-  it("game scope: loads history, past threads, and templates for the selected inquiry", async () => {
+  it("game scope: loads history and past threads for the selected inquiry", async () => {
     vi.mocked(inquiriesModule.getInquiryById).mockResolvedValue(inquiry({}));
     vi.mocked(historyModule.getAccountHistory).mockResolvedValue([
       { id: "inq-0", inquiryNo: null, title: "예전", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "bug_report", occurredAt: null, paymentNo: null, deviceInfo: null, translations: {}, createdAt: "2026-08-01T00:00:00.000Z" },
@@ -114,21 +111,20 @@ describe("loadInboxPage", () => {
     const data = await loadInboxPage({} as never, gameScope("g1"), "inq-1", {});
 
     expect(historyModule.getAccountHistory).toHaveBeenCalledWith({}, "g1", "player1", "inq-1");
-    expect(templatesModule.listTemplates).toHaveBeenCalledWith({}, "g1");
     expect(data?.selected?.history).toHaveLength(1);
     expect(data?.selected?.pastThreads).toHaveLength(1);
     expect(data?.selected?.pastThreads[0].inquiry.id).toBe("inq-0");
     expect(data?.selected?.siblingIds).toEqual(["inq-1"]);
   });
 
-  it("service scope: skips history and templates and hands the panel a null history", async () => {
+  it("service scope: skips history and hands the panel a null history", async () => {
     vi.mocked(inquiriesModule.getInquiryById).mockResolvedValue(inquiry({ gameId: null, gameAccount: null, companyName: "플레이컴퍼니" }));
 
     const data = await loadInboxPage({} as never, SERVICE_SCOPE, "inq-1", {});
 
     expect(historyModule.getAccountHistory).not.toHaveBeenCalled();
-    expect(templatesModule.listTemplates).not.toHaveBeenCalled();
-    expect(data?.selected).toMatchObject({ history: null, pastThreads: [], templates: [] });
+    expect(data?.selected).toMatchObject({ history: null, pastThreads: [] });
+    expect(data?.selected).not.toHaveProperty("templates");
     expect(inquiriesModule.listInquiryIds).toHaveBeenCalledWith({}, { kind: "service" }, expect.anything());
   });
 
@@ -160,7 +156,6 @@ describe("loadInboxPage", () => {
     expect(messagesModule.listMessages).toHaveBeenCalledWith({}, "inq-1");
     expect(notesModule.listNotes).toHaveBeenCalledWith({}, "inq-1");
     expect(eventsModule.listEvents).toHaveBeenCalledWith({}, "inq-1");
-    expect(templatesModule.listTemplates).toHaveBeenCalledWith({}, "g1");
     expect(inquiriesModule.listInquiryIds).toHaveBeenCalledWith({}, { kind: "game", gameId: "g1" }, expect.anything());
 
     releaseInquiry(inquiry({}));

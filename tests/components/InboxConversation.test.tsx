@@ -42,7 +42,7 @@ const entries: TimelineEntry[] = [{ kind: "inquiry", id: "inq-1", at: inquiry.cr
 
 function renderIt(overrides: Partial<InquiryRow> = {}) {
   return render(
-    <InboxConversation scope={gameScope("g1")} inquiry={{ ...inquiry, ...overrides }} labels={labels} query={DEFAULT_QUERY} siblingIds={["x", "inq-1", "y"]} entries={entries} templates={[]} />
+    <InboxConversation scope={gameScope("g1")} inquiry={{ ...inquiry, ...overrides }} labels={labels} query={DEFAULT_QUERY} siblingIds={["x", "inq-1", "y"]} entries={entries} />
   );
 }
 
