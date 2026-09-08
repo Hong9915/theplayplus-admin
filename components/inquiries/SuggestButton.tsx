@@ -30,9 +30,12 @@ function isSuggestEvent(value: unknown): value is SuggestEvent {
 
 export default function SuggestButton({
   inquiryId,
+  draft = "",
   onApply,
 }: {
   inquiryId: string;
+  /** 작성란에 지금 적혀 있는 글. 관리자가 원하는 답변이라 모델이 이걸 살려 완성한다. */
+  draft?: string;
   onApply: (text: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -51,7 +54,11 @@ export default function SuggestButton({
     let failure: string | null = null;
 
     try {
-      const response = await fetch(`/api/inquiries/${inquiryId}/suggest`, { method: "POST" });
+      const response = await fetch(`/api/inquiries/${inquiryId}/suggest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft }),
+      });
 
       // 세션 없음/문의 없음처럼 스트림을 열기 전에 거절된 경우는 JSON 한 덩어리다.
       if (!response.ok || !response.body) {

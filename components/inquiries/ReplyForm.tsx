@@ -197,7 +197,7 @@ export default function ReplyForm({
       )}
       <div className="flex flex-wrap items-start gap-2">
         <TemplatePicker templates={templates} typeKey={typeKey} onPick={applyText} />
-        <SuggestButton inquiryId={inquiryId} onApply={applyText} />
+        <SuggestButton inquiryId={inquiryId} draft={replyContent} onApply={applyText} />
       </div>
       <div className="flex items-center gap-2">
         <button

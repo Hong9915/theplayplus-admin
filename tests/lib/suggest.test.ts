@@ -21,6 +21,8 @@ function makeInput(overrides: Partial<SuggestInput> = {}): SuggestInput {
     templates: [],
     pastReplies: [],
     sourcesText: "",
+    conversation: [],
+    draft: "",
     ...overrides,
   };
 }
@@ -119,6 +121,82 @@ describe("buildSuggestPrompt", () => {
 
   it("omits the past-reply section entirely when there are none", () => {
     expect(buildSuggestPrompt(makeInput()).userMessage).not.toContain("과거 문의와 답변");
+  });
+
+  it("tells the model the draft is the answer the admin wants and must be kept", () => {
+    const { system } = buildSuggestPrompt(makeInput());
+    expect(system).toContain("초안");
+    expect(system).toContain("관리자가 원하는 답변");
+    // 대화 이력이 있으면 후속 답변이지 처음부터 다시 설명하는 게 아니다.
+    expect(system).toContain("후속");
+    // 내부 메모는 사실 확인용이지 답변 문장이 아니다.
+    expect(system).toContain("내부 메모");
+  });
+
+  it("puts the draft last under its own heading so it is the closest context", () => {
+    const { userMessage } = buildSuggestPrompt(
+      makeInput({
+        templates: [{ title: "환불 안내", content: "환불 절차는 다음과 같습니다." }],
+        draft: "확인해 보니 다이아 300개가 누락돼 있어 방금 지급해 드렸습니다",
+      })
+    );
+    const heading = userMessage.indexOf("작성 중인 답변 초안");
+    expect(heading).toBeGreaterThan(userMessage.indexOf("참고 템플릿"));
+    expect(userMessage.slice(heading)).toContain("다이아 300개가 누락돼 있어 방금 지급해 드렸습니다");
+  });
+
+  it("omits the draft section when the draft is blank", () => {
+    expect(buildSuggestPrompt(makeInput({ draft: "   \n" })).userMessage).not.toContain("작성 중인 답변 초안");
+  });
+
+  it("caps the draft at the same length the draft route accepts", () => {
+    const { userMessage } = buildSuggestPrompt(makeInput({ draft: "가".repeat(6000) }));
+    const section = userMessage.slice(userMessage.indexOf("작성 중인 답변 초안"));
+    expect(section.length).toBeLessThan(5200);
+    expect(section).toContain("가".repeat(5000));
+  });
+
+  it("lists this inquiry's conversation in order with a label and time per entry", () => {
+    const { userMessage } = buildSuggestPrompt(
+      makeInput({
+        conversation: [
+          { kind: "auto", at: "2026-09-02T00:10:00.000Z", body: "문의 접수되었습니다." },
+          { kind: "outbound", at: "2026-09-02T01:00:00.000Z", body: "결제 내역을 확인 중입니다." },
+          { kind: "note", at: "2026-09-02T02:00:00.000Z", body: "PG사에 확인 요청함" },
+          { kind: "inbound", at: "2026-09-03T03:00:00.000Z", body: "아직도 안 들어왔어요" },
+        ],
+      })
+    );
+    const section = userMessage.slice(userMessage.indexOf("이 문의의 대화 이력"));
+    expect(section).toContain("[자동 답변 · 2026-09-02 09:10]");
+    expect(section).toContain("[보낸 답변 · 2026-09-02 10:00]");
+    expect(section).toContain("[내부 메모 · 2026-09-02 11:00]");
+    expect(section).toContain("[사용자 회신 · 2026-09-03 12:00]");
+    expect(section.indexOf("문의 접수되었습니다.")).toBeLessThan(section.indexOf("결제 내역을 확인 중입니다."));
+    expect(section.indexOf("PG사에 확인 요청함")).toBeLessThan(section.indexOf("아직도 안 들어왔어요"));
+    // 이력은 본문 뒤, 템플릿 앞에 온다.
+    expect(userMessage.indexOf("이 문의의 대화 이력")).toBeGreaterThan(userMessage.indexOf("문의 내용:"));
+  });
+
+  it("omits the conversation section when there is none", () => {
+    expect(buildSuggestPrompt(makeInput()).userMessage).not.toContain("이 문의의 대화 이력");
+  });
+
+  it("keeps only the latest entries and trims each body when the thread is long", () => {
+    const conversation = Array.from({ length: 25 }, (_, index) => ({
+      kind: "inbound" as const,
+      at: `2026-09-${String(1 + Math.floor(index / 24)).padStart(2, "0")}T${String(index % 24).padStart(2, "0")}:00:00.000Z`,
+      body: `회신 ${index} ` + "나".repeat(3000),
+    }));
+    const { userMessage } = buildSuggestPrompt(makeInput({ conversation }));
+    expect(userMessage).not.toContain("회신 0 ");
+    expect(userMessage).not.toContain("회신 4 ");
+    expect(userMessage).toContain("회신 5 ");
+    expect(userMessage).toContain("회신 24 ");
+    expect(userMessage).not.toContain("나".repeat(2001));
+    // 잘렸다는 표시는 남긴다.
+    expect(userMessage).toContain("(이하 생략)");
+    expect(userMessage).toContain("앞의 5건은 생략");
   });
 });
 

@@ -160,6 +160,10 @@ export interface SuggestInput {
   pastReplies: PastReply[];
   /** serializeSources 결과. 자료가 없거나 서비스 문의면 "". */
   sourcesText: string;
+  /** (2026-09-08 추가) 이 문의의 보낸 답변·자동 답변·사용자 회신·내부 메모, 시간순. */
+  conversation: ConversationEntry[]; // { kind: "outbound" | "auto" | "inbound" | "note"; at: string; body: string }
+  /** (2026-09-08 추가) 작성란에 지금 적혀 있는 초안. 없으면 "". */
+  draft: string;
 }
 
 export function buildSuggestPrompt(input: SuggestInput): { system: string; userMessage: string };
@@ -173,7 +177,9 @@ export function buildSuggestPrompt(input: SuggestInput): { system: string; userM
    - 출력 형식: "본문을 다 쓴 뒤 다음 줄에 `=== 근거 ===`를 쓰고, 그 아래에 참고한 자료를 한 줄에 하나씩 적으세요. 시트는 `VIP 시트 VIP 탭 7행`, 문서는 `운영 가이드 문서 '환불' 항목`, 과거 답변은 `과거 답변 R-20260902-0001`처럼. 참고한 것이 없으면 `없음`이라고 적으세요."
 2. `sourcesText`가 비어 있지 않으면 `# 참고 자료` 아래에 그대로 붙인다.
 
-**userMessage**: 지금처럼 게임·종류·유형·계정·회사·제목·본문 → `참고 템플릿` → `과거 문의와 답변` 구간. 과거 답변은 항목마다 `N) 문의 R-…: 제목` / `문의 요약: (excerpt)` / `보낸 답변:` / 본문. `inquiryNo`가 null인 대체 항목은 `N) 같은 유형의 최근 답변:` 뒤에 본문만.
+   - (2026-09-08 추가) "'작성 중인 답변 초안'이 주어지면 그것이 관리자가 원하는 답변입니다. 가장 우선합니다. 초안에 적힌 사실·결정·방향을 그대로 유지하고, 정중한 메일 문장으로 다듬고 빠진 인사·맺음만 채우세요." / "'이 문의의 대화 이력'이 주어지면 이번 답변은 후속 답변입니다. 마지막 사용자 회신에 답하고 이미 안내한 내용을 다시 설명하지 마세요." / "내부 메모는 사실 확인용이니 문장을 옮겨 적지 마세요."
+
+**userMessage**: 지금처럼 게임·종류·유형·계정·회사·제목·본문 → (2026-09-08 추가) `이 문의의 대화 이력 (시간순)` — 항목마다 `[보낸 답변|자동 답변|사용자 회신|내부 메모 · YYYY-MM-DD HH:mm]`(Asia/Seoul) 한 줄 뒤 본문, 항목당 2,000자·최근 20건(넘으면 `(앞의 N건은 생략)`) → `참고 템플릿` → `과거 문의와 답변` 구간 → (2026-09-08 추가) 맨 끝에 `작성 중인 답변 초안 (관리자가 원하는 답변, 이 내용을 유지해 완성하세요):` 뒤 초안(공백뿐이면 생략, 5,000자 상한 = `/draft` 스키마와 같음). 과거 답변은 항목마다 `N) 문의 R-…: 제목` / `문의 요약: (excerpt)` / `보낸 답변:` / 본문. `inquiryNo`가 null인 대체 항목은 `N) 같은 유형의 최근 답변:` 뒤에 본문만.
 
 ### 근거 분리 — `lib/suggest-evidence.ts` (신규, 의존성 없음)
 
@@ -208,6 +214,9 @@ export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<Sug
 
 ## 라우트 — `app/api/inquiries/[id]/suggest/route.ts`
 
+- (2026-09-08 추가) 요청 본문 `{ draft }`를 읽는다. 본문이 없거나 JSON이 아니거나 문자열이 아니면 빈 초안. DB의 `draft_reply`가 아니라 화면 값을 쓰는 이유는 자동 저장이 2초 늦어 버튼을 누른 순간의 글과 다를 수 있어서다.
+- (2026-09-08 추가) `listMessages`·`listNotes`를 다른 근거와 함께 병렬로 읽어 시간순 `conversation`으로 합친다. 못 읽으면 빈 배열로 진행하고 warning은 내지 않는다.
+
 1. 세션·문의 확인(지금과 같음).
 2. 병렬: 라벨, 게임 목록, 템플릿, `listSources`(게임 문의만), `ensureInquiryEmbedding`.
 3. 자료: `sources`가 비어 있지 않으면 `loadSources` → `serializeSources`. `SheetError`(공유 안 됨·너무 큼·서비스 계정 미설정 포함)나 다른 예외면 `sourcesText = ""`로 두고 `warning sources_unavailable`(`sourceTitle`이 있으면 함께)을 기억한다. 자료가 등록돼 있지 않으면 경고 없이 빈 문자열.
@@ -224,6 +233,7 @@ export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<Sug
   - `similar_unavailable`: "유사 문의 검색이 안 돼 같은 유형의 최근 답변만 참고했습니다."
 - 오류 문구의 `not_configured`는 "OPENAI_API_KEY가 설정되지 않았습니다."로.
 - 생성 중 "적용" 비활성, 미리보기 후 적용/버리기 흐름은 그대로.
+- (2026-09-08 추가) `draft` prop으로 `ReplyForm`의 현재 `replyContent`를 받아 요청 본문 `{ draft }`로 보낸다. 적용은 지금처럼 통째 교체(글이 있으면 확인 뒤).
 
 ## 백필 — `scripts/backfill-inquiry-embeddings.js`
 
@@ -258,6 +268,7 @@ export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<Sug
 - `tests/lib/suggest.test.ts`: 기존 프롬프트 테스트 갱신(자료 구간이 system 뒤에 오는지, 과거 답변 항목 형식, 대체 항목 형식, 근거 형식 규칙), `splitSuggestion`(구분선 없음·있음·끝에 걸친 조각·`없음`), `streamSuggestion`을 openai 모킹으로 교체(모델·`reasoning_effort`·`content_filter` → refused·예외 → failed).
 - `tests/lib/replies.test.ts`: `listSimilarAnsweredReplies` RPC 인자·오류 시 `[]`.
 - `tests/api/inquiry-suggest.test.ts`: 자료 로드 실패 → warning 후 text, 임베딩 null → similar_unavailable, 유사 2건 미만 → 최근 답변 보충·중복 제거, 서비스 문의 → 자료 조회 안 함.
-- `tests/components/SuggestButton.test.tsx`: 근거가 본문과 분리돼 적용 텍스트에 안 들어감, warning 안내줄, 오류 문구.
+- `tests/components/SuggestButton.test.tsx`: 근거가 본문과 분리돼 적용 텍스트에 안 들어감, warning 안내줄, 오류 문구, (2026-09-08) 초안이 요청 본문으로 감.
+- (2026-09-08) `tests/lib/suggest.test.ts`에 초안 규칙·위치·상한, 대화 이력 형식·순서·자르기; `tests/api/inquiry-suggest.test.ts`에 본문 파싱, 메시지+메모 병합, 읽기 실패 시 빈 이력; `tests/components/ReplyForm.test.tsx`에 타이핑한 글이 추천 요청에 실림.
 - `tests/lib/send-reply.test.ts`: manual 발송 뒤 `ensureInquiryEmbedding` 호출, auto는 호출 안 함, 실패해도 결과 동일.
 - 마이그레이션·백필 스크립트는 코드 리뷰와 실제 DB에서 한 번 실행으로 확인한다.

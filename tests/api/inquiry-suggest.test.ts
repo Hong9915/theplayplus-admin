@@ -9,6 +9,8 @@ import * as suggestModule from "@/lib/suggest";
 import * as sessionModule from "@/lib/require-admin-session";
 import * as sourcesModule from "@/lib/assistant-sources";
 import * as embeddingsModule from "@/lib/embeddings";
+import * as messagesModule from "@/lib/messages";
+import * as notesModule from "@/lib/notes";
 
 vi.mock("@/lib/supabase", () => ({ getSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/inquiries", () => ({ getInquiryById: vi.fn() }));
@@ -23,6 +25,8 @@ vi.mock("@/lib/suggest", () => ({ streamSuggestion: vi.fn() }));
 vi.mock("@/lib/require-admin-session", () => ({ requireAdminSession: vi.fn() }));
 vi.mock("@/lib/assistant-sources", () => ({ listSources: vi.fn(), loadSources: vi.fn(), serializeSources: vi.fn() }));
 vi.mock("@/lib/embeddings", () => ({ ensureInquiryEmbedding: vi.fn() }));
+vi.mock("@/lib/messages", () => ({ listMessages: vi.fn() }));
+vi.mock("@/lib/notes", () => ({ listNotes: vi.fn() }));
 
 const EMBEDDING = [0.1, 0.2, 0.3];
 const sheetSource = { id: "src-1", gameId: "game-1", kind: "sheet" as const, externalId: "sh-1", title: "VIP 원장", createdAt: "" };
@@ -64,8 +68,13 @@ const inquiry = {
   createdAt: "2026-09-02T00:00:00.000Z",
 };
 
-function suggestRequest() {
-  return new Request("http://localhost/api/inquiries/inq-1/suggest", { method: "POST" });
+function suggestRequest(body?: unknown) {
+  return new Request("http://localhost/api/inquiries/inq-1/suggest", {
+    method: "POST",
+    ...(body === undefined
+      ? {}
+      : { headers: { "Content-Type": "application/json" }, body: typeof body === "string" ? body : JSON.stringify(body) }),
+  });
 }
 
 function events(...items: suggestModule.SuggestEvent[]) {
@@ -106,6 +115,8 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     vi.mocked(sourcesModule.loadSources).mockReset().mockResolvedValue([]);
     vi.mocked(sourcesModule.serializeSources).mockReset().mockReturnValue("");
     vi.mocked(embeddingsModule.ensureInquiryEmbedding).mockReset().mockResolvedValue(EMBEDDING);
+    vi.mocked(messagesModule.listMessages).mockReset().mockResolvedValue([]);
+    vi.mocked(notesModule.listNotes).mockReset().mockResolvedValue([]);
     vi.mocked(suggestModule.streamSuggestion)
       .mockReset()
       .mockImplementation(() => events({ type: "text", text: "추천 " }, { type: "text", text: "본문" }));
@@ -166,6 +177,57 @@ describe("POST /api/inquiries/[id]/suggest", () => {
       { type: "text", text: "추천 " },
       { type: "text", text: "본문" },
     ]);
+  });
+
+  it("passes the draft from the request body and an empty draft when the body is missing or malformed", async () => {
+    await POST(suggestRequest({ draft: "확인해 보니 누락분 지급했습니다" }), { params: { id: "inq-1" } });
+    expect(suggestModule.streamSuggestion).toHaveBeenLastCalledWith(
+      expect.objectContaining({ draft: "확인해 보니 누락분 지급했습니다" })
+    );
+
+    await POST(suggestRequest(), { params: { id: "inq-1" } });
+    expect(suggestModule.streamSuggestion).toHaveBeenLastCalledWith(expect.objectContaining({ draft: "" }));
+
+    await POST(suggestRequest("{not json"), { params: { id: "inq-1" } });
+    expect(suggestModule.streamSuggestion).toHaveBeenLastCalledWith(expect.objectContaining({ draft: "" }));
+
+    await POST(suggestRequest({ draft: 123 }), { params: { id: "inq-1" } });
+    expect(suggestModule.streamSuggestion).toHaveBeenLastCalledWith(expect.objectContaining({ draft: "" }));
+  });
+
+  it("merges this inquiry's messages and notes into one time-ordered conversation", async () => {
+    vi.mocked(messagesModule.listMessages).mockResolvedValue([
+      { id: "m1", direction: "outbound", authorEmail: null, body: "자동 안내", gmailMessageId: null, rfcMessageId: null, sentAt: "2026-09-02T00:10:00.000Z", autoSent: true, translations: {} },
+      { id: "m2", direction: "outbound", authorEmail: "admin@x", body: "확인 중입니다", gmailMessageId: null, rfcMessageId: null, sentAt: "2026-09-02T01:00:00.000Z", autoSent: false, translations: {} },
+      { id: "m3", direction: "inbound", authorEmail: "user@x", body: "아직도 안 돼요", gmailMessageId: "g3", rfcMessageId: null, sentAt: "2026-09-03T00:00:00.000Z", autoSent: false, translations: {} },
+    ]);
+    vi.mocked(notesModule.listNotes).mockResolvedValue([
+      { id: "n1", authorEmail: "admin@x", content: "PG 확인 요청함", createdAt: "2026-09-02T02:00:00.000Z" },
+    ]);
+
+    await POST(suggestRequest(), { params: { id: "inq-1" } });
+
+    expect(messagesModule.listMessages).toHaveBeenCalledWith(expect.anything(), "inq-1");
+    expect(notesModule.listNotes).toHaveBeenCalledWith(expect.anything(), "inq-1");
+    expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: [
+          { kind: "auto", at: "2026-09-02T00:10:00.000Z", body: "자동 안내" },
+          { kind: "outbound", at: "2026-09-02T01:00:00.000Z", body: "확인 중입니다" },
+          { kind: "note", at: "2026-09-02T02:00:00.000Z", body: "PG 확인 요청함" },
+          { kind: "inbound", at: "2026-09-03T00:00:00.000Z", body: "아직도 안 돼요" },
+        ],
+      })
+    );
+  });
+
+  it("still suggests with an empty conversation when messages or notes cannot be read", async () => {
+    vi.mocked(messagesModule.listMessages).mockRejectedValue(new Error("db down"));
+
+    const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
+
+    expect(response.status).toBe(200);
+    expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(expect.objectContaining({ conversation: [] }));
   });
 
   it("only forwards templates for this type or shared ones", async () => {

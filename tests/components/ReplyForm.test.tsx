@@ -133,6 +133,33 @@ describe("ReplyForm", () => {
     expect(screen.getByLabelText("답변 내용")).toHaveValue("환불 절차입니다.");
   });
 
+  it("sends what the admin has typed so far when asking for an AI suggestion", async () => {
+    const encoder = new TextEncoder();
+    const stream = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(JSON.stringify({ type: "text", text: "완성된 답변" }) + "\n"));
+          controller.close();
+        },
+      });
+    global.fetch = vi.fn().mockImplementation((url: string) =>
+      Promise.resolve(
+        String(url).endsWith("/suggest")
+          ? { ok: true, status: 200, body: stream() }
+          : { ok: true, json: () => Promise.resolve({ success: true }) }
+      )
+    ) as never;
+    render(<ReplyForm inquiryId="inq-1" initialDraft={null} templates={[]} typeKey="payment_refund" autosaveDelayMs={60_000} />);
+
+    await userEvent.type(screen.getByRole("textbox"), "누락분 지급했습니다");
+    await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
+
+    const call = vi.mocked(global.fetch).mock.calls.find(([url]) => String(url).endsWith("/suggest"));
+    expect(call).toBeDefined();
+    expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({ draft: "누락분 지급했습니다" });
+    expect(await screen.findByText("완성된 답변")).toBeInTheDocument();
+  });
+
   it("submits with Cmd+Enter from the textarea", async () => {
     global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: true }) }) as never;
     render(<ReplyForm inquiryId="inq-1" initialDraft={null} templates={[]} typeKey="payment_refund" />);

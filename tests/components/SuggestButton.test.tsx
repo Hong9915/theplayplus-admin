@@ -55,6 +55,16 @@ describe("SuggestButton", () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 
+  it("sends the current draft in the request body so the model builds on it", async () => {
+    render(<SuggestButton inquiryId="inq-1" draft="확인해 보니 누락분 지급했습니다" onApply={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0] as [string, RequestInit];
+    expect(init.headers).toMatchObject({ "Content-Type": "application/json" });
+    expect(JSON.parse(init.body as string)).toEqual({ draft: "확인해 보니 누락분 지급했습니다" });
+  });
+
   it("shows partial text while streaming and hides apply/discard until it finishes", async () => {
     const encoder = new TextEncoder();
     let controller!: ReadableStreamDefaultController<Uint8Array>;
