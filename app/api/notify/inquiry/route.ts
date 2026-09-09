@@ -29,6 +29,7 @@ const payloadSchema = z.object({
     type_key: z.string(),
     game_account: z.string().nullish(),
     title: z.string(),
+    content: z.string().nullish(),
     priority: z.string().nullish(),
   }),
 });
@@ -86,7 +87,9 @@ export async function POST(request: Request) {
     groupLabel: labels.groupLabels[record.group_key] ?? record.group_key,
     typeLabel: labels.typeLabels[record.type_key] ?? record.type_key,
     title: record.title,
+    content: record.content ?? null,
     gameAccount: record.game_account ?? null,
+    priority: record.priority ?? null,
     detailUrl: `${new URL(request.url).origin}${scopeBasePath(scope)}/inquiries/${record.id}`,
   });
 

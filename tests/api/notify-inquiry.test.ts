@@ -19,6 +19,7 @@ const record = {
   type_key: "payment_error",
   game_account: "player#1",
   title: "결제 오류입니다",
+  content: "다이아 결제했는데 안 들어왔어요",
   priority: "urgent",
 };
 
@@ -99,9 +100,12 @@ describe("POST /api/notify/inquiry", () => {
     expect(slackModule.sendSlackMessage).toHaveBeenCalledTimes(1);
     const [url, message] = vi.mocked(slackModule.sendSlackMessage).mock.calls[0];
     expect(url).toBe("https://hooks.slack.com/services/x");
-    expect(message.text).toBe("[여신의 검] 새 문의 · 결제 > 결제 오류 · 결제 오류입니다");
-    expect(JSON.stringify(message.blocks)).toContain("https://admin.theplayplus.com/games/game-1/inquiries/inq-1");
-    expect(JSON.stringify(message.blocks)).toContain("20260903-0001");
+    expect(message.text).toBe("[여신의 검] 긴급 문의 · 결제 > 결제 오류 · 결제 오류입니다");
+    expect(message.attachments[0].color).toBe("#E01E5A");
+    const json = JSON.stringify(message.attachments[0].blocks);
+    expect(json).toContain("https://admin.theplayplus.com/games/game-1/inquiries/inq-1");
+    expect(json).toContain("20260903-0001");
+    expect(json).toContain("> 다이아 결제했는데 안 들어왔어요");
   });
 
   it("falls back to raw keys and a placeholder game name when lookups fail", async () => {
@@ -111,7 +115,7 @@ describe("POST /api/notify/inquiry", () => {
     await POST(makeRequest(insertPayload));
 
     const [, message] = vi.mocked(slackModule.sendSlackMessage).mock.calls[0];
-    expect(message.text).toBe("[알 수 없는 게임] 새 문의 · payment > payment_error · 결제 오류입니다");
+    expect(message.text).toBe("[알 수 없는 게임] 긴급 문의 · payment > payment_error · 결제 오류입니다");
   });
 
   it("skips Slack and reports notified=false when no webhook url is configured", async () => {
@@ -144,7 +148,15 @@ describe("POST /api/notify/inquiry", () => {
       makeRequest({
         type: "INSERT",
         table: "inquiries",
-        record: { ...record, game_id: null, group_key: "business", type_key: "publishing", game_account: null, title: "퍼블리싱 제안" },
+        record: {
+          ...record,
+          game_id: null,
+          group_key: "business",
+          type_key: "publishing",
+          game_account: null,
+          title: "퍼블리싱 제안",
+          priority: "normal",
+        },
       })
     );
 
@@ -153,7 +165,10 @@ describe("POST /api/notify/inquiry", () => {
     expect(categoriesModule.listCategoryLabelsForScope).toHaveBeenCalledWith(expect.anything(), { kind: "service" });
     const [, message] = vi.mocked(slackModule.sendSlackMessage).mock.calls[0];
     expect(message.text).toBe("[서비스 문의] 새 문의 · 사업 제휴 문의 > 퍼블리싱 제휴 · 퍼블리싱 제안");
-    expect(JSON.stringify(message.blocks)).toContain("https://admin.theplayplus.com/service/inquiries/inq-1");
+    expect(message.attachments[0].color).toBe("#8D9298");
+    expect(JSON.stringify(message.attachments[0].blocks)).toContain(
+      "https://admin.theplayplus.com/service/inquiries/inq-1"
+    );
   });
 
   it("skips game inquiries that are not urgent", async () => {
@@ -193,6 +208,14 @@ describe("POST /api/notify/inquiry", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ success: true, notified: true });
     expect(slackModule.sendSlackMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("still notifies when the payload carries no content", async () => {
+    const { content: _omitted, ...withoutContent } = record;
+    await POST(makeRequest({ type: "INSERT", table: "inquiries", record: withoutContent }));
+
+    const [, message] = vi.mocked(slackModule.sendSlackMessage).mock.calls[0];
+    expect(message.attachments[0].blocks).toHaveLength(2);
   });
 
   it("still accepts payloads that omit game_id entirely", async () => {
