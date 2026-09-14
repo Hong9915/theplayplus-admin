@@ -154,6 +154,15 @@ describe("buildSuggestPrompt", () => {
     expect(userMessage.trimEnd().endsWith("덧붙이지 마세요.")).toBe(true);
   });
 
+  it("tells the model a draft written as an instruction is a directive to the writer, not customer speech", () => {
+    const { userMessage } = buildSuggestPrompt(makeInput({ draft: "스토어로 문의해서 환불 됐다고 말해줘" }));
+    // "~라고 말해줘"를 사용자의 말로 읽어 "말씀해 주세요"로 옮긴 실측 사례가 있다.
+    // 지시문이면 지시를 받는 쪽은 모델이고, 사용자에게 전할 내용으로 바꿔 써야 한다.
+    expect(userMessage).toContain("지시");
+    expect(userMessage).toContain("말해줘");
+    expect(userMessage).toContain("사용자가 한 말");
+  });
+
   it("keeps the plain inquiry-first layout when there is no draft", () => {
     const { userMessage } = buildSuggestPrompt(makeInput({ draft: "" }));
     expect(userMessage.startsWith("게임: ")).toBe(true);
