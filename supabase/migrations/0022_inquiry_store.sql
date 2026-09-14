@@ -1,4 +1,4 @@
--- 참조용 사본. 원본은 theplayplus-contact 저장소의 supabase/migrations/0008_inquiry_store.sql이며
+-- 참조용 사본. 원본은 theplayplus-web 저장소의 supabase/migrations/0009_inquiry_store.sql이며
 -- 같은 Supabase 프로젝트에 한 번만 실행한다.
 
 -- 결제/환불 문의에 "스토어 종류"를 필수로 받는다.
