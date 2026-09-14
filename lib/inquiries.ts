@@ -31,7 +31,7 @@ export interface InquiryRow {
   locale: string | null;
   /** 유형별 추가 항목. 접수 폼이 유형 플래그(collects_*)에 따라 채운다. */
   paymentNo: string | null;
-  /** 스토어 키(google_play / app_store / onestore / other). 결제·환불 문의만 채운다(마이그레이션 0022). */
+  /** 스토어 키(google_play / app_store / onestore / other). 게임 문의 전부가 채운다(마이그레이션 0022·0023). */
   store: string | null;
   /** datetime-local 문자열 (YYYY-MM-DDTHH:mm). */
   occurredAt: string | null;

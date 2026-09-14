@@ -24,7 +24,7 @@ export interface DefaultCategoryType {
   collectsPaymentNo: boolean;
   collectsOccurredAt: boolean;
   collectsDeviceInfo: boolean;
-  /** 스토어 종류(Google Play / App Store / 원스토어 / 기타)를 필수로 받는다. 결제·환불 유형. */
+  /** 스토어 종류(Google Play / App Store / 원스토어 / 기타)를 필수로 받는다. 게임 유형 전부(2026-09-14). */
   collectsStore: boolean;
   /** 접수 시 트리거(마이그레이션 0009)가 이 값을 문의 우선순위로 넣는다. */
   defaultPriority: InquiryTypePriority;
@@ -40,7 +40,7 @@ export interface DefaultCategoryGroup {
   types: DefaultCategoryType[];
 }
 
-/** 게임 유형 공통 플래그. 모든 유형이 게임 계정을 받고 첨부를 허용한다. */
+/** 게임 유형 공통 플래그. 모든 유형이 게임 계정과 스토어 종류를 받고 첨부를 허용한다. */
 const GAME_TYPE = {
   requiresGameAccount: true,
   requiresCompanyName: false,
@@ -49,7 +49,7 @@ const GAME_TYPE = {
   collectsPaymentNo: false,
   collectsOccurredAt: false,
   collectsDeviceInfo: false,
-  collectsStore: false,
+  collectsStore: true,
   defaultPriority: "normal" as InquiryTypePriority,
 };
 
@@ -101,7 +101,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
     labelEn: "Payment/Refund",
     sortOrder: 2,
     types: [
-      { ...GAME_TYPE, key: "payment", labelKo: "결제", labelZh: "支付", labelEn: "Payment", collectsOccurredAt: true, collectsStore: true, defaultPriority: "urgent", sortOrder: 0 },
+      { ...GAME_TYPE, key: "payment", labelKo: "결제", labelZh: "支付", labelEn: "Payment", collectsOccurredAt: true, defaultPriority: "urgent", sortOrder: 0 },
       {
         ...GAME_TYPE,
         key: "refund",
@@ -110,7 +110,6 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
         labelEn: "Refund",
         collectsPaymentNo: true,
         collectsOccurredAt: true,
-        collectsStore: true,
         defaultPriority: "urgent",
         sortOrder: 1,
       },

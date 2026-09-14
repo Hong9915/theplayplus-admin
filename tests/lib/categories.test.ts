@@ -29,7 +29,8 @@ describe("DEFAULT_CATEGORY_TEMPLATE", () => {
     expect(byKey.install_connect).toMatchObject({ requiresAttachments: true, collectsDeviceInfo: true });
     expect(byKey.payment).toMatchObject({ collectsOccurredAt: true, collectsPaymentNo: false, collectsStore: true });
     expect(byKey.refund).toMatchObject({ collectsOccurredAt: true, collectsPaymentNo: true, collectsStore: true });
-    expect(byKey.bug_report).toMatchObject({ collectsStore: false });
+    expect(byKey.bug_report).toMatchObject({ collectsStore: true });
+    expect(DEFAULT_CATEGORY_TEMPLATE.flatMap((g) => g.types).every((t) => t.collectsStore)).toBe(true);
     expect(byKey.bug_report).toMatchObject({ requiresGameAccount: true, allowAttachments: true, requiresAttachments: false });
   });
 
@@ -90,7 +91,7 @@ describe("createDefaultCategoriesForGame", () => {
     );
     const gameUsageTypes = supabase.typesInsert.mock.calls[1][0] as Array<Record<string, unknown>>;
     expect(gameUsageTypes.find((row) => row.key === "install_connect")).toEqual(
-      expect.objectContaining({ requires_attachments: true, collects_device_info: true, collects_payment_no: false, collects_store: false })
+      expect.objectContaining({ requires_attachments: true, collects_device_info: true, collects_payment_no: false, collects_store: true })
     );
     const paymentTypes = supabase.typesInsert.mock.calls[2][0] as Array<Record<string, unknown>>;
     expect(paymentTypes.find((row) => row.key === "payment")).toEqual(expect.objectContaining({ collects_store: true }));
