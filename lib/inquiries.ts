@@ -31,6 +31,8 @@ export interface InquiryRow {
   locale: string | null;
   /** 유형별 추가 항목. 접수 폼이 유형 플래그(collects_*)에 따라 채운다. */
   paymentNo: string | null;
+  /** 스토어 키(google_play / app_store / onestore / other). 결제·환불 문의만 채운다(마이그레이션 0022). */
+  store: string | null;
   /** datetime-local 문자열 (YYYY-MM-DDTHH:mm). */
   occurredAt: string | null;
   deviceInfo: string | null;
@@ -42,7 +44,7 @@ export interface InquiryRow {
 // 임베딩 벡터(1536 float)를 목록·상세에서 끌어오지 않도록 열을 명시한다.
 // mapInquiryRow가 읽는 열과 정확히 맞춘다(embedding, embedding_model은 제외).
 export const INQUIRY_COLUMNS =
-  "id, inquiry_no, game_id, group_key, type_key, game_account, company_name, reply_email, title, content, status, priority, meta, draft_reply, reply_content, replied_at, gmail_thread_id, locale, payment_no, occurred_at, device_info, created_at, unread_reply_at, translations";
+  "id, inquiry_no, game_id, group_key, type_key, game_account, company_name, reply_email, title, content, status, priority, meta, draft_reply, reply_content, replied_at, gmail_thread_id, locale, payment_no, store, occurred_at, device_info, created_at, unread_reply_at, translations";
 
 export interface AttachmentWithUrl {
   id: string;
@@ -71,6 +73,7 @@ function mapInquiryRow(row: {
   unread_reply_at?: string | null;
   locale?: string | null;
   payment_no?: string | null;
+  store?: string | null;
   occurred_at?: string | null;
   device_info?: string | null;
   translations?: unknown;
@@ -97,6 +100,7 @@ function mapInquiryRow(row: {
     unreadReplyAt: row.unread_reply_at ?? null,
     locale: row.locale ?? null,
     paymentNo: row.payment_no ?? null,
+    store: row.store ?? null,
     occurredAt: row.occurred_at ?? null,
     deviceInfo: row.device_info ?? null,
     translations: parseTranslations(row.translations),

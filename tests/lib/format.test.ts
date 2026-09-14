@@ -121,6 +121,7 @@ describe("inquiryMetaRows", () => {
     locale: null,
     translations: {},
     paymentNo: null,
+    store: null,
     occurredAt: null,
     deviceInfo: null,
     createdAt: "2026-07-23T13:55:00.000Z",
@@ -144,6 +145,7 @@ describe("inquiryMetaRows", () => {
       locale: "zh",
       translations: {},
       paymentNo: "imp_20260903_001",
+      store: "google_play",
       occurredAt: "2026-09-03T14:05",
       deviceInfo: "Galaxy S24 / Android 14",
     });
@@ -153,6 +155,7 @@ describe("inquiryMetaRows", () => {
       ["언어", "중국어"],
       ["접수 시각", formatReceivedAt("2026-07-23T13:55:00.000Z")],
       ["발생 일시", "2026. 09. 03. 오후 2:05"],
+      ["스토어", "Google Play"],
       ["결제번호", "imp_20260903_001"],
       ["기기/사양", "Galaxy S24 / Android 14"],
     ]);
@@ -166,10 +169,27 @@ describe("inquiryMetaRows", () => {
 
 describe("inquiryDetailRows", () => {
   it("returns only the type-specific fields that are present", () => {
-    expect(inquiryDetailRows({ occurredAt: "2026-09-03T14:05", paymentNo: null, deviceInfo: " " })).toEqual([
+    expect(inquiryDetailRows({ occurredAt: "2026-09-03T14:05", paymentNo: null, store: null, deviceInfo: " " })).toEqual([
       { key: "발생 일시", label: "발생 일시", value: "2026. 09. 03. 오후 2:05" },
     ]);
-    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, deviceInfo: null })).toEqual([]);
+    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, store: null, deviceInfo: null })).toEqual([]);
+  });
+
+  it.each([
+    ["google_play", "Google Play"],
+    ["app_store", "App Store"],
+    ["onestore", "원스토어"],
+    ["other", "기타"],
+  ])("labels the store key %s as %s in Korean", (key, label) => {
+    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, store: key, deviceInfo: null })).toEqual([
+      { key: "스토어", label: "스토어", value: label },
+    ]);
+  });
+
+  it("shows an unknown store key as-is", () => {
+    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, store: "steam", deviceInfo: null })).toEqual([
+      { key: "스토어", label: "스토어", value: "steam" },
+    ]);
   });
 });
 

@@ -63,6 +63,7 @@ const inquiry = {
   locale: null,
   translations: {},
   paymentNo: null,
+  store: null,
   occurredAt: null,
   deviceInfo: null,
   createdAt: "2026-09-02T00:00:00.000Z",

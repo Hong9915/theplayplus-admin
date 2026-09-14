@@ -13,6 +13,7 @@ const entry: AccountHistoryEntry = {
   typeKey: "account_login",
   occurredAt: null,
   paymentNo: null,
+  store: null,
   deviceInfo: null,
   translations: {},
   createdAt: "2025-06-01T00:00:00.000Z",

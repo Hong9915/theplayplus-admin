@@ -120,15 +120,28 @@ function presentRows(rows: Array<{ label: string; value: string | null }>): Meta
     .map((row) => ({ key: row.label, label: row.label, value: row.value as string }));
 }
 
+/** 접수 폼이 저장하는 스토어 키의 한국어 표기. 모르는 키는 그대로 보여준다. */
+export const STORE_LABELS: Record<string, string> = {
+  google_play: "Google Play",
+  app_store: "App Store",
+  onestore: "원스토어",
+  other: "기타",
+};
+
+export function formatStore(store: string): string {
+  return STORE_LABELS[store] ?? store;
+}
+
 /**
- * 유형별 추가 항목(발생 일시·결제번호·기기/사양). 접수 폼이 유형 플래그에 따라
+ * 유형별 추가 항목(발생 일시·스토어·결제번호·기기/사양). 접수 폼이 유형 플래그에 따라
  * 채우는 컬럼이라 유형마다 있는 것만 나온다. 대화 말풍선과 접수 정보가 같이 쓴다.
  */
 export function inquiryDetailRows(
-  inquiry: Pick<InquiryRow, "occurredAt" | "paymentNo" | "deviceInfo">
+  inquiry: Pick<InquiryRow, "occurredAt" | "paymentNo" | "store" | "deviceInfo">
 ): MetaEntry[] {
   return presentRows([
     { label: "발생 일시", value: inquiry.occurredAt ? formatOccurredAt(inquiry.occurredAt) : null },
+    { label: "스토어", value: inquiry.store ? formatStore(inquiry.store) : null },
     { label: "결제번호", value: inquiry.paymentNo },
     { label: "기기/사양", value: inquiry.deviceInfo },
   ]);

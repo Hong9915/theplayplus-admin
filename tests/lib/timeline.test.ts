@@ -26,6 +26,7 @@ const inquiry: InquiryRow = {
   locale: null,
   translations: {},
   paymentNo: null,
+  store: null,
   occurredAt: null,
   deviceInfo: null,
   createdAt: "2026-09-03T01:12:00.000Z",
@@ -63,11 +64,12 @@ describe("buildTimeline", () => {
   });
 
   it("carries the type-specific detail rows on the inquiry entry", () => {
-    const [head] = buildTimeline({ ...inquiry, occurredAt: "2026-09-02T21:00", paymentNo: "imp_9" }, [], [], []);
+    const [head] = buildTimeline({ ...inquiry, occurredAt: "2026-09-02T21:00", store: "app_store", paymentNo: "imp_9" }, [], [], []);
     expect(head.kind).toBe("inquiry");
     if (head.kind !== "inquiry") throw new Error("fixture");
     expect(head.details.map((d) => [d.label, d.value])).toEqual([
       ["발생 일시", "2026. 09. 02. 오후 9:00"],
+      ["스토어", "App Store"],
       ["결제번호", "imp_9"],
     ]);
   });
@@ -104,6 +106,7 @@ describe("buildAccountTimeline", () => {
       gameAccount: "luna_park",
       occurredAt: null,
       paymentNo: null,
+      store: null,
       deviceInfo: null,
       translations: {},
       createdAt: "2026-07-21T00:00:00.000Z",

@@ -24,6 +24,8 @@ export interface DefaultCategoryType {
   collectsPaymentNo: boolean;
   collectsOccurredAt: boolean;
   collectsDeviceInfo: boolean;
+  /** 스토어 종류(Google Play / App Store / 원스토어 / 기타)를 필수로 받는다. 결제·환불 유형. */
+  collectsStore: boolean;
   /** 접수 시 트리거(마이그레이션 0009)가 이 값을 문의 우선순위로 넣는다. */
   defaultPriority: InquiryTypePriority;
   sortOrder: number;
@@ -47,6 +49,7 @@ const GAME_TYPE = {
   collectsPaymentNo: false,
   collectsOccurredAt: false,
   collectsDeviceInfo: false,
+  collectsStore: false,
   defaultPriority: "normal" as InquiryTypePriority,
 };
 
@@ -98,7 +101,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
     labelEn: "Payment/Refund",
     sortOrder: 2,
     types: [
-      { ...GAME_TYPE, key: "payment", labelKo: "결제", labelZh: "支付", labelEn: "Payment", collectsOccurredAt: true, defaultPriority: "urgent", sortOrder: 0 },
+      { ...GAME_TYPE, key: "payment", labelKo: "결제", labelZh: "支付", labelEn: "Payment", collectsOccurredAt: true, collectsStore: true, defaultPriority: "urgent", sortOrder: 0 },
       {
         ...GAME_TYPE,
         key: "refund",
@@ -107,6 +110,7 @@ export const DEFAULT_CATEGORY_TEMPLATE: DefaultCategoryGroup[] = [
         labelEn: "Refund",
         collectsPaymentNo: true,
         collectsOccurredAt: true,
+        collectsStore: true,
         defaultPriority: "urgent",
         sortOrder: 1,
       },
@@ -146,6 +150,7 @@ export async function createDefaultCategoriesForGame(supabase: SupabaseClient, g
       collects_payment_no: type.collectsPaymentNo,
       collects_occurred_at: type.collectsOccurredAt,
       collects_device_info: type.collectsDeviceInfo,
+      collects_store: type.collectsStore,
       default_priority: type.defaultPriority,
       sort_order: type.sortOrder,
     }));

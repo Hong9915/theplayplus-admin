@@ -17,6 +17,7 @@ export type ThreadInquiry = Pick<
   | "createdAt"
   | "occurredAt"
   | "paymentNo"
+  | "store"
   | "deviceInfo"
   | "translations"
 >;

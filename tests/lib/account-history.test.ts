@@ -29,6 +29,7 @@ describe("getAccountHistory", () => {
           type_key: "account_login",
           occurred_at: null,
           payment_no: "imp_1",
+          store: "onestore",
           device_info: null,
           created_at: "2025-06-01T00:00:00.000Z",
         },
@@ -45,6 +46,7 @@ describe("getAccountHistory", () => {
 
     expect(select).toHaveBeenCalledWith(expect.stringContaining("content"));
     expect(select).toHaveBeenCalledWith(expect.stringContaining("inquiry_no"));
+    expect(select).toHaveBeenCalledWith(expect.stringContaining("store"));
     expect(eqGame).toHaveBeenCalledWith("game_id", "game-1");
     expect(eqAccount).toHaveBeenCalledWith("game_account", "player1");
     expect(neq).toHaveBeenCalledWith("id", "inq-1");
@@ -59,6 +61,7 @@ describe("getAccountHistory", () => {
         typeKey: "account_login",
         occurredAt: null,
         paymentNo: "imp_1",
+        store: "onestore",
         deviceInfo: null,
         translations: {},
         createdAt: "2025-06-01T00:00:00.000Z",

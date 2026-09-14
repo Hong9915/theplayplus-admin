@@ -32,6 +32,7 @@ const inquiry: InquiryRow = {
   locale: null,
   translations: {},
   paymentNo: null,
+  store: null,
   occurredAt: null,
   deviceInfo: null,
   createdAt: new Date().toISOString(),

@@ -51,6 +51,7 @@ function makeInquiry(overrides: Partial<InquiryRow>): InquiryRow {
     locale: null,
     translations: {},
     paymentNo: null,
+    store: null,
     occurredAt: null,
     deviceInfo: null,
     createdAt: new Date().toISOString(),

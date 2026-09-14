@@ -35,6 +35,7 @@ const inquiry: InquiryRow = {
   locale: null,
   translations: {},
   paymentNo: null,
+  store: null,
   occurredAt: null,
   deviceInfo: null,
   createdAt: "2026-09-03T01:12:00.000Z",
@@ -46,7 +47,7 @@ const events: EventRow[] = [
 ];
 
 const history: AccountHistoryEntry[] = [
-  { id: "inq-0", inquiryNo: null, title: "예전 문의", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "payment_refund", occurredAt: null, paymentNo: null, deviceInfo: null, translations: {}, createdAt: "2026-07-21T00:00:00.000Z" },
+  { id: "inq-0", inquiryNo: null, title: "예전 문의", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "payment_refund", occurredAt: null, paymentNo: null, store: null, deviceInfo: null, translations: {}, createdAt: "2026-07-21T00:00:00.000Z" },
 ];
 
 describe("InboxDetailPanel", () => {
