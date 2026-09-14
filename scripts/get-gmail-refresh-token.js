@@ -12,6 +12,11 @@
  *   - 게임 문의 계정(help@)으로 로그인 → GMAIL_REFRESH_TOKEN / GMAIL_SENDER
  *   - 서비스 문의 계정(info@)으로 로그인 → GMAIL_SERVICE_REFRESH_TOKEN / GMAIL_SERVICE_SENDER
  * 이미 로그인된 다른 Google 계정으로 동의하지 않도록 계정 선택 화면에서 확인하세요.
+ *
+ * `--docs`를 붙이면 Gmail 대신 drive.file 스코프 토큰을 발급합니다. 게임 생성 시
+ * 운영 현황 구글 문서를 그 계정 소유로 만드는 데 쓰며(lib/ops-doc.ts) 값은
+ * GOOGLE_DOCS_REFRESH_TOKEN에 넣습니다. 문서를 소유할 계정(보통 help@)으로 로그인하세요.
+ *   node scripts/get-gmail-refresh-token.js --docs
  */
 const fs = require("fs");
 const path = require("path");
@@ -49,19 +54,27 @@ async function main() {
   console.log(`사용할 client_id: ${clientId}`);
 
   const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, REDIRECT_URI);
+  const docsMode = process.argv.includes("--docs");
 
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: [
-      "https://www.googleapis.com/auth/gmail.send",
-      // 사용자 회신을 스레드에서 읽어오는 데 필요하다. 예전 토큰은 send만 있어
-      // 회신 확인이 실패하니, 스코프를 바꾸면 토큰을 다시 발급해야 한다.
-      "https://www.googleapis.com/auth/gmail.readonly",
-    ],
+    scope: docsMode
+      ? // 이 앱이 만든 파일만 만들고 공유할 수 있는 최소 Drive 스코프.
+        ["https://www.googleapis.com/auth/drive.file"]
+      : [
+          "https://www.googleapis.com/auth/gmail.send",
+          // 사용자 회신을 스레드에서 읽어오는 데 필요하다. 예전 토큰은 send만 있어
+          // 회신 확인이 실패하니, 스코프를 바꾸면 토큰을 다시 발급해야 한다.
+          "https://www.googleapis.com/auth/gmail.readonly",
+        ],
   });
 
-  console.log("\n아래 URL을 브라우저에서 열고, 토큰을 발급할 발신 계정(게임 문의 help@ 또는 서비스 문의 info@)으로 로그인/동의하세요:\n");
+  console.log(
+    docsMode
+      ? "\n아래 URL을 브라우저에서 열고, 운영 현황 문서를 소유할 계정(보통 help@)으로 로그인/동의하세요:\n"
+      : "\n아래 URL을 브라우저에서 열고, 토큰을 발급할 발신 계정(게임 문의 help@ 또는 서비스 문의 info@)으로 로그인/동의하세요:\n"
+  );
   console.log(authUrl, "\n");
 
   const server = http.createServer(async (req, res) => {
@@ -79,9 +92,13 @@ async function main() {
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("인증이 완료되었습니다. 터미널을 확인하세요. 이 탭은 닫아도 됩니다.");
 
-      console.log("\n발급 완료. 로그인한 계정에 맞는 변수에 넣으세요:\n");
-      console.log("  게임 문의 계정이면   GMAIL_REFRESH_TOKEN (발신 주소는 GMAIL_SENDER)");
-      console.log("  서비스 문의 계정이면 GMAIL_SERVICE_REFRESH_TOKEN (발신 주소는 GMAIL_SERVICE_SENDER)\n");
+      if (docsMode) {
+        console.log("\n발급 완료. GOOGLE_DOCS_REFRESH_TOKEN에 넣으세요:\n");
+      } else {
+        console.log("\n발급 완료. 로그인한 계정에 맞는 변수에 넣으세요:\n");
+        console.log("  게임 문의 계정이면   GMAIL_REFRESH_TOKEN (발신 주소는 GMAIL_SENDER)");
+        console.log("  서비스 문의 계정이면 GMAIL_SERVICE_REFRESH_TOKEN (발신 주소는 GMAIL_SERVICE_SENDER)\n");
+      }
       console.log(`refresh_token=${tokens.refresh_token}\n`);
 
       if (!tokens.refresh_token) {
