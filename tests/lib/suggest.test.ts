@@ -163,6 +163,51 @@ describe("buildSuggestPrompt", () => {
     expect(userMessage).toContain("사용자가 한 말");
   });
 
+  it("spells out the paragraph structure of a reply and leaves the greeting to the mail template", () => {
+    const { system } = buildSuggestPrompt(makeInput());
+    // 메이플스토리식 답변: 사과 → 배경 → 처리 방향·다음 단계 → 개선 다짐, 단락마다 빈 줄.
+    expect(system).toContain("답변 구조");
+    expect(system).toContain("빈 줄");
+    expect(system).toContain("다음 단계");
+    expect(system).toContain("전달하겠습니다");
+    // "OOO님, 안녕하세요. …답변드립니다."는 메일 템플릿이 붙이므로 본문에 또 쓰면 이중 인사다.
+    expect(system).toContain("호칭");
+    // 순서 안내를 "현재 파악된 상황:", "다음 처리 및 절차:" 같은 이름표로 본문에 옮겨 적었다(실측).
+    expect(system).toContain("이름표");
+  });
+
+  it("marks auto-sent intake templates so the model does not repeat them as the answer", () => {
+    const { system, userMessage } = buildSuggestPrompt(
+      makeInput({
+        templates: [
+          { title: "환불 요청 접수 안내", content: "접수되었습니다. 정보를 보내 주세요.", autoSend: true },
+          { title: "환불 불가 답변", content: "환불이 어렵습니다.", autoSend: false },
+        ],
+      })
+    );
+    expect(userMessage).toContain("템플릿 이름: 환불 요청 접수 안내 (접수 시 자동 발송된 안내)");
+    expect(userMessage).toContain("템플릿 이름: 환불 불가 답변\n");
+    expect(system).toContain("자동 발송된 안내");
+  });
+
+  it("lets a directive draft grow into a structured reply instead of a two-line note", () => {
+    const { userMessage } = buildSuggestPrompt(makeInput({ draft: "환불 불가. 이미 사용한 재화라고 해" }));
+    // 사과·처리 절차·맺음은 채우되 새 사실·결정·요청은 못 붙인다. 3배 길이 제한은 없앤다.
+    expect(userMessage).toContain("사과");
+    expect(userMessage).toContain("맺음");
+    expect(userMessage).not.toContain("3배");
+    expect(userMessage).toContain("새 사실");
+  });
+
+  it("tells the model the draft wins over a template that concludes differently", () => {
+    // "환불 됐다고 말해줘" 초안에 스토어 환불 안내 템플릿을 주자 모델이 템플릿의 결론
+    // ("직접 신청하셔야 합니다")로 초안의 사실("환불 완료")을 뒤집었다(실측).
+    const { userMessage } = buildSuggestPrompt(
+      makeInput({ draft: "스토어로 문의해서 환불 됐다고 말해줘", templates: [{ title: "환불 처리 안내 답변", content: "스토어에 신청하세요." }] })
+    );
+    expect(userMessage).toContain("템플릿·과거 답변의 결론이 초안과 다르면 초안을 따르세요");
+  });
+
   it("keeps the plain inquiry-first layout when there is no draft", () => {
     const { userMessage } = buildSuggestPrompt(makeInput({ draft: "" }));
     expect(userMessage.startsWith("게임: ")).toBe(true);
@@ -287,14 +332,16 @@ describe("streamSuggestion", () => {
     expect(createMock).toHaveBeenLastCalledWith(expect.objectContaining({ model: "gpt-5-something" }));
   });
 
-  it("streams with minimal reasoning, no temperature, and the system prompt first", async () => {
+  it("streams with low reasoning, no temperature, and the system prompt first", async () => {
     createMock.mockResolvedValue(chunks([{ text: "본문" }]));
 
     await collect(makeInput());
 
     const call = createMock.mock.calls[0][0];
     expect(call.stream).toBe(true);
-    expect(call.reasoning_effort).toBe("minimal");
+    // minimal은 초안이 "환불 됐다"인데 템플릿이 "스토어에 신청하라"면 템플릿을 따랐다(2026-09-14 실측).
+    // low는 초안을 지켰고 지연은 몇 초 차이다.
+    expect(call.reasoning_effort).toBe("low");
     expect(call.max_completion_tokens).toBe(2048);
     // gpt-5 계열은 기본값 외의 temperature를 거절한다.
     expect(call).not.toHaveProperty("temperature");

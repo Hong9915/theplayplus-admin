@@ -263,22 +263,201 @@ export const DEFAULT_REPLY_TEMPLATES: DefaultReplyTemplate[] = [
 ];
 
 /**
- * 새 게임에 기본 템플릿을 자동 발송 켜진 상태로 넣는다. 카테고리 시드와
- * 달리 실패해도 게임 생성을 되돌리지 않는다 — 템플릿은 화면에서 다시 만들
- * 수 있는 부가 데이터다. 실패는 throw로 알려 호출부가 경고를 내리게 한다.
+ * 유형별 "답변 본보기" 템플릿. 자동 발송은 끈 채로 들어가며 AI 답변 추천이
+ * 말투·단락 구조의 본보기로만 읽는다(접수 안내 템플릿은 "(접수 시 자동 발송된
+ * 안내)"로 표시돼 본보기에서 빠진다, lib/suggest.ts).
+ *
+ * 구조는 메일 템플릿이 호칭·첫 인사를 붙이는 것을 전제로 인사 없이 시작한다:
+ * 사과·감사 → 확인 결과·배경 → 처리 방향과 다음 단계 → (사용자가 할 일) →
+ * 사과·개선 다짐·맺음. 단락마다 빈 줄. 계정·금액·날짜 같은 구체 값은 넣지
+ * 않는다 — 모델이 옮겨 적는다.
  */
-export async function createDefaultTemplatesForGame(supabase: SupabaseClient, gameId: string): Promise<void> {
-  const rows = DEFAULT_REPLY_TEMPLATES.map((template, index) => ({
+export const DEFAULT_RESOLUTION_TEMPLATES: DefaultReplyTemplate[] = [
+  {
+    typeKey: "payment",
+    title: "결제 상품 지급 완료 답변",
+    content: `결제하신 상품이 제때 지급되지 않아 불편을 드려 죄송합니다.
+
+스토어 결제 기록과 게임 내 지급 내역을 대조한 결과, 결제는 정상 완료되었으나 상품 지급이 누락된 것으로 확인되었습니다.
+
+누락된 상품은 문의하신 계정으로 지급을 완료했습니다. 게임에 다시 접속하시면 우편함에서 받으실 수 있습니다.
+
+지급이 확인되지 않으면 본 메일에 답장으로 알려 주세요. 다시 확인하겠습니다.
+
+같은 문제가 반복되지 않도록 지급 과정을 점검하겠습니다. 게임 이용에 불편을 끼쳐 드려 죄송합니다.`,
+  },
+  {
+    typeKey: "refund",
+    title: "환불 처리 안내 답변",
+    content: `환불 요청 확인이 늦어져 죄송합니다.
+
+확인 결과, 문의하신 결제 건은 결제하신 스토어의 정책에 따라 처리됩니다. 게임사에서는 스토어 결제를 직접 취소하거나 환불할 수 없습니다.
+
+환불은 결제하신 스토어(Google Play, App Store, ONE store)의 결제 내역에서 해당 주문을 선택해 요청하실 수 있습니다. 스토어에서 환불이 승인되면 지급된 상품은 게임에서 회수됩니다.
+
+스토어 환불 진행 중 어려움이 있으면 본 메일에 답장으로 알려 주세요. 필요한 결제 확인 자료를 안내해 드리겠습니다.
+
+불편을 끼쳐 드려 죄송합니다. 결제 관련 안내를 더 명확히 하도록 개선하겠습니다.`,
+  },
+  {
+    typeKey: "restore_request",
+    title: "복구 완료 답변",
+    content: `복구 요청 확인이 늦어져 불편을 드려 죄송합니다.
+
+서버 기록을 확인한 결과, 문의하신 내용은 게임 내 오류로 인한 손실로 확인되었습니다.
+
+손실된 항목은 문의하신 계정으로 복구를 완료했습니다. 게임에 다시 접속하시면 우편함에서 확인하실 수 있습니다.
+
+복구 내역이 실제 손실과 다르면 본 메일에 답장으로 알려 주세요. 기록을 다시 대조해 확인하겠습니다.
+
+같은 오류가 다시 발생하지 않도록 원인을 개발팀에 전달했습니다. 게임 이용에 불편을 끼쳐 드려 죄송합니다.`,
+  },
+  {
+    typeKey: "account_inquiry",
+    title: "계정 확인 결과 답변",
+    content: `계정 관련으로 불편을 드려 죄송합니다.
+
+보내 주신 정보로 계정을 확인한 결과, 문의하신 계정의 상태와 연동 정보를 확인했습니다.
+
+요청하신 처리는 완료했습니다. 게임을 완전히 종료한 뒤 다시 실행해 로그인 상태를 확인해 주세요.
+
+처리 후에도 같은 문제가 계속되면 로그인 화면의 스크린샷을 본 메일에 답장으로 보내 주세요. 다시 확인하겠습니다.
+
+계정 문제가 재발하지 않도록 관련 절차를 점검하겠습니다. 감사합니다.`,
+  },
+  {
+    typeKey: "account_restriction",
+    title: "이용 제한 사유 답변",
+    content: `이용 제한으로 불편을 드려 죄송합니다.
+
+제한 기록을 확인한 결과, 문의하신 계정은 운영 정책 위반이 확인되어 이용이 제한되었습니다. 구체적인 위반 항목과 제한 기간은 운영 정책에 따라 안내드립니다.
+
+제한 조치에 대한 이의가 있으시면 관련 상황을 설명하는 내용을 본 메일에 답장으로 보내 주세요. 다시 검토해 결과를 안내드리겠습니다.
+
+운영 정책은 모든 이용자에게 공정한 환경을 유지하기 위한 것입니다. 이해와 협조를 부탁드립니다.
+
+감사합니다.`,
+  },
+  {
+    typeKey: "install_connect",
+    title: "접속 오류 확인 결과 답변",
+    content: `접속 문제로 게임 이용에 불편을 드려 죄송합니다.
+
+보내 주신 기기 정보와 오류 내용을 확인한 결과, 문의하신 증상은 특정 환경에서 발생하는 오류로 확인되었습니다.
+
+해당 오류는 개발팀에 전달했으며, 원인이 확인되는 대로 다음 업데이트에 수정을 반영하겠습니다.
+
+수정 전까지는 게임을 완전히 종료한 뒤 다시 실행하거나, 앱을 최신 버전으로 업데이트한 뒤 접속해 보시기 바랍니다. 그래도 접속이 되지 않으면 오류 화면의 스크린샷을 본 메일에 답장으로 보내 주세요.
+
+안정적인 접속 환경을 위해 더 꼼꼼히 확인하겠습니다. 불편을 끼쳐 드려 죄송합니다.`,
+  },
+  {
+    typeKey: "bug_report",
+    title: "버그 확인 및 수정 예정 답변",
+    content: `답변이 늦어져 죄송합니다. 게임 개선에 도움이 되는 제보를 보내 주셔서 감사합니다.
+
+제보해 주신 내용을 확인한 결과, 말씀하신 증상은 게임 내 오류로 확인되었습니다.
+
+해당 오류는 개발팀에 전달했으며, 원인을 확인한 뒤 다음 업데이트에서 수정할 예정입니다. 수정이 반영되면 업데이트 공지로 안내드리겠습니다.
+
+오류로 인해 아이템이나 재화 손실이 있었다면 본 메일에 답장으로 알려 주세요. 서버 기록을 확인해 복구 여부를 안내드리겠습니다.
+
+게임 이용에 불편을 끼쳐 드려 죄송합니다. 게임 내 오류를 더 꼼꼼하게 확인하겠습니다.`,
+  },
+  {
+    typeKey: "game_content",
+    title: "게임 내용 안내 답변",
+    content: `문의해 주셔서 감사합니다.
+
+문의하신 내용은 게임 내 시스템의 정상 동작으로 확인되었습니다. 해당 콘텐츠의 이용 조건과 동작 방식은 다음과 같습니다.
+
+관련 안내가 게임 안에서 충분히 보이지 않았던 점은 개발팀에 전달해 설명을 보완하겠습니다.
+
+추가로 궁금한 점이 있으면 본 메일에 답장으로 문의해 주세요.
+
+즐거운 게임 되시기 바랍니다.`,
+  },
+  {
+    typeKey: "event_inquiry",
+    title: "이벤트 보상 지급 결과 답변",
+    content: `이벤트 보상 확인이 늦어져 불편을 드려 죄송합니다.
+
+이벤트 참여 기록과 보상 지급 내역을 확인한 결과, 문의하신 보상은 지급 조건을 충족했으나 지급이 누락된 것으로 확인되었습니다.
+
+누락된 보상은 문의하신 계정으로 지급을 완료했습니다. 게임에 다시 접속하시면 우편함에서 받으실 수 있습니다.
+
+지급이 확인되지 않으면 본 메일에 답장으로 알려 주세요. 다시 확인하겠습니다.
+
+이벤트 보상 지급 과정을 점검해 같은 문제가 반복되지 않도록 하겠습니다. 감사합니다.`,
+  },
+  {
+    typeKey: "suggestion",
+    title: "건의 사항 검토 결과 답변",
+    content: `소중한 의견을 보내 주셔서 감사합니다.
+
+보내 주신 건의 내용은 운영팀과 개발팀에서 검토했습니다. 제안하신 방향은 게임 개선에 참고할 수 있는 내용으로 판단했습니다.
+
+반영 여부와 일정은 개발 우선순위에 따라 결정되며, 반영이 확정되면 업데이트 공지로 안내드리겠습니다.
+
+앞으로도 게임을 이용하시며 느끼신 점이 있으면 언제든지 알려 주세요.
+
+더 나은 게임을 만들 수 있도록 노력하겠습니다. 감사합니다.`,
+  },
+];
+
+function toRows(
+  gameId: string,
+  templates: DefaultReplyTemplate[],
+  sortOffset: number,
+  autoSend: boolean
+) {
+  return templates.map((template, index) => ({
     game_id: gameId,
     type_key: template.typeKey,
     title: template.title,
     content: template.content,
-    sort_order: index,
-    auto_send: true,
+    sort_order: sortOffset + index,
+    auto_send: autoSend,
   }));
+}
+
+/**
+ * 새 게임에 기본 템플릿을 넣는다: 접수 안내는 자동 발송 켜서, 답변 본보기는
+ * 꺼서. 카테고리 시드와 달리 실패해도 게임 생성을 되돌리지 않는다 — 템플릿은
+ * 화면에서 다시 만들 수 있는 부가 데이터다. 실패는 throw로 알려 호출부가
+ * 경고를 내리게 한다.
+ */
+export async function createDefaultTemplatesForGame(supabase: SupabaseClient, gameId: string): Promise<void> {
+  const rows = [
+    ...toRows(gameId, DEFAULT_REPLY_TEMPLATES, 0, true),
+    ...toRows(gameId, DEFAULT_RESOLUTION_TEMPLATES, DEFAULT_REPLY_TEMPLATES.length, false),
+  ];
 
   const { error } = await supabase.from("reply_templates").insert(rows);
   if (error) {
     throw new Error(`Failed to create default reply templates: ${error.message}`);
   }
+}
+
+/**
+ * 이미 있는 게임에 답변 본보기 템플릿을 채운다(scripts/seed-resolution-templates.ts).
+ * 같은 제목이 이미 있으면 건너뛰므로 여러 번 실행해도 안전하다. 넣은 수를 돌려준다.
+ */
+export async function seedResolutionTemplatesForGame(supabase: SupabaseClient, gameId: string): Promise<number> {
+  const { data, error } = await supabase.from("reply_templates").select("title").eq("game_id", gameId);
+  if (error) {
+    throw new Error(`Failed to read reply templates: ${error.message}`);
+  }
+
+  const existing = new Set((data ?? []).map((row: { title: string }) => row.title));
+  const missing = DEFAULT_RESOLUTION_TEMPLATES.filter((template) => !existing.has(template.title));
+  if (missing.length === 0) return 0;
+
+  const { error: insertError } = await supabase
+    .from("reply_templates")
+    .insert(toRows(gameId, missing, DEFAULT_REPLY_TEMPLATES.length, false));
+  if (insertError) {
+    throw new Error(`Failed to seed resolution templates: ${insertError.message}`);
+  }
+  return missing.length;
 }

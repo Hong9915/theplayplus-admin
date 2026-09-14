@@ -106,7 +106,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       content: inquiry.content,
       gameAccount: inquiry.gameAccount,
       companyName: inquiry.companyName,
-      templates: relevant.map((template) => ({ title: template.title, content: template.content })),
+      templates: relevant.map((template) => ({ title: template.title, content: template.content, autoSend: template.autoSend })),
       pastReplies,
       sourcesText,
       conversation: buildConversation(messages, notes),

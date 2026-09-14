@@ -242,8 +242,8 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(
       expect.objectContaining({
         templates: [
-          { title: "환불", content: "환불 본문" },
-          { title: "공용", content: "공용 본문" },
+          { title: "환불", content: "환불 본문", autoSend: false },
+          { title: "공용", content: "공용 본문", autoSend: false },
         ],
       })
     );
