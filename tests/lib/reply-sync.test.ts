@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { listInboundIdsSince, getInboundMessage, openMailbox } = vi.hoisted(() => ({
+const { listInboundIdsSince, getInboundMessage, getReplyHeaders, openMailbox } = vi.hoisted(() => ({
   listInboundIdsSince: vi.fn(),
   getInboundMessage: vi.fn(),
+  getReplyHeaders: vi.fn(),
   openMailbox: vi.fn(),
 }));
 vi.mock("@/lib/gmail", () => ({ openMailbox }));
@@ -22,6 +23,8 @@ interface FakeOptions {
   inquiries?: Array<{ id: string; gmail_thread_id: string; unread_reply_at: string | null }>;
   /** 이 gmail_message_id는 이미 저장돼 있어 insert가 실패한다. */
   knownMessageIds?: string[];
+  /** 우리가 보낸 메일의 Message-ID. 스레드가 어긋난 회신을 이걸로 맞춘다. */
+  outbound?: Array<{ inquiry_id: string; rfc_message_id: string }>;
 }
 
 function fakeSupabase(options: FakeOptions = {}) {
@@ -53,8 +56,10 @@ function fakeSupabase(options: FakeOptions = {}) {
       if (table === "inquiries") {
         return {
           select: () => ({
-            in: async (_column: string, threadIds: string[]) => ({
-              data: (options.inquiries ?? []).filter((row) => threadIds.includes(row.gmail_thread_id)),
+            in: async (column: string, values: string[]) => ({
+              data: (options.inquiries ?? []).filter((row) =>
+                column === "id" ? values.includes(row.id) : values.includes(row.gmail_thread_id)
+              ),
               error: null,
             }),
           }),
@@ -69,8 +74,11 @@ function fakeSupabase(options: FakeOptions = {}) {
       if (table === "inquiry_messages") {
         return {
           select: () => ({
-            in: async (_column: string, ids: string[]) => ({
-              data: ids.filter((id) => known.has(id)).map((id) => ({ gmail_message_id: id })),
+            in: async (column: string, ids: string[]) => ({
+              data:
+                column === "rfc_message_id"
+                  ? (options.outbound ?? []).filter((row) => ids.includes(row.rfc_message_id))
+                  : ids.filter((id) => known.has(id)).map((id) => ({ gmail_message_id: id })),
               error: null,
             }),
           }),
@@ -101,11 +109,13 @@ beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
   listInboundIdsSince.mockReset();
   getInboundMessage.mockReset();
+  getReplyHeaders.mockReset().mockResolvedValue([]);
   openMailbox.mockReset();
   openMailbox.mockImplementation((mailbox: string) => ({
     sender: mailbox === "game" ? "help@theplayplus.com" : "info@theplayplus.com",
     listInboundIdsSince,
     getInboundMessage,
+    getReplyHeaders,
   }));
 });
 
@@ -166,6 +176,51 @@ describe("syncMailbox", () => {
     expect(db.updates).toEqual([]);
     expect(db.upserts).toHaveLength(1);
     expect(result).toEqual({ mailbox: "game", fetched: 1, matched: 0, added: 0 });
+  });
+
+  it("matches a reply Gmail put in its own thread by its In-Reply-To header", async () => {
+    // 사용자가 제목을 바꿔 답장하면 Gmail이 새 스레드로 만든다(2026-09-16 실측).
+    mailboxHas([email("m1", "m1")]);
+    getReplyHeaders.mockResolvedValue(["<sent@mail.gmail.com>"]);
+    const db = fakeSupabase({
+      syncedThrough: "2026-09-07T09:55:00.000Z",
+      inquiries: [{ id: "inq-1", gmail_thread_id: "t1", unread_reply_at: null }],
+      outbound: [{ inquiry_id: "inq-1", rfc_message_id: "<sent@mail.gmail.com>" }],
+    });
+
+    const result = await syncMailbox(db.client, "game", { now: NOW });
+
+    expect(getReplyHeaders).toHaveBeenCalledWith("m1");
+    expect(db.inserts).toEqual([expect.objectContaining({ inquiry_id: "inq-1", gmail_message_id: "m1" })]);
+    expect(db.updates).toEqual([{ id: "inq-1", patch: { unread_reply_at: "2026-09-07T09:50:00.000Z" } }]);
+    expect(result).toEqual({ mailbox: "game", fetched: 1, matched: 1, added: 1 });
+  });
+
+  it("does not read headers of mail whose thread already matched", async () => {
+    mailboxHas([email("m1", "t1")]);
+    const db = fakeSupabase({
+      syncedThrough: "2026-09-07T09:55:00.000Z",
+      inquiries: [{ id: "inq-1", gmail_thread_id: "t1", unread_reply_at: null }],
+    });
+
+    await syncMailbox(db.client, "game", { now: NOW });
+
+    expect(getReplyHeaders).not.toHaveBeenCalled();
+  });
+
+  it("keeps going when reading a stray mail's headers fails", async () => {
+    mailboxHas([email("m1", "m1"), email("m2", "m2")]);
+    getReplyHeaders.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce(["<sent@mail.gmail.com>"]);
+    const db = fakeSupabase({
+      syncedThrough: "2026-09-07T09:55:00.000Z",
+      inquiries: [{ id: "inq-1", gmail_thread_id: "t1", unread_reply_at: null }],
+      outbound: [{ inquiry_id: "inq-1", rfc_message_id: "<sent@mail.gmail.com>" }],
+    });
+
+    const result = await syncMailbox(db.client, "game", { now: NOW });
+
+    expect(db.inserts).toEqual([expect.objectContaining({ inquiry_id: "inq-1", gmail_message_id: "m2" })]);
+    expect(result).toEqual({ mailbox: "game", fetched: 2, matched: 1, added: 1 });
   });
 
   it("does not fetch or mark messages that are already stored", async () => {

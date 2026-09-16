@@ -173,11 +173,3 @@ export async function createInboundMessage(
   });
   return !error;
 }
-
-/** 이미 저장된 Gmail message id 집합. 동기화 때 건너뛸 기준. */
-export async function listGmailMessageIds(supabase: SupabaseClient, inquiryId: string): Promise<Set<string>> {
-  const messages = await listMessages(supabase, inquiryId);
-  return new Set(
-    messages.map((message) => message.gmailMessageId).filter((id): id is string => typeof id === "string")
-  );
-}

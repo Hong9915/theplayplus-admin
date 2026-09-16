@@ -102,6 +102,39 @@ describe("openMailbox", () => {
     });
   });
 
+  describe("getReplyHeaders", () => {
+    it("reads In-Reply-To and References without the body", async () => {
+      get.mockResolvedValue({
+        data: {
+          id: "m1",
+          threadId: "m1",
+          payload: {
+            headers: [
+              { name: "In-Reply-To", value: "<b@mail.gmail.com>" },
+              { name: "References", value: "<a@mail.gmail.com>\r\n <b@mail.gmail.com>" },
+            ],
+          },
+        },
+      });
+
+      const result = await openMailbox("game").getReplyHeaders("m1");
+
+      expect(get).toHaveBeenCalledWith({
+        userId: "me",
+        id: "m1",
+        format: "metadata",
+        metadataHeaders: ["In-Reply-To", "References"],
+      });
+      expect(result).toEqual(["<b@mail.gmail.com>", "<a@mail.gmail.com>"]);
+    });
+
+    it("returns an empty list for mail that replies to nothing", async () => {
+      get.mockResolvedValue({ data: { id: "m1", threadId: "m1", payload: { headers: [] } } });
+
+      expect(await openMailbox("game").getReplyHeaders("m1")).toEqual([]);
+    });
+  });
+
   describe("getInboundMessage", () => {
     it("returns the message with its thread id and cleaned body", async () => {
       get.mockResolvedValue(message("m1", "t1", "User <user@example.com>", "회신 본문\n\nOn Mon wrote:\n> 인용"));

@@ -82,6 +82,79 @@ async function listKnownMessageIds(supabase: SupabaseClient, ids: string[]): Pro
   return new Set(((data ?? []) as Array<{ gmail_message_id: string }>).map((row) => row.gmail_message_id));
 }
 
+/**
+ * 스레드 id로 못 맞춘 메일을 In-Reply-To·References로 다시 맞춘다. 사용자가
+ * 제목을 바꿔 답장하면 Gmail이 새 스레드를 만들어 스레드 id가 어긋나는데,
+ * 헤더는 여전히 우리가 보낸 메일의 Message-ID(inquiry_messages.rfc_message_id)를
+ * 가리킨다. 메일마다 헤더 조회가 한 번 들어가므로 본문은 맞은 것만 읽는다.
+ * 같은 문의를 스레드로도 만난 경우 그 행을 그대로 써 unread 판단을 공유한다.
+ */
+async function matchStrayRefsByHeaders(
+  supabase: SupabaseClient,
+  reader: MailboxReader,
+  refs: InboundMessageRef[],
+  inquiriesByThread: Map<string, ThreadInquiryRow>
+): Promise<Array<{ ref: InboundMessageRef; inquiry: ThreadInquiryRow }>> {
+  if (refs.length === 0) return [];
+
+  const referencedByRef = new Map<InboundMessageRef, string[]>();
+  for (const ref of refs) {
+    try {
+      const ids = await reader.getReplyHeaders(ref.id);
+      if (ids.length > 0) referencedByRef.set(ref, ids);
+    } catch (error) {
+      console.warn("[reply-sync] 헤더 조회 실패", ref.id, error);
+    }
+  }
+  const allReferenced = Array.from(new Set(Array.from(referencedByRef.values()).flat()));
+  if (allReferenced.length === 0) return [];
+
+  const { data: sentRows, error } = await supabase
+    .from("inquiry_messages")
+    .select("inquiry_id, rfc_message_id")
+    .in("rfc_message_id", allReferenced);
+  if (error) {
+    console.warn("[reply-sync] Message-ID 대조 실패", error);
+    return [];
+  }
+  const inquiryIdByRfc = new Map<string, string>();
+  for (const row of (sentRows ?? []) as Array<{ inquiry_id: string; rfc_message_id: string }>) {
+    inquiryIdByRfc.set(row.rfc_message_id, row.inquiry_id);
+  }
+
+  const inquiryIds = new Set<string>();
+  const inquiryIdByRef = new Map<InboundMessageRef, string>();
+  for (const [ref, ids] of referencedByRef) {
+    const inquiryId = ids.map((id) => inquiryIdByRfc.get(id)).find((id): id is string => !!id);
+    if (!inquiryId) continue;
+    inquiryIdByRef.set(ref, inquiryId);
+    inquiryIds.add(inquiryId);
+  }
+  if (inquiryIds.size === 0) return [];
+
+  const rowsById = new Map<string, ThreadInquiryRow>();
+  for (const row of inquiriesByThread.values()) rowsById.set(row.id, row);
+  const missing = Array.from(inquiryIds).filter((id) => !rowsById.has(id));
+  if (missing.length > 0) {
+    const { data, error: loadError } = await supabase
+      .from("inquiries")
+      .select("id, gmail_thread_id, unread_reply_at")
+      .in("id", missing);
+    if (loadError) {
+      console.warn("[reply-sync] 문의 조회 실패", loadError);
+      return [];
+    }
+    for (const row of (data ?? []) as ThreadInquiryRow[]) rowsById.set(row.id, row);
+  }
+
+  const pairs: Array<{ ref: InboundMessageRef; inquiry: ThreadInquiryRow }> = [];
+  for (const [ref, inquiryId] of inquiryIdByRef) {
+    const inquiry = rowsById.get(inquiryId);
+    if (inquiry) pairs.push({ ref, inquiry });
+  }
+  return pairs;
+}
+
 /** 이미 더 이른 읽지 않은 회신이 있으면 그대로 둔다. 배지는 가장 오래된 회신 기준. */
 function earlierUnread(current: string | null, candidate: string): string | null {
   if (current && new Date(current).getTime() <= new Date(candidate).getTime()) return null;
@@ -111,17 +184,24 @@ export async function syncMailbox(
 
   const threadIds = Array.from(new Set(refs.map((ref) => ref.threadId)));
   const inquiriesByThread = await mapThreadsToInquiries(supabase, threadIds);
-  const matchedRefs = refs.filter((ref) => inquiriesByThread.has(ref.threadId));
+  // 겹침 구간이나 헤더로 이미 맞춘 메일은 다시 열지 않는다.
   const known = await listKnownMessageIds(
     supabase,
-    matchedRefs.map((ref) => ref.id)
+    refs.map((ref) => ref.id)
   );
 
-  let added = 0;
-  for (const ref of matchedRefs) {
+  const pairs: Array<{ ref: InboundMessageRef; inquiry: ThreadInquiryRow }> = [];
+  const strayRefs: InboundMessageRef[] = [];
+  for (const ref of refs) {
     if (known.has(ref.id)) continue;
-    const inquiry = inquiriesByThread.get(ref.threadId)!;
+    const inquiry = inquiriesByThread.get(ref.threadId);
+    if (inquiry) pairs.push({ ref, inquiry });
+    else strayRefs.push(ref);
+  }
+  pairs.push(...(await matchStrayRefsByHeaders(supabase, reader, strayRefs, inquiriesByThread)));
 
+  let added = 0;
+  for (const { ref, inquiry } of pairs) {
     let email;
     try {
       email = await reader.getInboundMessage(ref.id);
@@ -164,7 +244,7 @@ export async function syncMailbox(
     console.warn(`[reply-sync] ${mailbox} 동기화 시각 저장 실패`, stateError);
   }
 
-  return { mailbox, fetched: refs.length, matched: matchedRefs.length, added };
+  return { mailbox, fetched: refs.length, matched: pairs.length, added };
 }
 
 /**

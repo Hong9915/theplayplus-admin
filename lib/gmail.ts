@@ -106,8 +106,9 @@ function toBase64Url(input: string): string {
 }
 
 /**
- * Message-ID는 우리가 직접 만든다. Gmail이 붙여주는 값을 다시 읽어오려면
- * 발송 뒤 조회를 한 번 더 해야 하는데, 직접 넣으면 Gmail이 그대로 보존한다.
+ * 보낼 때 넣는 Message-ID. Gmail API는 이 값을 보존하지 않고 `@mail.gmail.com`
+ * 값으로 바꿔 보내므로(2026-09-16 실측) 발송 뒤 fetchSentRfcMessageId로 실제
+ * 값을 읽어 저장한다. 이 값은 그 조회가 실패했을 때의 대체다.
  */
 export function buildRfcMessageId(sender: string): string {
   const domain = sender.split("@")[1] || "theplayplus.com";
@@ -246,11 +247,40 @@ export async function sendReplyEmail(input: SendReplyEmailInput): Promise<SentEm
     response = await send(null);
   }
 
+  const gmailMessageId = response.data.id ?? "";
+  let actualRfcMessageId: string | null = null;
+  if (gmailMessageId) {
+    try {
+      actualRfcMessageId = await fetchSentRfcMessageId(gmail, gmailMessageId);
+    } catch (error) {
+      console.warn("[gmail] could not read back the sent Message-ID", { gmailMessageId }, error);
+    }
+  }
+
   return {
-    gmailMessageId: response.data.id ?? "",
+    gmailMessageId,
     gmailThreadId: response.data.threadId ?? "",
-    rfcMessageId,
+    rfcMessageId: actualRfcMessageId ?? rfcMessageId,
   };
+}
+
+/**
+ * 보낸 메일에 Gmail이 실제로 붙인 Message-ID. 사용자 회신의 In-Reply-To /
+ * References가 이 값을 가리키므로 스레드가 어긋난 회신을 맞출 때 쓴다.
+ * gmail.readonly 스코프가 필요하다. 헤더가 없으면 null.
+ */
+export async function readSentRfcMessageId(mailbox: Mailbox, gmailMessageId: string): Promise<string | null> {
+  return fetchSentRfcMessageId(getGmailClient(mailbox).gmail, gmailMessageId);
+}
+
+async function fetchSentRfcMessageId(gmail: gmail_v1.Gmail, gmailMessageId: string): Promise<string | null> {
+  const response = await gmail.users.messages.get({
+    userId: "me",
+    id: gmailMessageId,
+    format: "metadata",
+    metadataHeaders: ["Message-ID"],
+  });
+  return header(response.data.payload?.headers, "Message-ID");
 }
 
 function isNotFound(error: unknown): boolean {
@@ -343,6 +373,42 @@ export async function fetchInboundReplies(threadId: string, mailbox: Mailbox): P
   return inbound;
 }
 
+export interface UnthreadedReplyQuery {
+  /** 문의의 회신 주소. 이 주소가 보낸 메일만 찾는다. */
+  fromEmail: string;
+  /** 첫 답변을 보낸 시각. 그 전 메일은 회신일 수 없다. */
+  since: Date;
+  /** 이 문의로 보낸 메일들의 실제 Message-ID(inquiry_messages.rfc_message_id). */
+  rfcMessageIds: string[];
+}
+
+/**
+ * 스레드 조회로는 안 보이는 회신을 찾는다. 사용자가 제목을 바꿔 답장하면 Gmail이
+ * 새 스레드를 만들지만 In-Reply-To·References는 우리 메일을 가리키므로, 그
+ * 주소가 첫 답변 이후 보낸 메일 중 우리 Message-ID를 참조하는 것만 고른다.
+ * "회신 확인" 버튼이 스레드 조회와 함께 쓴다. gmail.readonly 스코프가 필요하다.
+ */
+export async function fetchUnthreadedReplies(mailbox: Mailbox, query: UnthreadedReplyQuery): Promise<InboundEmail[]> {
+  if (query.rfcMessageIds.length === 0) return [];
+  const { gmail, sender } = getGmailClient(mailbox);
+  const senderAddress = sender.trim().toLowerCase();
+  const wanted = new Set(query.rfcMessageIds);
+
+  const q = `from:${query.fromEmail} after:${Math.floor(query.since.getTime() / 1000)} -from:${senderAddress}`;
+  const listed = await gmail.users.messages.list({ userId: "me", q, maxResults: LIST_PAGE_SIZE });
+
+  const inbound: InboundEmail[] = [];
+  for (const entry of listed.data.messages ?? []) {
+    if (!entry.id) continue;
+    const response = await gmail.users.messages.get({ userId: "me", id: entry.id, format: "full" });
+    const referenced = referencedMessageIds(response.data.payload?.headers);
+    if (!referenced.some((id) => wanted.has(id))) continue;
+    const parsed = parseInboundMessage(response.data, senderAddress);
+    if (parsed) inbound.push(parsed);
+  }
+  return inbound;
+}
+
 /**
  * Gmail 메시지 하나를 InboundEmail로 바꾼다. 우리 발신 주소에서 나간 메일이거나
  * id가 없으면 null.
@@ -388,8 +454,27 @@ export interface MailboxReader {
    * Gmail 검색의 after:는 초 단위 epoch만 받는다.
    */
   listInboundIdsSince(since: Date): Promise<InboundMessageRef[]>;
+  /**
+   * 메일이 답장하는 상대의 Message-ID들(In-Reply-To 먼저, 그다음 References).
+   * 사용자가 제목을 바꿔 답장하면 Gmail이 새 스레드로 만들어 스레드 id로는
+   * 못 맞추므로, 이 값을 우리가 보낸 메일의 rfc_message_id와 대조한다.
+   * 본문은 읽지 않는다.
+   */
+  getReplyHeaders(id: string): Promise<string[]>;
   /** 메일 하나를 본문까지 읽는다. 우리 발신 주소에서 나간 메일이면 null. */
   getInboundMessage(id: string): Promise<InboundEmailWithThread | null>;
+}
+
+/** In-Reply-To·References 헤더에서 `<…>` 꼴 Message-ID를 순서대로, 중복 없이 뽑는다. */
+export function referencedMessageIds(headers: gmail_v1.Schema$MessagePartHeader[] | undefined): string[] {
+  const raw = [header(headers, "In-Reply-To"), header(headers, "References")].filter((v): v is string => !!v);
+  const ids: string[] = [];
+  for (const value of raw) {
+    for (const match of value.match(/<[^<>\s]+>/g) ?? []) {
+      if (!ids.includes(match)) ids.push(match);
+    }
+  }
+  return ids;
 }
 
 export function openMailbox(mailbox: Mailbox): MailboxReader {
@@ -415,6 +500,15 @@ export function openMailbox(mailbox: Mailbox): MailboxReader {
         pageToken = response.data.nextPageToken ?? undefined;
       } while (pageToken && refs.length < LIST_INBOUND_LIMIT);
       return refs;
+    },
+    async getReplyHeaders(id) {
+      const response = await gmail.users.messages.get({
+        userId: "me",
+        id,
+        format: "metadata",
+        metadataHeaders: ["In-Reply-To", "References"],
+      });
+      return referencedMessageIds(response.data.payload?.headers);
     },
     async getInboundMessage(id) {
       const response = await gmail.users.messages.get({ userId: "me", id, format: "full" });

@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import {
   createInboundMessage,
   createOutboundMessage,
-  listGmailMessageIds,
   listMessages,
   listMessagesByInquiryIds,
   listRfcMessageIds,
@@ -74,11 +73,10 @@ describe("listMessages", () => {
   });
 });
 
-describe("listRfcMessageIds / listGmailMessageIds", () => {
+describe("listRfcMessageIds", () => {
   it("collects only the ids that exist", async () => {
     const { from } = mockSelect(rows);
     await expect(listRfcMessageIds({ from } as never, "inq-1")).resolves.toEqual(["<a@theplayplus.com>"]);
-    await expect(listGmailMessageIds({ from } as never, "inq-1")).resolves.toEqual(new Set(["gm-1", "gm-2"]));
   });
 });
 

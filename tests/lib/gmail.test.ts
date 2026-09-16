@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const sendMock = vi.fn();
+const getMock = vi.fn();
+const listMock = vi.fn();
 const threadGetMock = vi.fn();
 const setCredentialsMock = vi.fn();
 
@@ -9,7 +11,9 @@ vi.mock("googleapis", () => ({
     auth: {
       OAuth2: vi.fn().mockImplementation(() => ({ setCredentials: setCredentialsMock })),
     },
-    gmail: vi.fn(() => ({ users: { messages: { send: sendMock }, threads: { get: threadGetMock } } })),
+    gmail: vi.fn(() => ({
+      users: { messages: { send: sendMock, get: getMock, list: listMock }, threads: { get: threadGetMock } },
+    })),
   },
 }));
 
@@ -19,6 +23,7 @@ describe("sendReplyEmail", () => {
   beforeEach(() => {
     vi.resetModules();
     sendMock.mockReset().mockResolvedValue({ data: { id: "gm-1", threadId: "thread-1" } });
+    getMock.mockReset().mockResolvedValue({ data: { id: "gm-1", payload: { headers: [] } } });
     threadGetMock.mockReset();
     setCredentialsMock.mockReset();
     process.env.GMAIL_CLIENT_ID = "client-id";
@@ -66,6 +71,33 @@ describe("sendReplyEmail", () => {
     expect(sent.gmailThreadId).toBe("thread-1");
     expect(sent.rfcMessageId).toMatch(/^<[0-9a-f-]+@theplayplus\.com>$/);
     expect(sendMock.mock.calls[0][0].requestBody.threadId).toBeUndefined();
+  });
+
+  it("returns the Message-ID Gmail actually assigned when it rewrote ours", async () => {
+    // Gmail은 우리가 넣은 Message-ID를 @mail.gmail.com 값으로 바꿔 보낸다(2026-09-16 실측).
+    // 사용자 회신의 In-Reply-To는 그 값을 가리키므로 보낸 뒤 읽어 와야 한다.
+    getMock.mockResolvedValue({
+      data: { id: "gm-1", payload: { headers: [{ name: "Message-Id", value: "<CAFZg8mL@mail.gmail.com>" }] } },
+    });
+    const { sendReplyEmail } = await import("@/lib/gmail");
+
+    const sent = await sendReplyEmail({ mailbox: "game", to: "user@example.com", subject: "s", body: "b" });
+
+    expect(getMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "me", id: "gm-1", format: "metadata", metadataHeaders: ["Message-ID"] })
+    );
+    expect(sent.rfcMessageId).toBe("<CAFZg8mL@mail.gmail.com>");
+  });
+
+  it("keeps the generated Message-ID when reading the sent mail back fails", async () => {
+    getMock.mockRejectedValue(new Error("insufficient scope"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { sendReplyEmail } = await import("@/lib/gmail");
+
+    const sent = await sendReplyEmail({ mailbox: "game", to: "user@example.com", subject: "s", body: "b" });
+
+    expect(sent.rfcMessageId).toMatch(/^<[0-9a-f-]+@theplayplus\.com>$/);
+    warn.mockRestore();
   });
 
   it("threads a follow-up with In-Reply-To, References, and the Gmail threadId", async () => {
@@ -254,10 +286,96 @@ describe("fetchInboundReplies", () => {
   });
 });
 
+describe("readSentRfcMessageId", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    getMock.mockReset();
+    process.env.GMAIL_CLIENT_ID = "client-id";
+    process.env.GMAIL_CLIENT_SECRET = "client-secret";
+    process.env.GMAIL_REFRESH_TOKEN = "refresh-token";
+    process.env.GMAIL_SENDER = "help@theplayplus.com";
+  });
+
+  it("reads the Message-ID of a mail we sent earlier from the given mailbox", async () => {
+    getMock.mockResolvedValue({ data: { id: "gm-1", payload: { headers: [{ name: "Message-ID", value: "<x@mail.gmail.com>" }] } } });
+    const { readSentRfcMessageId } = await import("@/lib/gmail");
+
+    await expect(readSentRfcMessageId("game", "gm-1")).resolves.toBe("<x@mail.gmail.com>");
+    expect(getMock).toHaveBeenCalledWith(expect.objectContaining({ id: "gm-1", format: "metadata" }));
+  });
+});
+
+describe("fetchUnthreadedReplies", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    listMock.mockReset();
+    getMock.mockReset();
+    process.env.GMAIL_CLIENT_ID = "client-id";
+    process.env.GMAIL_CLIENT_SECRET = "client-secret";
+    process.env.GMAIL_REFRESH_TOKEN = "refresh-token";
+    process.env.GMAIL_SENDER = "help@theplayplus.com";
+  });
+
+  function userMail(id: string, references: string, body = "회신") {
+    return {
+      data: {
+        id,
+        threadId: id,
+        internalDate: "1756774980000",
+        payload: {
+          mimeType: "text/plain",
+          headers: [
+            { name: "From", value: "User <user@example.com>" },
+            { name: "Message-ID", value: `<${id}@mail.example>` },
+            { name: "In-Reply-To", value: references },
+            { name: "References", value: references },
+          ],
+          body: { data: b64url(body) },
+        },
+      },
+    };
+  }
+
+  it("searches the user's address since the first reply and keeps mail that answers ours", async () => {
+    // 제목을 바꿔 답장해 새 스레드로 떨어진 회신. 스레드 조회로는 안 보인다.
+    listMock.mockResolvedValue({ data: { messages: [{ id: "gm-a", threadId: "gm-a" }, { id: "gm-b", threadId: "gm-b" }] } });
+    getMock.mockImplementation(async ({ id }: { id: string }) =>
+      id === "gm-a" ? userMail("gm-a", "<ours@mail.gmail.com>") : userMail("gm-b", "<other@mail.gmail.com>")
+    );
+    const { fetchUnthreadedReplies } = await import("@/lib/gmail");
+
+    const inbound = await fetchUnthreadedReplies("game", {
+      fromEmail: "user@example.com",
+      since: new Date("2026-09-16T06:02:03.000Z"),
+      rfcMessageIds: ["<ours@mail.gmail.com>"],
+    });
+
+    expect(listMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "me", q: "from:user@example.com after:1789538523 -from:help@theplayplus.com" })
+    );
+    expect(inbound.map((email) => email.gmailMessageId)).toEqual(["gm-a"]);
+    expect(inbound[0]).toEqual(expect.objectContaining({ fromEmail: "user@example.com", body: "회신" }));
+  });
+
+  it("does not search at all when there is nothing of ours to match against", async () => {
+    const { fetchUnthreadedReplies } = await import("@/lib/gmail");
+
+    const inbound = await fetchUnthreadedReplies("game", {
+      fromEmail: "user@example.com",
+      since: new Date("2026-09-16T06:02:03.000Z"),
+      rfcMessageIds: [],
+    });
+
+    expect(inbound).toEqual([]);
+    expect(listMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("sendReplyEmail with an HTML body", () => {
   beforeEach(() => {
     vi.resetModules();
     sendMock.mockReset().mockResolvedValue({ data: { id: "gm-1", threadId: "thread-1" } });
+    getMock.mockReset().mockResolvedValue({ data: { id: "gm-1", payload: { headers: [] } } });
     setCredentialsMock.mockReset();
     process.env.GMAIL_CLIENT_ID = "client-id";
     process.env.GMAIL_CLIENT_SECRET = "client-secret";
@@ -326,6 +444,7 @@ describe("mailboxes", () => {
   beforeEach(() => {
     vi.resetModules();
     sendMock.mockReset().mockResolvedValue({ data: { id: "gm-1", threadId: "thread-1" } });
+    getMock.mockReset().mockResolvedValue({ data: { id: "gm-1", payload: { headers: [] } } });
     threadGetMock.mockReset();
     setCredentialsMock.mockReset();
     process.env.GMAIL_CLIENT_ID = "client-id";
