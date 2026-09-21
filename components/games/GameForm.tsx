@@ -34,6 +34,7 @@ export default function GameForm({
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"active" | "ended">("active");
   const [ownerName, setOwnerName] = useState("");
+  const [loungeUrl, setLoungeUrl] = useState("");
   const [logo, setLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export default function GameForm({
   const [submitting, setSubmitting] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  const dirty = name !== "" || ownerName !== "" || logo !== null;
+  const dirty = name !== "" || ownerName !== "" || loungeUrl !== "" || logo !== null;
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -103,6 +104,7 @@ export default function GameForm({
     formData.set("name", name);
     formData.set("status", status);
     formData.set("ownerName", ownerName);
+    formData.set("loungeUrl", loungeUrl);
     if (logo) {
       formData.set("logo", logo);
     }
@@ -125,6 +127,7 @@ export default function GameForm({
 
     setName("");
     setOwnerName("");
+    setLoungeUrl("");
     clearLogo();
 
     if (json.warning === "logo_upload_failed") {
@@ -155,6 +158,13 @@ export default function GameForm({
       return;
     }
 
+    if (json.warning === "lounge_unreachable") {
+      setMessageTone("warning");
+      setMessage('게임은 추가되었지만 네이버 라운지를 연결하지 못했습니다. 주소를 확인한 뒤 문의함의 "네이버 라운지 연결"에서 다시 연결해주세요.');
+      onCreated(json.game, json.warning);
+      return;
+    }
+
     setMessageTone("success");
     setMessage("게임이 추가되었습니다.");
     onCreated(json.game);
@@ -176,6 +186,22 @@ export default function GameForm({
       <label className="flex flex-col gap-1">
         <span>담당자</span>
         <input name="ownerName" autoComplete="off" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} className={INPUT} />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span>
+          네이버 라운지 주소 <span className="text-xs text-muted">(선택)</span>
+        </span>
+        <input
+          name="loungeUrl"
+          type="text"
+          inputMode="url"
+          autoComplete="off"
+          placeholder="https://game.naver.com/lounge/…/home"
+          value={loungeUrl}
+          onChange={(e) => setLoungeUrl(e.target.value)}
+          className={INPUT}
+        />
+        <span className="text-xs text-muted">라운지에 유저 글·댓글이 올라오면 알려드립니다. 나중에 문의함에서 연결할 수도 있습니다.</span>
       </label>
 
       <div className="flex flex-col gap-1">

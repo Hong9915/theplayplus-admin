@@ -8,6 +8,7 @@ import { createDefaultTemplatesForGame } from "@/lib/default-templates";
 import { getAdminSession } from "@/lib/require-admin-session";
 import { createOpsDoc, opsDocEditors, isOpsDocConfigured } from "@/lib/ops-doc";
 import { insertSource } from "@/lib/assistant-sources";
+import { connectLounge } from "@/lib/lounge-connect";
 
 export async function POST(request: Request) {
   const session = await getAdminSession();
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
     name: formData.get("name"),
     status: formData.get("status") || undefined,
     ownerName: formData.get("ownerName") ?? "",
+    loungeUrl: formData.get("loungeUrl") ?? "",
   });
 
   if (!parsed.success) {
@@ -106,6 +108,19 @@ export async function POST(request: Request) {
     }
   }
 
+  // 네이버 라운지 연결도 부가 작업이다. 주소가 틀렸거나 못 읽으면 게임은 두고 경고만 낸다 —
+  // 문의함의 "네이버 라운지 연결"에서 다시 할 수 있다.
+  let naverLoungeId: string | null = null;
+  if (input.loungeUrl) {
+    const lounge = await connectLounge(supabase, inserted.id, input.loungeUrl);
+    if (lounge.ok) {
+      naverLoungeId = lounge.loungeId;
+    } else {
+      console.error("[api/games] lounge connect failed", { gameId: inserted.id, error: lounge.error });
+      warning = warning ?? "lounge_unreachable";
+    }
+  }
+
   return NextResponse.json(
     {
       success: true,
@@ -116,6 +131,7 @@ export async function POST(request: Request) {
         logoPath,
         ownerName: input.ownerName || null,
         createdAt: inserted.created_at,
+        naverLoungeId,
       },
       ...(warning ? { warning } : {}),
     },

@@ -100,6 +100,23 @@ describe("GameForm", () => {
     expect(screen.queryByText("notes.txt")).not.toBeInTheDocument();
   });
 
+  it("sends the lounge url and warns when the lounge could not be connected", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ success: true, game: createdGame, warning: "lounge_unreachable" }),
+    }) as never;
+    const onCreated = vi.fn();
+    render(<GameForm onCreated={onCreated} />);
+
+    await userEvent.type(screen.getByLabelText("게임명"), "여신키우기");
+    await userEvent.type(screen.getByLabelText(/네이버 라운지 주소/), "https://game.naver.com/lounge/Abc/home");
+    await userEvent.click(screen.getByRole("button", { name: "게임 추가" }));
+
+    const body = vi.mocked(global.fetch).mock.calls[0][1]?.body as FormData;
+    expect(body.get("loungeUrl")).toBe("https://game.naver.com/lounge/Abc/home");
+    expect(await screen.findByText(/네이버 라운지를 연결하지 못했습니다/)).toBeInTheDocument();
+    expect(onCreated).toHaveBeenCalledWith(createdGame, "lounge_unreachable");
+  });
+
   it("shows a failure message and re-enables the button when the request throws", async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("network error")) as never;
     render(<GameForm onCreated={vi.fn()} />);

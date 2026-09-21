@@ -6,6 +6,7 @@ import * as defaultTemplatesModule from "@/lib/default-templates";
 import * as requireAdminSessionModule from "@/lib/require-admin-session";
 import * as opsDocModule from "@/lib/ops-doc";
 import * as sourcesModule from "@/lib/assistant-sources";
+import * as loungeConnectModule from "@/lib/lounge-connect";
 
 vi.mock("@/lib/supabase", () => ({
   getSupabaseServerClient: vi.fn(),
@@ -31,6 +32,10 @@ vi.mock("@/lib/ops-doc", () => ({
 
 vi.mock("@/lib/assistant-sources", () => ({
   insertSource: vi.fn(),
+}));
+
+vi.mock("@/lib/lounge-connect", () => ({
+  connectLounge: vi.fn(),
 }));
 
 function buildFormData(overrides: Record<string, string> = {}) {
@@ -68,6 +73,7 @@ describe("POST /api/games", () => {
       .mockReset()
       .mockResolvedValue({ docId: "doc-1", title: "여신키우기 운영 현황 (AI 답변 근거)", url: "https://docs.google.com/document/d/doc-1/edit", unshared: [] });
     vi.mocked(sourcesModule.insertSource).mockReset().mockResolvedValue({ id: "src-1" } as never);
+    vi.mocked(loungeConnectModule.connectLounge).mockReset();
   });
 
   it("creates the ops doc shared with the creator and registers it as a doc source", async () => {
@@ -193,9 +199,31 @@ describe("POST /api/games", () => {
         logoPath: null,
         ownerName: "홍길동",
         createdAt: "2026-01-01T00:00:00.000Z",
+        naverLoungeId: null,
       },
     });
     expect(categoriesModule.createDefaultCategoriesForGame).toHaveBeenCalledWith(expect.anything(), "game-1");
+  });
+
+  it("connects the lounge after creating the game when loungeUrl is given", async () => {
+    mockSupabaseSuccess();
+    vi.mocked(loungeConnectModule.connectLounge).mockResolvedValue({ ok: true, loungeId: "Abc" });
+    const response = await POST(new Request("http://localhost/api/games", { method: "POST", body: buildFormData({ loungeUrl: "https://game.naver.com/lounge/Abc/home" }) }));
+    const json = await response.json();
+    expect(json.success).toBe(true);
+    expect(json.game.naverLoungeId).toBe("Abc");
+    expect(loungeConnectModule.connectLounge).toHaveBeenCalledWith(expect.anything(), "game-1", "https://game.naver.com/lounge/Abc/home");
+  });
+
+  it("keeps the game and warns when the lounge cannot be connected", async () => {
+    mockSupabaseSuccess();
+    vi.mocked(loungeConnectModule.connectLounge).mockResolvedValue({ ok: false, error: "lounge_unreachable" });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await POST(new Request("http://localhost/api/games", { method: "POST", body: buildFormData({ loungeUrl: "Nope" }) }));
+    const json = await response.json();
+    expect(response.status).toBe(200);
+    expect(json.game.naverLoungeId).toBeNull();
+    expect(json.warning).toBe("lounge_unreachable");
   });
 
   it("rejects a missing name", async () => {
