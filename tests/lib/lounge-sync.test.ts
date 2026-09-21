@@ -13,7 +13,13 @@ const FRESH = "2026-09-21T09:57:00.000Z";
 interface GameSeed { id: string; name: string; naver_lounge_id: string; lounge_synced_at: string | null }
 type Row = Record<string, unknown>;
 
-function fakeSupabase(games: GameSeed[], seedItems: Row[] = []) {
+interface FailGamesUpdate {
+  gameId: string;
+  /** "error": Supabase 스타일로 {error}를 돌려준다. "throw": 호출 자체가 예상 못 하게 실패한다. */
+  mode: "error" | "throw";
+}
+
+function fakeSupabase(games: GameSeed[], seedItems: Row[] = [], options: { failGamesUpdate?: FailGamesUpdate } = {}) {
   const items: Row[] = seedItems.map((row, i) => ({ id: `seed-${i}`, ...row }));
   const gameUpdates: Array<{ id: string; patch: Row }> = [];
   const client = {
@@ -30,7 +36,13 @@ function fakeSupabase(games: GameSeed[], seedItems: Row[] = []) {
         in: (col: string, values: unknown[]) => (filters.push([col, values]), builder),
         upsert: (rows: Row[]) => ((op = "upsert"), (payload = rows), builder),
         update: (patch: Row) => ((op = "update"), (payload = patch), builder),
-        then(resolve: (value: { data: unknown; error: null }) => void) {
+        then(resolve: (value: { data: unknown; error: unknown }) => void) {
+          const fail = options.failGamesUpdate;
+          if (table === "games" && op === "update" && fail && filters[0]?.[1] === fail.gameId) {
+            if (fail.mode === "throw") throw new Error("games update boom");
+            resolve({ data: null, error: { message: "games update failed" } });
+            return;
+          }
           resolve({ data: run(), error: null });
         },
       };
@@ -143,5 +155,27 @@ describe("syncAllLounges", () => {
     const supabase = fakeSupabase([game()]);
     await syncAllLounges(supabase as never, { now: NOW });
     expect(fetchLoungeComments).toHaveBeenCalledTimes(20);
+  });
+
+  it("warns and still returns the found items when the watermark update fails", async () => {
+    fetchLoungePosts.mockResolvedValue([post()]);
+    const supabase = fakeSupabase([game()], [], { failGamesUpdate: { gameId: "g1", mode: "error" } });
+    const [result] = await syncAllLounges(supabase as never, { now: NOW });
+    expect(result.error).toBeUndefined();
+    expect(result.added).toHaveLength(1);
+    expect(console.warn).toHaveBeenCalledWith("[lounge-sync] 동기화 시각 갱신 실패", expect.objectContaining({ gameId: "g1" }));
+    expect(supabase.gameUpdates).toEqual([]);
+  });
+
+  it("reports fetch_failed for a game whose sync rejects unexpectedly, and still syncs the next game", async () => {
+    fetchLoungePosts.mockResolvedValue([post()]);
+    const supabase = fakeSupabase([game(), game({ id: "g2", name: "둘째", naver_lounge_id: "L2" })], [], {
+      failGamesUpdate: { gameId: "g1", mode: "throw" },
+    });
+    const results = await syncAllLounges(supabase as never, { now: NOW });
+    expect(results[0]).toMatchObject({ gameId: "g1", gameName: "갓생 토크", fetched: 0, added: [], error: "fetch_failed" });
+    expect(results[1].error).toBeUndefined();
+    expect(results[1].added).toHaveLength(1);
+    expect(supabase.gameUpdates.map((u) => u.id)).toEqual(["g2"]);
   });
 });

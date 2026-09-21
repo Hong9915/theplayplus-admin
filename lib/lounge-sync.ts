@@ -119,14 +119,25 @@ async function syncLounge(supabase: SupabaseClient, game: LoungeGame, now: Date)
     try {
       const comments = await fetchLoungeComments(game.naver_lounge_id, post.feedId);
       result.added.push(...(await insertNew(supabase, comments.map((comment) => commentRow(game, post, comment, baseline, nowIso)))));
-      await supabase.from("lounge_items").update({ comment_count: post.commentCount }).eq("game_id", game.id).eq("kind", "post").eq("naver_id", post.feedId);
+      const { error: countError } = await supabase
+        .from("lounge_items")
+        .update({ comment_count: post.commentCount })
+        .eq("game_id", game.id)
+        .eq("kind", "post")
+        .eq("naver_id", post.feedId);
+      if (countError) throw new Error(countError.message);
     } catch (err) {
       // comment_count를 그대로 둬 다음 실행이 이 글의 댓글을 다시 읽는다.
       console.warn("[lounge-sync] 댓글 실패", { gameId: game.id, feedId: post.feedId, err });
     }
   }
 
-  await supabase.from("games").update({ lounge_synced_at: nowIso }).eq("id", game.id);
+  const { error: watermarkError } = await supabase.from("games").update({ lounge_synced_at: nowIso }).eq("id", game.id);
+  if (watermarkError) {
+    // 결과는 그대로 돌려준다 — 이번에 찾은 항목은 이미 저장돼 있으니 알림은 나가야 한다.
+    // 다음 실행은 갱신되지 않은 이전 시각을 기준으로 다시 훑는다.
+    console.warn("[lounge-sync] 동기화 시각 갱신 실패", { gameId: game.id, watermarkError });
+  }
   return result;
 }
 
@@ -140,7 +151,14 @@ export async function syncAllLounges(supabase: SupabaseClient, options: SyncOpti
   }
   const results: LoungeSyncResult[] = [];
   for (const game of data as LoungeGame[]) {
-    results.push(await syncLounge(supabase, game, now));
+    try {
+      results.push(await syncLounge(supabase, game, now));
+    } catch (err) {
+      // syncLounge 내부는 대부분 자체 try/catch로 감싸져 있지만, 예상 못 한 예외가 새어 나와도
+      // 이 게임만 실패로 기록하고 나머지 게임은 계속 동기화한다.
+      console.warn("[lounge-sync] 게임 동기화 실패", { gameId: game.id, err });
+      results.push({ gameId: game.id, gameName: game.name, fetched: 0, added: [], error: "fetch_failed" });
+    }
   }
   return results;
 }
