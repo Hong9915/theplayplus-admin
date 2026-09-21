@@ -92,16 +92,24 @@ alter table lounge_items enable row level security;  -- 정책 없음: service_r
    성공하면 글의 `comment_count`를 갱신한다. 댓글 읽기 실패는 경고만 남기고 `comment_count`를 그대로 둬
    다음 실행이 다시 본다. 한 번 실행에 댓글을 읽는 글은 20개까지(서버리스 시간 제한).
 5. 안 읽음 판정: 유저 항목이고 `posted_at`이 **이전** `lounge_synced_at`보다 뒤일 때만 `read_at = null`로 넣고
-   `added`에 담는다. 그 밖(GM 항목, 기준 시각 이전 항목)은 `read_at = now`. 첫 실행은 `lounge_synced_at`이
-   null이라 기준 시각을 now로 잡으므로 기존 글·댓글은 전부 읽음이 된다. 4번의 상한 때문에 다음 실행으로
-   밀린 옛 댓글도 작성 시각이 기준보다 앞서 알림이 되지 않는다.
-6. `games.lounge_synced_at = now`(실행을 시작한 시각).
+   `added`에 담는다. 그 밖(GM 항목, 기준 시각 이전 항목)은 `read_at = now`. 기준에는 **2분 여유**를 둬
+   (`이전 시각 − 2분`) 네이버의 초 단위 시각·반영 지연·시계 차이로 갓 올라온 글이 기준 바로 앞에 놓여도
+   알림이 되게 한다. 이미 넣은 항목은 유니크 인덱스가 걸러 중복 알림이 생기지 않으므로 여유는 공짜다.
+   첫 실행은 `lounge_synced_at`이 null이라 기준을 now로 잡고 **여유도 두지 않아** 기존 글·댓글이 전부 읽음이 된다.
+6. `games.lounge_synced_at = now`(실행을 시작한 시각). 단, 이번 실행이 **못 본 것을 남겼으면 옮기지 않는다** —
+   댓글 읽기 실패, 4번의 20개 상한에 걸린 글, 시간 예산(아래)에 걸려 멈춘 경우다. 기준을 그대로 두면 다음
+   실행이 같은 기준으로 다시 봐 놓친 항목이 안 읽음으로 들어간다(기준을 옮겨 버리면 그 사이 댓글이
+   기준보다 앞서게 돼 조용히 읽음으로 저장된다). 첫 실행만은 미완이어도 옮긴다 — 기준이 없으면 다음
+   실행도 기존 글을 전부 읽음으로 넣고 끝나 소용이 없다.
+7. 시간 예산: 한 번 호출에 40초(라우트의 `maxDuration = 60`보다 짧게). 넘으면 새 댓글 조회·새 게임을
+   시작하지 않고 그 게임을 미완으로 두고 끝낸다. 남은 일은 5분 뒤 다음 실행이 한다.
 
 중복은 유니크 인덱스가 거른다(insert는 `upsert(..., { onConflict, ignoreDuplicates: true })`).
 한계: 최신 30건보다 오래된 글의 새 댓글, 한 글에서 5분 사이 30건을 넘긴 댓글은 놓친다.
 
 라우트는 `/api/replies/sync`와 같은 모양이다: `isWebhookAuthorized` → `syncAllLounges` → 모든 게임이
-실패하면 502 `sync_failed`, 아니면 200. 그 뒤 `added`를 Slack으로 보낸다(5번).
+실패하면 502 `sync_failed`, 아니면 200. Slack은 게임 하나가 끝날 때마다 `onGameSynced` 콜백으로 보낸다(5번) —
+뒤 게임에서 시간이 다 돼도 앞 게임 알림은 이미 나가 있다(다음 실행에서 그 항목은 중복이라 `added`에 다시 오지 않는다).
 
 ### 4. 관리자 화면
 
@@ -128,7 +136,7 @@ alter table lounge_items enable row level security;  -- 정책 없음: service_r
 
 ### 5. Slack (`lib/slack.ts`)
 
-`buildLoungeSlackMessage({ gameName, items, moreCount })` 추가. 항목마다 section 하나:
+`buildLoungeSlackMessage({ gameName, items, listUrl })` 추가(`listUrl`은 관리자 목록 주소, "외 N건"은 `items` 수로 센다). 항목마다 section 하나:
 `💬 *[게임명] 라운지 새 글*`(댓글이면 "라운지 새 댓글") / `게시판 · 닉네임` / `<url|제목>` / 본문 인용(기존 `quoteBody`, 600자).
 색은 `#03C75A`. 유저가 쓴 글자는 모두 `escapeMrkdwn`. 한 게임에서 한 번에 5건을 넘으면 앞 5건만 싣고
 context에 "외 N건"을 적는다. 게임마다 메시지 하나.
@@ -141,7 +149,8 @@ context에 "외 N건"을 적는다. 게임마다 메시지 하나.
 | 상황 | 동작 |
 | --- | --- |
 | 네이버 글 목록 실패·응답 모양 변경 | 그 게임 `fetch_failed`, 다음 실행이 다시 시도. 다른 게임은 계속 |
-| 댓글 읽기 실패 | 경고 로그, `comment_count` 유지 → 다음 실행이 다시 읽음 |
+| 댓글 읽기 실패 | 경고 로그, `comment_count`와 `lounge_synced_at`을 그대로 둔다 → 다음 실행이 같은 기준으로 다시 읽어 그 댓글을 안 읽음으로 넣는다 |
+| 상한(20개)·시간 예산으로 남은 글 | 미완으로 보고 `lounge_synced_at`을 옮기지 않는다 → 다음 실행이 이어서 본다(첫 실행은 예외, 언제나 옮긴다) |
 | Slack 실패 | 로그만. 항목은 저장돼 화면에 보인다 |
 | 연결 시 라운지를 못 읽음 | 400 `lounge_unreachable`, 저장하지 않음 |
 | 건수 조회 실패 | 건수·배지 없이 그린다 |
