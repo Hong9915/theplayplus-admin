@@ -7,6 +7,7 @@ import * as historyModule from "@/lib/account-history";
 import * as notesModule from "@/lib/notes";
 import * as eventsModule from "@/lib/events";
 import * as messagesModule from "@/lib/messages";
+import * as loungeItemsModule from "@/lib/lounge-items";
 
 vi.mock("@/lib/inquiries", () => ({
   getInquiryById: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("@/lib/account-history", () => ({ getAccountHistory: vi.fn() }));
 vi.mock("@/lib/notes", () => ({ listNotes: vi.fn(), listNotesByInquiryIds: vi.fn() }));
 vi.mock("@/lib/events", () => ({ listEvents: vi.fn() }));
 vi.mock("@/lib/messages", () => ({ listMessages: vi.fn(), listMessagesByInquiryIds: vi.fn() }));
+vi.mock("@/lib/lounge-items", () => ({ countUnreadLoungeItems: vi.fn() }));
 
 const game = { id: "g1", name: "아르카나 사가", status: "active" as const, logoPath: null, ownerName: null, createdAt: "2026-01-01T00:00:00.000Z" };
 const labels = { groupLabels: {}, typeLabels: {}, typeOrder: [] };
@@ -71,6 +73,7 @@ describe("loadInboxPage", () => {
     vi.mocked(eventsModule.listEvents).mockReset().mockResolvedValue([]);
     vi.mocked(messagesModule.listMessages).mockReset().mockResolvedValue([]);
     vi.mocked(messagesModule.listMessagesByInquiryIds).mockReset().mockResolvedValue({});
+    vi.mocked(loungeItemsModule.countUnreadLoungeItems).mockReset().mockResolvedValue(0);
   });
 
   it("returns null for an unknown game", async () => {
@@ -90,6 +93,27 @@ describe("loadInboxPage", () => {
     expect(data).toMatchObject({ title: "서비스 문의", game: null });
     expect(categoriesModule.listGames).not.toHaveBeenCalled();
     expect(inquiriesModule.getInquiryFacetCounts).toHaveBeenCalledWith({}, { kind: "service" });
+  });
+
+  it("service scope: never looks up the lounge unread count", async () => {
+    const data = await loadInboxPage({} as never, SERVICE_SCOPE, null, {});
+    expect(loungeItemsModule.countUnreadLoungeItems).not.toHaveBeenCalled();
+    expect(data?.loungeUnread).toBeNull();
+  });
+
+  it("game scope: reports no lounge unread count when the game has no lounge connected", async () => {
+    const data = await loadInboxPage({} as never, gameScope("g1"), null, {});
+    expect(loungeItemsModule.countUnreadLoungeItems).toHaveBeenCalledWith({}, "g1");
+    expect(data?.loungeUnread).toBeNull();
+  });
+
+  it("game scope: reports the lounge unread count when the game has a lounge connected", async () => {
+    vi.mocked(categoriesModule.listGames).mockResolvedValue([{ ...game, naverLoungeId: "Abc" }]);
+    vi.mocked(loungeItemsModule.countUnreadLoungeItems).mockResolvedValue(5);
+
+    const data = await loadInboxPage({} as never, gameScope("g1"), null, {});
+
+    expect(data?.loungeUnread).toBe(5);
   });
 
   it("returns null when the selected inquiry is missing or outside the scope", async () => {

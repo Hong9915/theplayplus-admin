@@ -51,6 +51,7 @@ export default function InboxShell({
   counts,
   listPage,
   selected,
+  loungeUnread,
 }: {
   scope: InboxScope;
   title: string;
@@ -60,12 +61,13 @@ export default function InboxShell({
   counts: InquiryFacetCounts | null;
   listPage: InquiryPage;
   selected: InboxSelection | null;
+  loungeUnread?: number | null;
 }) {
   const selectedId = selected?.inquiry.id ?? null;
 
   return (
     <div className="flex h-screen min-w-[1180px] flex-1">
-      <InboxNav scope={scope} title={title} game={game} query={query} labels={labels} counts={counts} selectedId={selectedId} />
+      <InboxNav scope={scope} title={title} game={game} query={query} labels={labels} counts={counts} selectedId={selectedId} loungeUnread={loungeUnread} />
       <InboxList scope={scope} page={listPage} query={query} labels={labels} selectedId={selectedId} viewLabel={describeView(query)} now={Date.now()} />
       {selected ? (
         <>

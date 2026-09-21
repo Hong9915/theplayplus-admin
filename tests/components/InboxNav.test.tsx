@@ -112,6 +112,20 @@ describe("InboxNav", () => {
     expect(screen.getByRole("link", { name: /^처리중/ })).toHaveAttribute("href", "/games/g1/inquiries/i1?status=in_progress");
   });
 
+  it("links to the lounge list with the unread count when a lounge is connected", () => {
+    render(<InboxNav scope={gameScope("g1")} title={game.name} game={{ ...game, naverLoungeId: "Abc" }} query={DEFAULT_QUERY} labels={labels} counts={counts} selectedId={null} loungeUnread={4} />);
+    const link = screen.getByRole("link", { name: /라운지 새 글/ });
+    expect(link).toHaveAttribute("href", "/games/g1/lounge");
+    expect(within(link).getByText("4")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "네이버 라운지 변경" })).toBeInTheDocument();
+  });
+
+  it("offers to connect a lounge instead when none is connected", () => {
+    renderNav();
+    expect(screen.queryByRole("link", { name: /라운지 새 글/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "네이버 라운지 연결" })).toBeInTheDocument();
+  });
+
   it("links to templates and offers game deletion", () => {
     renderNav();
     expect(screen.getByRole("link", { name: "답변 템플릿" })).toHaveAttribute("href", "/games/g1/templates");

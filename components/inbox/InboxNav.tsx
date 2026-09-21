@@ -6,6 +6,7 @@ import { inboxHref, type InquiryListQuery } from "@/lib/inquiry-filters";
 import type { InboxScope } from "@/lib/inbox-scope";
 import InboxSearch from "@/components/inbox/InboxSearch";
 import DeleteGameButton from "@/components/games/DeleteGameButton";
+import LoungeConnectDialog from "@/components/inbox/LoungeConnectDialog";
 
 type ViewKey = InquiryStatus | "all" | "stale" | "unread";
 
@@ -60,6 +61,7 @@ export default function InboxNav({
   labels,
   counts,
   selectedId,
+  loungeUnread = null,
 }: {
   scope: InboxScope;
   title: string;
@@ -68,6 +70,7 @@ export default function InboxNav({
   labels: CategoryLabelMaps;
   counts: InquiryFacetCounts | null;
   selectedId: string | null;
+  loungeUnread?: number | null;
 }) {
   const href = (patch: Partial<InquiryListQuery>) => inboxHref(scope, selectedId, { ...query, ...patch, page: 1 });
 
@@ -103,6 +106,18 @@ export default function InboxNav({
             <span>{assistantChatEnabled() ? "운영 어시스턴트" : "운영 자료"}</span>
           </span>
           <span className="text-xs text-muted" aria-hidden="true">↗</span>
+        </Link>
+      )}
+
+      {game?.naverLoungeId && (
+        <Link href={`/games/${game.id}/lounge`} className={`${ITEM} h-8 ${ITEM_IDLE} border border-line`}>
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden="true">💬</span>
+            <span>라운지 새 글</span>
+          </span>
+          {loungeUnread !== null && (
+            <span className={`text-xs tabular-nums ${loungeUnread > 0 ? "text-accent font-semibold" : "text-muted font-normal"}`}>{loungeUnread}</span>
+          )}
         </Link>
       )}
 
@@ -175,6 +190,7 @@ export default function InboxNav({
           <Link href={`/games/${game.id}/templates`} className={`${ITEM} h-8 ${ITEM_IDLE}`}>
             답변 템플릿
           </Link>
+          <LoungeConnectDialog gameId={game.id} loungeId={game.naverLoungeId ?? null} />
           <div className="px-2.5">
             <DeleteGameButton gameId={game.id} gameName={game.name} inquiryCount={counts?.total ?? 0} />
           </div>

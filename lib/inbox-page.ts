@@ -11,6 +11,7 @@ import {
 import { parseInquiryListQuery, type InquiryListQuery } from "@/lib/inquiry-filters";
 import { SERVICE_SCOPE_TITLE, inquiryBelongsToScope, type InboxScope } from "@/lib/inbox-scope";
 import { listCategoryLabelsForScope, listGames, type CategoryLabelMaps, type GameRow } from "@/lib/categories";
+import { countUnreadLoungeItems } from "@/lib/lounge-items";
 import { getAccountHistory, type AccountHistoryEntry } from "@/lib/account-history";
 import { listNotes, listNotesByInquiryIds } from "@/lib/notes";
 import { listEvents } from "@/lib/events";
@@ -28,6 +29,8 @@ export interface InboxPageData {
   counts: InquiryFacetCounts | null;
   listPage: InquiryPage;
   selected: InboxSelection | null;
+  /** 네이버 라운지의 안 읽은 유저 글·댓글 수. 서비스 문의이거나 조회 실패면 null. */
+  loungeUnread: number | null;
 }
 
 /**
@@ -48,7 +51,7 @@ export async function loadInboxPage(
   // 계정 이력·같은 계정 이어보기는 게임에 딸린 것이라 서비스 문의에는 없다.
   const gameId = scope.kind === "game" ? scope.gameId : null;
 
-  const [games, labels, counts, listPage, inquiry, notes, events, messages, siblingIds] = await Promise.all([
+  const [games, labels, counts, listPage, inquiry, notes, events, messages, siblingIds, loungeUnreadRaw] = await Promise.all([
     gameId ? listGames(supabase) : Promise.resolve([] as GameRow[]),
     listCategoryLabelsForScope(supabase, scope),
     getInquiryFacetCounts(supabase, scope),
@@ -58,6 +61,7 @@ export async function loadInboxPage(
     inquiryId ? listEvents(supabase, inquiryId) : Promise.resolve([]),
     inquiryId ? listMessages(supabase, inquiryId) : Promise.resolve([]),
     inquiryId ? listInquiryIds(supabase, scope, query) : Promise.resolve([] as string[]),
+    gameId ? countUnreadLoungeItems(supabase, gameId) : Promise.resolve(null),
   ]);
 
   let game: GameRow | null = null;
@@ -102,5 +106,7 @@ export async function loadInboxPage(
     };
   }
 
-  return { scope, title, game, query, labels, counts, listPage, selected };
+  const loungeUnread = game?.naverLoungeId ? loungeUnreadRaw : null;
+
+  return { scope, title, game, query, labels, counts, listPage, selected, loungeUnread };
 }
