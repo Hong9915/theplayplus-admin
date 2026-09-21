@@ -109,6 +109,11 @@ alter table lounge_items enable row level security;  -- 정책 없음: service_r
   URL 입력). `PATCH /api/games/{gameId}/lounge`가 `requireAdminSession` → `parseLoungeId` → `fetchLoungePosts`로
   실제로 읽히는지 확인(실패 시 400 `lounge_unreachable`) → `naver_lounge_id` 저장, `lounge_synced_at`은 null로 되돌린다.
   빈 값이면 연결 해제. 연결을 바꾸면 그 게임의 `lounge_items`를 지운다(다른 라운지의 글이 섞이지 않게).
+- **게임 추가 시 연결**: `GameForm`에 선택 입력 "네이버 라운지 주소"를 더하고 `POST /api/games`가 `loungeUrl`을 받는다
+  (`gameFormSchema`에 optional 문자열). 게임을 저장한 뒤 `parseLoungeId` → `fetchLoungePosts`로 확인해 되면
+  `naver_lounge_id`를 저장한다. 주소가 틀렸거나 못 읽으면 게임은 그대로 만들고 `lounge_unreachable` 경고만 낸다
+  (로고·운영 문서와 같은 "부가 작업 실패는 경고" 규칙). 확인·저장 로직은 PATCH 라우트와 `lib/lounge-connect.ts`의
+  `connectLounge(supabase, gameId, input)`로 공유한다.
 - **보기 열**: 라운지가 연결된 게임이면 `InboxNav`에 "라운지 새 글" 링크와 안 읽은 건수(0보다 크면 강조색).
   건수는 `lib/lounge-items.ts`의 `countUnreadLoungeItems(supabase, gameId)`로 `loadInboxPage`의 `Promise.all`에서
   읽고 실패하면 건수 없이 그린다. 문의 필터가 아니므로 `inquiry_facet_counts` RPC는 건드리지 않는다.
