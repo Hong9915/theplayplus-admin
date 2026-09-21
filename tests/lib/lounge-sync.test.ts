@@ -6,9 +6,12 @@ vi.mock("@/lib/naver-lounge", () => ({ fetchLoungePosts, fetchLoungeComments }))
 import { syncAllLounges } from "@/lib/lounge-sync";
 
 const NOW = new Date("2026-09-21T10:00:00.000Z");
+const LATER = new Date("2026-09-21T10:05:00.000Z"); // 다음 실행
 const BEFORE = "2026-09-21T09:50:00.000Z"; // 이전 동기화 시각
 const OLD = "2026-09-21T09:00:00.000Z";
 const FRESH = "2026-09-21T09:57:00.000Z";
+const JUST_BEFORE_BASELINE = "2026-09-21T09:49:00.000Z"; // 기준 1분 전(2분 여유 안)
+const JUST_BEFORE_NOW = "2026-09-21T09:59:00.000Z"; // 지금 1분 전
 
 interface GameSeed { id: string; name: string; naver_lounge_id: string; lounge_synced_at: string | null }
 type Row = Record<string, unknown>;
@@ -49,7 +52,12 @@ function fakeSupabase(games: GameSeed[], seedItems: Row[] = [], options: { failG
       const matches = (row: Row) => filters.every(([col, value]) => (Array.isArray(value) ? value.includes(row[col]) : row[col] === value));
       function run(): unknown {
         if (table === "games") {
-          if (op === "update") gameUpdates.push({ id: filters[0][1] as string, patch: payload as Row });
+          if (op === "update") {
+            const id = filters[0][1] as string;
+            gameUpdates.push({ id, patch: payload as Row });
+            // 실제 DB처럼 seed에도 반영한다 — 두 번 실행하는 테스트가 갱신된 기준 시각을 보게.
+            Object.assign(games.find((g) => g.id === id) ?? {}, payload as Row);
+          }
           return games;
         }
         if (op === "upsert") {
@@ -102,13 +110,22 @@ describe("syncAllLounges", () => {
   });
 
   it("marks everything read on the first run so connecting a lounge does not flood", async () => {
-    fetchLoungePosts.mockResolvedValue([post({ commentCount: 1 })]);
+    // 방금 올라온 글(1분 전)도 첫 실행에는 읽음이어야 한다 — 2분 여유는 첫 실행에 적용하지 않는다.
+    fetchLoungePosts.mockResolvedValue([post({ commentCount: 1 }), post({ feedId: 101, postedAt: JUST_BEFORE_NOW })]);
     fetchLoungeComments.mockResolvedValue([comment()]);
     const supabase = fakeSupabase([game({ lounge_synced_at: null })]);
     const [result] = await syncAllLounges(supabase as never, { now: NOW });
     expect(result.added).toEqual([]);
-    expect(supabase.items).toHaveLength(2);
+    expect(supabase.items).toHaveLength(3);
     expect(supabase.items.every((row) => row.read_at === NOW.toISOString())).toBe(true);
+  });
+
+  it("treats an item posted just before the baseline as unread — naver 시각이 우리보다 늦을 수 있다", async () => {
+    fetchLoungePosts.mockResolvedValue([post({ postedAt: JUST_BEFORE_BASELINE })]);
+    const supabase = fakeSupabase([game()]);
+    const [result] = await syncAllLounges(supabase as never, { now: NOW });
+    expect(result.added).toHaveLength(1);
+    expect(supabase.items[0].read_at).toBeNull();
   });
 
   it("stores GM posts as read and never reports them", async () => {
@@ -141,6 +158,38 @@ describe("syncAllLounges", () => {
     expect(supabase.items[0].comment_count).toBe(1);
   });
 
+  it("keeps the watermark when a comment fetch failed, so the next run still alerts on that comment", async () => {
+    fetchLoungePosts.mockResolvedValue([post({ commentCount: 2, postedAt: OLD })]);
+    fetchLoungeComments.mockRejectedValueOnce(new Error("boom"));
+    const supabase = fakeSupabase([game()], [seedPost({ comment_count: 1 })]);
+    await syncAllLounges(supabase as never, { now: NOW });
+    expect(supabase.gameUpdates).toEqual([]);
+
+    // 다음 실행: 기준 시각이 그대로라 09:57 댓글이 여전히 "이전 동기화 뒤"다.
+    fetchLoungeComments.mockResolvedValueOnce([comment()]);
+    const [second] = await syncAllLounges(supabase as never, { now: LATER });
+    expect(second.added.map((item) => item.naverId)).toEqual([500]);
+    expect(supabase.items.find((row) => row.kind === "comment")?.read_at).toBeNull();
+    expect(supabase.gameUpdates).toEqual([{ id: "g1", patch: { lounge_synced_at: LATER.toISOString() } }]);
+  });
+
+  it("keeps the watermark when more posts changed than the per-run comment cap", async () => {
+    fetchLoungePosts.mockResolvedValue(Array.from({ length: 25 }, (_, i) => post({ feedId: 200 + i, commentCount: 1 })));
+    const supabase = fakeSupabase([game()]);
+    await syncAllLounges(supabase as never, { now: NOW });
+    expect(fetchLoungeComments).toHaveBeenCalledTimes(20);
+    expect(supabase.gameUpdates).toEqual([]);
+  });
+
+  it("advances the watermark on the first run even when the run was incomplete", async () => {
+    fetchLoungePosts.mockResolvedValue([post({ commentCount: 1 })]);
+    fetchLoungeComments.mockRejectedValueOnce(new Error("boom"));
+    const supabase = fakeSupabase([game({ lounge_synced_at: null })]);
+    const [result] = await syncAllLounges(supabase as never, { now: NOW });
+    expect(result.added).toEqual([]);
+    expect(supabase.gameUpdates).toEqual([{ id: "g1", patch: { lounge_synced_at: NOW.toISOString() } }]);
+  });
+
   it("reports fetch_failed without advancing the watermark, and still syncs the other games", async () => {
     fetchLoungePosts.mockRejectedValueOnce(new Error("naver down")).mockResolvedValueOnce([post()]);
     const supabase = fakeSupabase([game(), game({ id: "g2", name: "둘째", naver_lounge_id: "L2" })]);
@@ -165,6 +214,52 @@ describe("syncAllLounges", () => {
     expect(result.added).toHaveLength(1);
     expect(console.warn).toHaveBeenCalledWith("[lounge-sync] 동기화 시각 갱신 실패", expect.objectContaining({ gameId: "g1" }));
     expect(supabase.gameUpdates).toEqual([]);
+  });
+
+  it("stops starting comment fetches when the time budget runs out and keeps the watermark", async () => {
+    fetchLoungePosts.mockResolvedValue([200, 201, 202].map((feedId) => post({ feedId, commentCount: 1 })));
+    let elapsed = 0;
+    fetchLoungeComments.mockReset().mockImplementation(async () => ((elapsed += 25_000), []));
+    const supabase = fakeSupabase([game()]);
+    await syncAllLounges(supabase as never, { now: NOW, clock: () => elapsed });
+    // 40초 예산: 0초·25초에 두 번 부르고 50초에는 시작하지 않는다.
+    expect(fetchLoungeComments).toHaveBeenCalledTimes(2);
+    expect(supabase.gameUpdates).toEqual([]);
+  });
+
+  it("does not start another game when the budget is gone, and keeps the finished game's watermark", async () => {
+    let elapsed = 0;
+    fetchLoungePosts.mockImplementation(async () => ((elapsed += 45_000), [post()]));
+    const supabase = fakeSupabase([game(), game({ id: "g2", name: "둘째", naver_lounge_id: "L2" })]);
+    const results = await syncAllLounges(supabase as never, { now: NOW, clock: () => elapsed });
+    expect(results.map((r) => r.gameId)).toEqual(["g1"]);
+    expect(fetchLoungePosts).toHaveBeenCalledTimes(1);
+    expect(supabase.gameUpdates).toEqual([{ id: "g1", patch: { lounge_synced_at: NOW.toISOString() } }]);
+  });
+
+  it("hands each game's result to onGameSynced as soon as that game finishes", async () => {
+    fetchLoungePosts.mockResolvedValue([post()]);
+    const supabase = fakeSupabase([game(), game({ id: "g2", name: "둘째", naver_lounge_id: "L2" })]);
+    const seen: Array<{ gameId: string; fetches: number }> = [];
+    const onGameSynced = vi.fn((result: { gameId: string }) => {
+      seen.push({ gameId: result.gameId, fetches: fetchLoungePosts.mock.calls.length });
+    });
+    await syncAllLounges(supabase as never, { now: NOW, onGameSynced });
+    // 두 번째 게임을 읽기 전에 첫 게임 알림이 나간다.
+    expect(seen).toEqual([{ gameId: "g1", fetches: 1 }, { gameId: "g2", fetches: 2 }]);
+  });
+
+  it("keeps syncing when onGameSynced throws", async () => {
+    fetchLoungePosts.mockResolvedValue([post()]);
+    const supabase = fakeSupabase([game(), game({ id: "g2", name: "둘째", naver_lounge_id: "L2" })]);
+    const results = await syncAllLounges(supabase as never, {
+      now: NOW,
+      onGameSynced: () => {
+        throw new Error("slack down");
+      },
+    });
+    expect(results.map((r) => r.gameId)).toEqual(["g1", "g2"]);
+    expect(console.warn).toHaveBeenCalledWith("[lounge-sync] 게임별 알림 처리 실패", expect.objectContaining({ gameId: "g1" }));
   });
 
   it("reports fetch_failed for a game whose sync rejects unexpectedly, and still syncs the next game", async () => {
