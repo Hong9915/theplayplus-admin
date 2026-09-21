@@ -4,7 +4,7 @@
 
 **Goal:** 게임별로 연결한 네이버 게임 라운지에 유저가 글·댓글을 쓰면 5분 안에 관리자 페이지(보기 열 건수·목록·레일 배지)와 Slack으로 알리고, 클릭하면 라운지의 그 글이 새 탭으로 열린다.
 
-**Architecture:** 회신 자동 동기화와 같은 모양이다. `pg_cron`이 5분마다 `/api/lounge/sync`를 부르고, `lib/lounge-sync.ts`가 라운지가 연결된 게임마다 네이버 내부 API(`lib/naver-lounge.ts`)로 최신 글 50건과 댓글 수가 바뀐 글의 댓글을 읽어 `lounge_items` 표에 넣는다. 유저가 쓴 새 항목만 안 읽음(`read_at is null`)이 되고 Slack으로 나간다.
+**Architecture:** 회신 자동 동기화와 같은 모양이다. `pg_cron`이 5분마다 `/api/lounge/sync`를 부르고, `lib/lounge-sync.ts`가 라운지가 연결된 게임마다 네이버 내부 API(`lib/naver-lounge.ts`)로 최신 글 30건과 댓글 수가 바뀐 글의 댓글을 읽어 `lounge_items` 표에 넣는다. 유저가 쓴 새 항목만 안 읽음(`read_at is null`)이 되고 Slack으로 나간다.
 
 **Tech Stack:** Next.js 14 App Router, TypeScript, Supabase(Postgres, pg_cron, pg_net), zod, Vitest + React Testing Library.
 
@@ -221,7 +221,7 @@ describe("fetchLoungePosts", () => {
     const fetchMock = stubFetch(feedResponse);
     const posts = await fetchLoungePosts("L1");
     expect(fetchMock.mock.calls[0][0]).toContain("/community/lounge/L1/feed?");
-    expect(fetchMock.mock.calls[0][0]).toContain("limit=50");
+    expect(fetchMock.mock.calls[0][0]).toContain("limit=30");
     expect(fetchMock.mock.calls[0][1].headers.Referer).toBe("https://game.naver.com/");
     expect(posts[0]).toEqual({
       feedId: 8212525,
@@ -296,7 +296,7 @@ import { z } from "zod";
 
 const FEED_BASE = "https://comm-api.game.naver.com/nng_main/v1/community/lounge";
 const COMMENT_BASE = "https://apis.naver.com/nng_main/nng_comment_api/v1";
-const POST_LIMIT = 50;
+const POST_LIMIT = 30;
 const COMMENT_LIMIT = 30;
 const TIMEOUT_MS = 10_000;
 const HEADERS = {
@@ -430,7 +430,7 @@ async function getJson(url: string): Promise<unknown> {
   return response.json();
 }
 
-/** 최신 글 50건. */
+/** 최신 글 30건. */
 export async function fetchLoungePosts(loungeId: string): Promise<LoungePost[]> {
   const params = new URLSearchParams({ boardId: "0", buffFilteringYN: "N", limit: String(POST_LIMIT), offset: "0", order: "NEW" });
   const parsed = feedSchema.parse(await getJson(`${FEED_BASE}/${loungeId}/feed?${params}`));
@@ -2167,7 +2167,7 @@ git commit -m "feat: 게임 레일에 라운지 새 글 배지"
 - [ ] **Step 1: `CLAUDE.md` 핵심 기능에 12번 추가** (11번 항목 뒤, "상세 설계는 …" 문단 앞)
 
 ```markdown
-12. **네이버 라운지 새 글·댓글 알림** — 네이버 게임 라운지는 운영자에게 새 글 알림을 주지 않아서, 게임에 라운지를 연결해 두면(`games.naver_lounge_id`; 게임 추가 폼의 "네이버 라운지 주소" 또는 문의함 보기 열 아래 "네이버 라운지 연결" → `PATCH /api/games/{id}/lounge`, 둘 다 `lib/lounge-connect.ts`가 저장 전에 라운지를 한 번 읽어 확인) Supabase `pg_cron` 잡 `lounge-sync-run`이 5분마다 `/api/lounge/sync`를 부른다(마이그레이션 0024, 인증은 같은 `x-webhook-secret`). `lib/naver-lounge.ts`가 라운지 웹의 내부 API 두 개(글 목록 `comm-api.game.naver.com/.../lounge/{id}/feed`, 댓글 `apis.naver.com/nng_main/nng_comment_api/...`)를 로그인 없이 읽는다(2026-09-21 실측, 비공식이라 바뀌면 zod 검증이 던져 `fetch_failed`가 된다). `lib/lounge-sync.ts`는 최신 글 50건을 읽어 처음 보는 글을 `lounge_items`에 넣고, 저장해 둔 `comment_count`와 달라진 글만(한 번에 20개까지) 댓글·답글을 읽는다. 알림이 되는 것은 **유저(`common_user`)가 쓴 항목이면서 이전 동기화 뒤에 쓴 것**뿐이다 — GM 글·댓글도 저장하지만(공지에 달리는 유저 댓글을 잡으려면 댓글 수를 알아야 한다) 읽음으로 넣고, 첫 실행은 기준이 지금이라 기존 글이 전부 읽음이 된다. 라운지를 바꾸면 그 게임의 항목을 지우고 다시 시작한다. 관리자 화면: 보기 열의 "라운지 새 글 N" → `/games/{gameId}/lounge` 목록(항목을 누르면 라운지의 그 글이 새 탭으로 열리고 읽음 처리, "모두 읽음"), 게임 레일 타일 아래쪽의 초록 배지. Slack은 새 항목이 있는 게임마다 메시지 하나(초록 `#03C75A`, 5건까지 싣고 나머지는 "외 N건", `lib/slack.ts`의 `buildLoungeSlackMessage`)이며 실패해도 저장은 남는다. 한계: 최신 50건보다 오래된 글의 새 댓글, 한 글에서 5분 사이 30건을 넘긴 댓글은 놓친다.
+12. **네이버 라운지 새 글·댓글 알림** — 네이버 게임 라운지는 운영자에게 새 글 알림을 주지 않아서, 게임에 라운지를 연결해 두면(`games.naver_lounge_id`; 게임 추가 폼의 "네이버 라운지 주소" 또는 문의함 보기 열 아래 "네이버 라운지 연결" → `PATCH /api/games/{id}/lounge`, 둘 다 `lib/lounge-connect.ts`가 저장 전에 라운지를 한 번 읽어 확인) Supabase `pg_cron` 잡 `lounge-sync-run`이 5분마다 `/api/lounge/sync`를 부른다(마이그레이션 0024, 인증은 같은 `x-webhook-secret`). `lib/naver-lounge.ts`가 라운지 웹의 내부 API 두 개(글 목록 `comm-api.game.naver.com/.../lounge/{id}/feed`, 댓글 `apis.naver.com/nng_main/nng_comment_api/...`)를 로그인 없이 읽는다(2026-09-21 실측, 비공식이라 바뀌면 zod 검증이 던져 `fetch_failed`가 된다). `lib/lounge-sync.ts`는 최신 글 30건을 읽어 처음 보는 글을 `lounge_items`에 넣고, 저장해 둔 `comment_count`와 달라진 글만(한 번에 20개까지) 댓글·답글을 읽는다. 알림이 되는 것은 **유저(`common_user`)가 쓴 항목이면서 이전 동기화 뒤에 쓴 것**뿐이다 — GM 글·댓글도 저장하지만(공지에 달리는 유저 댓글을 잡으려면 댓글 수를 알아야 한다) 읽음으로 넣고, 첫 실행은 기준이 지금이라 기존 글이 전부 읽음이 된다. 라운지를 바꾸면 그 게임의 항목을 지우고 다시 시작한다. 관리자 화면: 보기 열의 "라운지 새 글 N" → `/games/{gameId}/lounge` 목록(항목을 누르면 라운지의 그 글이 새 탭으로 열리고 읽음 처리, "모두 읽음"), 게임 레일 타일 아래쪽의 초록 배지. Slack은 새 항목이 있는 게임마다 메시지 하나(초록 `#03C75A`, 5건까지 싣고 나머지는 "외 N건", `lib/slack.ts`의 `buildLoungeSlackMessage`)이며 실패해도 저장은 남는다. 한계: 최신 30건보다 오래된 글의 새 댓글, 한 글에서 5분 사이 30건을 넘긴 댓글은 놓친다.
 ```
 
 "상세 설계는 …" 문단 끝에 `, 네이버 라운지 알림은 `docs/superpowers/specs/2026-09-21-naver-lounge-alerts-design.md``를 더한다.

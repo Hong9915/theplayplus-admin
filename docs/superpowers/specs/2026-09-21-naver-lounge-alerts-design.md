@@ -14,9 +14,9 @@
 ## 조사 결과 (2026-09-21 실측)
 
 라운지 웹이 쓰는 내부 API 두 개가 로그인·쿠키 없이 서버에서 응답한다. `Referer: https://game.naver.com/`와
-일반 브라우저 `User-Agent`를 붙여 호출했다. 공식 API가 아니므로 예고 없이 바뀔 수 있다.
+일반 브라우저 `User-Agent`를 붙여 호출했다. 글 목록의 `limit`은 30까지다(50은 400 `30002`). 공식 API가 아니므로 예고 없이 바뀔 수 있다.
 
-- 글 목록: `GET https://comm-api.game.naver.com/nng_main/v1/community/lounge/{loungeId}/feed?boardId=0&buffFilteringYN=N&limit=50&offset=0&order=NEW`
+- 글 목록: `GET https://comm-api.game.naver.com/nng_main/v1/community/lounge/{loungeId}/feed?boardId=0&buffFilteringYN=N&limit=30&offset=0&order=NEW`
   - `content.feeds[]`의 항목마다 `feed.feedId`, `feed.title`, `feed.contents`(SmartEditor JSON 문자열),
     `feed.createdDate`(`yyyyMMddHHmmss`, KST), `board.boardName`, `user.nickname`, `user.userRoleCode`,
     `comment.totalCount`(댓글+답글 수), `feedLink.pc`(글 주소)가 온다.
@@ -33,7 +33,7 @@
 외부 API를 아는 유일한 파일이다. 응답은 zod로 필요한 필드만 검증하고, 모양이 다르면 던진다.
 
 - `parseLoungeId(input): string | null` — 라운지 URL 또는 ID 문자열에서 ID를 뽑는다.
-- `fetchLoungePosts(loungeId): Promise<LoungePost[]>` — 최신 50건. `LoungePost` =
+- `fetchLoungePosts(loungeId): Promise<LoungePost[]>` — 최신 30건. `LoungePost` =
   `{ feedId, title, bodyText, boardName, nickname, isUser, postedAt, url, commentCount }`.
   `bodyText`는 `contents` JSON에서 `textNode`의 `value`를 단락마다 줄바꿈으로 이은 것(파싱 실패는 빈 문자열).
   제목의 HTML 엔티티(`&#x1f430;` 등)는 풀어 준다.
@@ -98,7 +98,7 @@ alter table lounge_items enable row level security;  -- 정책 없음: service_r
 6. `games.lounge_synced_at = now`(실행을 시작한 시각).
 
 중복은 유니크 인덱스가 거른다(insert는 `upsert(..., { onConflict, ignoreDuplicates: true })`).
-한계: 최신 50건보다 오래된 글의 새 댓글, 한 글에서 5분 사이 30건을 넘긴 댓글은 놓친다.
+한계: 최신 30건보다 오래된 글의 새 댓글, 한 글에서 5분 사이 30건을 넘긴 댓글은 놓친다.
 
 라우트는 `/api/replies/sync`와 같은 모양이다: `isWebhookAuthorized` → `syncAllLounges` → 모든 게임이
 실패하면 502 `sync_failed`, 아니면 200. 그 뒤 `added`를 Slack으로 보낸다(5번).
