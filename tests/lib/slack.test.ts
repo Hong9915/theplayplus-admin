@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { buildInquirySlackMessage, sendSlackMessage } from "@/lib/slack";
+import { buildInquirySlackMessage, sendSlackMessage, buildLoungeSlackMessage } from "@/lib/slack";
+import type { LoungeItemRow } from "@/lib/lounge-items";
 
 const inquiry = {
   gameName: "여신의 검",
@@ -110,5 +111,34 @@ describe("sendSlackMessage", () => {
     await expect(sendSlackMessage("https://hooks.slack.com/services/x", message)).rejects.toThrow(
       "Slack webhook failed: 400 invalid_payload"
     );
+  });
+});
+
+const loungeItem = (over: Partial<LoungeItemRow> = {}): LoungeItemRow => ({
+  id: "i1", gameId: "g1", kind: "post", naverId: 100, feedId: 100, title: "질문 <있어요>", body: "본문 & 내용", boardName: "자유", nickname: "유저1",
+  isUser: true, url: "https://game.naver.com/lounge/L1/board/detail/100", postedAt: "2026-09-21T09:57:00.000Z", readAt: null, ...over,
+});
+
+describe("buildLoungeSlackMessage", () => {
+  it("builds one green attachment with a section per item and escapes user text", () => {
+    const message = buildLoungeSlackMessage({ gameName: "갓생 토크", items: [loungeItem(), loungeItem({ id: "i2", kind: "comment", naverId: 500, body: "댓글", nickname: "유저2" })], listUrl: "https://admin.example/games/g1/lounge" });
+    expect(message.text).toBe("[갓생 토크] 라운지 새 글 · 질문 &lt;있어요&gt; 외 1건");
+    expect(message.attachments[0].color).toBe("#03C75A");
+    const json = JSON.stringify(message.attachments[0].blocks);
+    expect(json).toContain("💬 *[갓생 토크] 라운지 새 글*");
+    expect(json).toContain("💬 *[갓생 토크] 라운지 새 댓글*");
+    expect(json).toContain("<https://game.naver.com/lounge/L1/board/detail/100|질문 &lt;있어요&gt;>");
+    expect(json).toContain("> 본문 &amp; 내용");
+    expect(json).toContain("자유 · 유저1");
+    expect(json).toContain("<https://admin.example/games/g1/lounge|관리자에서 보기>");
+  });
+
+  it("shows only the first five items and counts the rest", () => {
+    const items = Array.from({ length: 7 }, (_, i) => loungeItem({ id: `i${i}`, naverId: 100 + i, title: `글 ${i}` }));
+    const message = buildLoungeSlackMessage({ gameName: "갓생 토크", items, listUrl: "https://admin.example/games/g1/lounge" });
+    const json = JSON.stringify(message.attachments[0].blocks);
+    expect(json).toContain("글 4");
+    expect(json).not.toContain("글 5");
+    expect(json).toContain("외 2건");
   });
 });
