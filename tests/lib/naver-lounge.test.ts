@@ -64,7 +64,7 @@ describe("fetchLoungePosts", () => {
     const fetchMock = stubFetch(feedResponse);
     const posts = await fetchLoungePosts("L1");
     expect(fetchMock.mock.calls[0][0]).toContain("/community/lounge/L1/feed?");
-    expect(fetchMock.mock.calls[0][0]).toContain("limit=50");
+    expect(fetchMock.mock.calls[0][0]).toContain("limit=30");
     expect(fetchMock.mock.calls[0][1].headers.Referer).toBe("https://game.naver.com/");
     expect(posts[0]).toEqual({
       feedId: 8212525,

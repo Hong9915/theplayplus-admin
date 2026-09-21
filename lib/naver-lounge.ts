@@ -8,7 +8,7 @@ import { z } from "zod";
 
 const FEED_BASE = "https://comm-api.game.naver.com/nng_main/v1/community/lounge";
 const COMMENT_BASE = "https://apis.naver.com/nng_main/nng_comment_api/v1";
-const POST_LIMIT = 50;
+const POST_LIMIT = 30; // API는 30 초과 시 400을 돌려준다 (2026-09-21 실측).
 const COMMENT_LIMIT = 30;
 const TIMEOUT_MS = 10_000;
 const HEADERS = {
@@ -142,7 +142,7 @@ async function getJson(url: string): Promise<unknown> {
   return response.json();
 }
 
-/** 최신 글 50건. */
+/** 최신 글 30건. */
 export async function fetchLoungePosts(loungeId: string): Promise<LoungePost[]> {
   const params = new URLSearchParams({ boardId: "0", buffFilteringYN: "N", limit: String(POST_LIMIT), offset: "0", order: "NEW" });
   const parsed = feedSchema.parse(await getJson(`${FEED_BASE}/${loungeId}/feed?${params}`));
