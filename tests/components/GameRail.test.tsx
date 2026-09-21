@@ -65,6 +65,16 @@ describe("GameRail", () => {
     expect(screen.getByRole("link", { name: /서비스 문의/ })).not.toHaveAttribute("aria-current");
     expect(screen.getByTitle("여신의 검")).toHaveAttribute("aria-current", "page");
   });
+  it("shows a separate lounge badge on the game tile", () => {
+    render(<GameRail games={games} newCounts={{ g1: 2 }} loungeCounts={{ g1: 5 }} />);
+    const tile = screen.getByRole("link", { name: /아르카나 사가/ });
+    expect(within(tile).getByText("접수 2건")).toBeInTheDocument();
+    expect(within(tile).getByText("라운지 새 글 5건")).toBeInTheDocument();
+    expect(tile).toHaveAttribute("title", "아르카나 사가 · 접수 2건 · 라운지 새 글 5건");
+    const other = screen.getByRole("link", { name: /여신의 검/ });
+    expect(within(other).queryByText(/라운지 새 글/)).not.toBeInTheDocument();
+  });
+
   it("names the add-game button for assistive tech", () => {
     render(<GameRail games={games} />);
     expect(screen.getByRole("button", { name: "게임 추가" })).toBeInTheDocument();

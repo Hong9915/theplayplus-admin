@@ -27,6 +27,17 @@ function NewBadge({ pending }: { pending: number }) {
   );
 }
 
+/** 네이버 라운지의 안 읽은 유저 글·댓글. 접수 배지와 헷갈리지 않게 아래쪽 모서리에 네이버 초록으로 둔다. */
+function LoungeBadge({ unread }: { unread: number }) {
+  if (unread <= 0) return null;
+  return (
+    <span className="absolute -bottom-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#03C75A] text-white text-[10px] font-semibold leading-[18px] text-center ring-2 ring-panel tabular-nums">
+      <span aria-hidden="true">{unread > 99 ? "99+" : unread}</span>
+      <span className="sr-only">라운지 새 글 {unread}건</span>
+    </span>
+  );
+}
+
 /** 게임 없이 접수된 서비스 문의(제휴·기타)로 가는 고정 타일. 게임 목록 맨 위에 놓인다. */
 function ServiceTile({ active, pending }: { active: boolean; pending: number }) {
   const label = `${SERVICE_SCOPE_TITLE} (제휴·기타)`;
@@ -52,10 +63,13 @@ function ServiceTile({ active, pending }: { active: boolean; pending: number }) 
 export default function GameRail({
   games,
   newCounts = {},
+  loungeCounts = {},
 }: {
   games: GameRow[];
   /** 게임별 접수(new) 건수. 없으면 배지를 그리지 않는다. */
   newCounts?: Record<string, number>;
+  /** 게임별 네이버 라운지 안 읽은 건수. */
+  loungeCounts?: Record<string, number>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -105,11 +119,15 @@ export default function GameRail({
             const active = pathname.startsWith(`/games/${game.id}/`);
             const logoUrl = getGameLogoPublicUrl(game.logoPath);
             const pending = newCounts[game.id] ?? 0;
+            const loungeUnread = loungeCounts[game.id] ?? 0;
+            const title = [game.name, pending > 0 ? `접수 ${pending}건` : null, loungeUnread > 0 ? `라운지 새 글 ${loungeUnread}건` : null]
+              .filter(Boolean)
+              .join(" · ");
             return (
               <Link
                 key={game.id}
                 href={`/games/${game.id}/inquiries`}
-                title={pending > 0 ? `${game.name} · 접수 ${pending}건` : game.name}
+                title={title}
                 aria-current={active ? "page" : undefined}
                 className={`${TILE} ${active ? TILE_ACTIVE : TILE_IDLE}`}
               >
@@ -117,10 +135,12 @@ export default function GameRail({
                   <Image src={logoUrl} alt={game.name} width={40} height={40} className="w-10 h-10 rounded-xl object-cover" unoptimized />
                 ) : (
                   <span className="w-10 h-10 bg-ground border border-line rounded-xl flex items-center justify-center font-semibold text-muted">
-                    {game.name.charAt(0)}
+                    <span aria-hidden="true">{game.name.charAt(0)}</span>
+                    <span className="sr-only">{game.name}</span>
                   </span>
                 )}
                 <NewBadge pending={pending} />
+                <LoungeBadge unread={loungeUnread} />
               </Link>
             );
           })}
