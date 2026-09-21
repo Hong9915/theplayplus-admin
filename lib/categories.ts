@@ -8,6 +8,8 @@ export interface GameRow {
   logoPath: string | null;
   ownerName: string | null;
   createdAt: string;
+  /** 연결된 네이버 게임 라운지 ID. 없으면 라운지 알림을 쓰지 않는 게임. */
+  naverLoungeId?: string | null;
 }
 
 export type InquiryTypePriority = "urgent" | "high" | "normal" | "low";
@@ -168,6 +170,7 @@ function mapGameRow(row: {
   logo_path: string | null;
   owner_name: string | null;
   created_at: string;
+  naver_lounge_id?: string | null;
 }): GameRow {
   return {
     id: row.id,
@@ -176,6 +179,7 @@ function mapGameRow(row: {
     logoPath: row.logo_path,
     ownerName: row.owner_name,
     createdAt: row.created_at,
+    naverLoungeId: row.naver_lounge_id ?? null,
   };
 }
 

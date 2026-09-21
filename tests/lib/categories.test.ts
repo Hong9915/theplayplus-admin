@@ -152,6 +152,7 @@ describe("listGames", () => {
             logo_path: "game-1/logo.png",
             owner_name: "홍길동",
             created_at: "2026-01-01T00:00:00.000Z",
+            naver_lounge_id: null,
           },
         ],
         error: null,
@@ -169,6 +170,7 @@ describe("listGames", () => {
         logoPath: "game-1/logo.png",
         ownerName: "홍길동",
         createdAt: "2026-01-01T00:00:00.000Z",
+        naverLoungeId: null,
       },
     ]);
   });
