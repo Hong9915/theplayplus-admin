@@ -52,7 +52,7 @@ describe("GameRail", () => {
     expect(within(service).queryByText(/접수/)).not.toBeInTheDocument();
   });
 
-  // 로고 없는 게임 타일의 접근성 이름은 첫 글자("아")뿐이라 title로 찾는다.
+  // 로고 없는 게임 타일도 sr-only로 게임 이름을 읽어 준다. 여기서는 배지 문구가 섞이지 않는 title로 찾는다.
   it("marks the service tile current under /service/ and the game tile under /games/{id}/", () => {
     pathname = "/service/inquiries/i1?status=new";
     const { unmount } = render(<GameRail games={games} />);

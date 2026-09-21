@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import LoungeItemList from "@/components/lounge/LoungeItemList";
 import type { LoungeItemRow } from "@/lib/lounge-items";
@@ -32,6 +32,20 @@ describe("LoungeItemList", () => {
     await userEvent.click(links[0]);
     expect(global.fetch).toHaveBeenCalledWith("/api/lounge/items/i1/read", { method: "POST" });
     expect(within(links[0]).queryByText("안 읽음")).not.toBeInTheDocument();
+  });
+
+  it("marks read on a middle click but not on a right click (context menu)", async () => {
+    const auxClick = (target: HTMLElement, button: number) => fireEvent(target, new MouseEvent("auxclick", { bubbles: true, button }));
+    render(<LoungeItemList gameId="g1" items={[item()]} />);
+    const link = screen.getByRole("link");
+
+    auxClick(link, 2);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(within(link).getByText("안 읽음")).toBeInTheDocument();
+
+    auxClick(link, 1);
+    expect(global.fetch).toHaveBeenCalledWith("/api/lounge/items/i1/read", { method: "POST" });
+    await waitFor(() => expect(within(link).queryByText("안 읽음")).not.toBeInTheDocument());
   });
 
   it("does not call the api for an item that is already read", async () => {

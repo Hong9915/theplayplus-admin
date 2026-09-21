@@ -80,6 +80,20 @@ describe("fetchLoungePosts", () => {
     // 본문 JSON이 깨져도 글은 살린다. GM 글은 isUser=false.
     expect(posts[1]).toMatchObject({ feedId: 8207656, bodyText: "", isUser: false, boardName: null, commentCount: 0 });
   });
+  it("keeps the title as is when an entity is out of range instead of failing the whole lounge", async () => {
+    stubFetch({ content: { feeds: [{ ...feedResponse.content.feeds[0], feed: { ...feedResponse.content.feeds[0].feed, title: "범위 밖 &#x110000; &#99999999; &amp;" } }] } });
+    const posts = await fetchLoungePosts("L1");
+    expect(posts[0].title).toBe("범위 밖 &#x110000; &#99999999; &");
+  });
+
+  it("drops a post link that is not https and falls back to the lounge itself", async () => {
+    const link = (pc: string) => ({ ...feedResponse.content.feeds[0], feedLink: { pc } });
+    stubFetch({ content: { feeds: [link("javascript:alert(1)"), link("//game.naver.com/lounge/L1/board/detail/1")] } });
+    const posts = await fetchLoungePosts("L1");
+    expect(posts[0].url).toBe("https://game.naver.com/lounge/L1");
+    expect(posts[1].url).toBe("https://game.naver.com/lounge/L1");
+  });
+
   it("throws on a non-ok response and on an unexpected shape", async () => {
     stubFetch({}, false);
     await expect(fetchLoungePosts("L1")).rejects.toThrow();

@@ -98,11 +98,18 @@ function parseKstDate(value: string): string {
 
 const NAMED_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
 
+const MAX_CODE_POINT = 0x10ffff;
+
+/** 유니코드 범위를 벗어난 값은 String.fromCodePoint가 던진다. 제목 한 줄 때문에 게임 전체가 실패하지 않게 원문을 둔다. */
+function fromCodePoint(code: number, whole: string): string {
+  return Number.isInteger(code) && code >= 0 && code <= MAX_CODE_POINT ? String.fromCodePoint(code) : whole;
+}
+
 /** 제목은 이모지 등이 `&#x1f430;` 꼴로 온다. */
 function decodeEntities(text: string): string {
   return text.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-z]+);/g, (whole, body: string) => {
-    if (body.startsWith("#x")) return String.fromCodePoint(parseInt(body.slice(2), 16));
-    if (body.startsWith("#")) return String.fromCodePoint(parseInt(body.slice(1), 10));
+    if (body.startsWith("#x")) return fromCodePoint(parseInt(body.slice(2), 16), whole);
+    if (body.startsWith("#")) return fromCodePoint(parseInt(body.slice(1), 10), whole);
     return NAMED_ENTITIES[body] ?? whole;
   });
 }
@@ -134,6 +141,14 @@ function extractEditorText(contents: string | null | undefined): string {
   return paragraphs.join("\n").trim();
 }
 
+/**
+ * 글 주소는 관리자 화면과 Slack에서 그대로 링크가 되므로 `https://`로 시작할 때만 쓴다.
+ * 아니면 그 라운지 홈으로 보낸다(주소 없이 저장할 수는 없다 — `lounge_items.url`은 not null).
+ */
+function safePostUrl(pc: string, loungeId: string): string {
+  return pc.startsWith("https://") ? pc : `https://game.naver.com/lounge/${loungeId}`;
+}
+
 async function getJson(url: string): Promise<unknown> {
   const response = await fetch(url, { headers: HEADERS, cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!response.ok) {
@@ -154,7 +169,7 @@ export async function fetchLoungePosts(loungeId: string): Promise<LoungePost[]> 
     nickname: entry.user?.nickname ?? null,
     isUser: entry.user?.userRoleCode === USER_ROLE,
     postedAt: parseKstDate(entry.feed.createdDate),
-    url: entry.feedLink.pc,
+    url: safePostUrl(entry.feedLink.pc, loungeId),
     commentCount: entry.comment?.totalCount ?? 0,
   }));
 }

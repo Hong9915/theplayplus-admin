@@ -93,7 +93,10 @@ export default function LoungeItemList({ gameId, items }: { gameId: string; item
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => markRead(item.id)}
-                onAuxClick={() => markRead(item.id)}
+                // 가운데 버튼(새 탭)만. 오른쪽 버튼도 auxclick을 내는데, 메뉴만 열고 읽지 않았을 수 있다.
+                onAuxClick={(event) => {
+                  if (event.button === 1) markRead(item.id);
+                }}
                 className={`flex flex-col gap-1 px-4 py-3 hover:bg-ground transition-colors ${item.isUser ? "" : "opacity-60"}`}
               >
                 <span className="flex items-center gap-2 text-xs text-muted">
