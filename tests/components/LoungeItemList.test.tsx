@@ -16,7 +16,7 @@ const item = (over: Partial<LoungeItemRow> = {}): LoungeItemRow => ({
 describe("LoungeItemList", () => {
   beforeEach(() => {
     refresh.mockReset();
-    global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: true }) }) as never;
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) }) as never;
   });
 
   it("links each item to the lounge post in a new tab and marks it read on click", async () => {
@@ -54,5 +54,33 @@ describe("LoungeItemList", () => {
     render(<LoungeItemList gameId="g1" items={[]} />);
     expect(screen.getByText(/아직 가져온 글이 없습니다/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "모두 읽음" })).not.toBeInTheDocument();
+  });
+
+  it("rolls back the read state and warns when marking one item read fails, and retries on the next click", async () => {
+    vi.mocked(global.fetch).mockRejectedValueOnce(new Error("network"));
+    render(<LoungeItemList gameId="g1" items={[item()]} />);
+    const link = screen.getByRole("link");
+    link.addEventListener("click", (event) => event.preventDefault());
+
+    await userEvent.click(link);
+    expect(await screen.findByText("읽음 처리에 실패했습니다. 다시 시도해주세요.")).toBeInTheDocument();
+    expect(within(link).getByText("안 읽음")).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
+
+    await userEvent.click(link);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(within(link).queryByText("안 읽음")).not.toBeInTheDocument();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps items unread and the button visible, and warns when marking everything read fails", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: false }) } as never);
+    render(<LoungeItemList gameId="g1" items={[item(), item({ id: "i2", naverId: 200 })]} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "모두 읽음" }));
+    expect(await screen.findByText("읽음 처리에 실패했습니다. 다시 시도해주세요.")).toBeInTheDocument();
+    expect(screen.getAllByText("안 읽음")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "모두 읽음" })).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
