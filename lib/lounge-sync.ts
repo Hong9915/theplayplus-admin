@@ -184,7 +184,12 @@ export async function syncAllLounges(supabase: SupabaseClient, options: SyncOpti
   /** 남은 시간이 없으면 새 댓글 조회·새 게임을 시작하지 않는다. 남은 일은 다음 실행(5분 뒤)이 한다. */
   const outOfTime = () => clock() - startedAt >= BUDGET_MS;
 
-  const { data, error } = await supabase.from("games").select("id, name, naver_lounge_id, lounge_synced_at").not("naver_lounge_id", "is", null);
+  // 가장 오래전에 확인한 게임부터 — 앞 게임이 시간을 다 써도 밀린 게임이 다음 실행에서 맨 앞으로 온다.
+  const { data, error } = await supabase
+    .from("games")
+    .select("id, name, naver_lounge_id, lounge_synced_at")
+    .not("naver_lounge_id", "is", null)
+    .order("lounge_synced_at", { ascending: true, nullsFirst: true });
   if (error || !data) {
     console.warn("[lounge-sync] 게임 목록 실패", error);
     return [];

@@ -32,9 +32,11 @@ function fakeSupabase(games: GameSeed[], seedItems: Row[] = [], options: { failG
       const filters: Array<[string, unknown]> = [];
       let op: "select" | "upsert" | "update" = "select";
       let payload: Row[] | Row = [];
+      let orderBy: string | null = null;
       const builder = {
         select: () => builder,
         not: () => builder,
+        order: (col: string) => ((orderBy = col), builder),
         eq: (col: string, value: unknown) => (filters.push([col, value]), builder),
         in: (col: string, values: unknown[]) => (filters.push([col, values]), builder),
         upsert: (rows: Row[]) => ((op = "upsert"), (payload = rows), builder),
@@ -57,6 +59,12 @@ function fakeSupabase(games: GameSeed[], seedItems: Row[] = [], options: { failG
             gameUpdates.push({ id, patch: payload as Row });
             // 실제 DB처럼 seed에도 반영한다 — 두 번 실행하는 테스트가 갱신된 기준 시각을 보게.
             Object.assign(games.find((g) => g.id === id) ?? {}, payload as Row);
+          }
+          if (op === "select" && orderBy) {
+            // ascending, nulls first
+            const key = orderBy as keyof GameSeed;
+            const rank = (g: GameSeed) => (g[key] == null ? "" : String(g[key]));
+            return [...games].sort((a, b) => rank(a).localeCompare(rank(b)));
           }
           return games;
         }
@@ -235,6 +243,17 @@ describe("syncAllLounges", () => {
     expect(results.map((r) => r.gameId)).toEqual(["g1"]);
     expect(fetchLoungePosts).toHaveBeenCalledTimes(1);
     expect(supabase.gameUpdates).toEqual([{ id: "g1", patch: { lounge_synced_at: NOW.toISOString() } }]);
+  });
+
+  it("starts with the least recently synced game, so a game skipped for time goes first next run", async () => {
+    let elapsed = 0;
+    fetchLoungePosts.mockImplementation(async () => ((elapsed += 45_000), [post()]));
+    const supabase = fakeSupabase([game(), game({ id: "g2", name: "둘째", naver_lounge_id: "L2" })]);
+    await syncAllLounges(supabase as never, { now: NOW, clock: () => elapsed });
+    // g1만 기준 시각이 앞으로 갔으니 다음 실행은 밀렸던 g2부터 읽는다.
+    elapsed = 0;
+    const results = await syncAllLounges(supabase as never, { now: LATER, clock: () => elapsed });
+    expect(results.map((r) => r.gameId)).toEqual(["g2"]);
   });
 
   it("hands each game's result to onGameSynced as soon as that game finishes", async () => {
