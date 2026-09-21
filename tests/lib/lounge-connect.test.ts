@@ -5,24 +5,38 @@ vi.mock("@/lib/naver-lounge", async (original) => ({ ...(await original<typeof i
 
 import { connectLounge } from "@/lib/lounge-connect";
 
-function fakeSupabase(current: string | null, updateError: unknown = null) {
+interface FakeOptions {
+  /** 현재 라운지 조회 실패 */
+  selectError?: unknown;
+  /** games 갱신 실패 */
+  updateError?: unknown;
+  /** 이전 라운지 항목 삭제 실패 */
+  deleteError?: unknown;
+}
+
+function fakeSupabase(current: string | null, options: FakeOptions = {}) {
   const calls = { updates: [] as unknown[], deletes: 0 };
   const client = {
     calls,
     from(table: string) {
       if (table === "games") {
         return {
-          select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { naver_lounge_id: current }, error: null }) }) }),
-          update: (patch: unknown) => (calls.updates.push(patch), { eq: () => Promise.resolve({ error: updateError }) }),
+          select: () => ({
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: options.selectError ? null : { naver_lounge_id: current }, error: options.selectError ?? null }) }),
+          }),
+          update: (patch: unknown) => (calls.updates.push(patch), { eq: () => Promise.resolve({ error: options.updateError ?? null }) }),
         };
       }
-      return { delete: () => ({ eq: () => ((calls.deletes += 1), Promise.resolve({ error: null })) }) };
+      return { delete: () => ({ eq: () => ((calls.deletes += 1), Promise.resolve({ error: options.deleteError ?? null })) }) };
     },
   };
   return client;
 }
 
-beforeEach(() => fetchLoungePosts.mockReset().mockResolvedValue([]));
+beforeEach(() => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  fetchLoungePosts.mockReset().mockResolvedValue([]);
+});
 
 describe("connectLounge", () => {
   it("saves the id from a url, resets the watermark, and clears old items", async () => {
@@ -63,7 +77,21 @@ describe("connectLounge", () => {
   });
 
   it("reports save_failed when the update fails", async () => {
-    const supabase = fakeSupabase(null, { message: "db" });
+    const supabase = fakeSupabase(null, { updateError: { message: "db" } });
     expect(await connectLounge(supabase as never, "g1", "Abc")).toEqual({ ok: false, error: "save_failed" });
+  });
+
+  it("reports save_failed when the current lounge cannot be read — a disconnect must not look like success", async () => {
+    const supabase = fakeSupabase("Old", { selectError: { message: "db" } });
+    expect(await connectLounge(supabase as never, "g1", "   ")).toEqual({ ok: false, error: "save_failed" });
+    expect(supabase.calls.updates).toEqual([]);
+    expect(supabase.calls.deletes).toBe(0);
+  });
+
+  it("keeps the old lounge connected when clearing its items fails", async () => {
+    const supabase = fakeSupabase("Old_Lounge", { deleteError: { message: "db" } });
+    expect(await connectLounge(supabase as never, "g1", "New_Lounge")).toEqual({ ok: false, error: "save_failed" });
+    expect(supabase.calls.deletes).toBe(1);
+    expect(supabase.calls.updates).toEqual([]);
   });
 });

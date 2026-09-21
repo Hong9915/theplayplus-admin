@@ -17,7 +17,13 @@ export async function connectLounge(supabase: SupabaseClient, gameId: string, in
     return { ok: false, error: "invalid_lounge" };
   }
 
-  const { data: current } = await supabase.from("games").select("naver_lounge_id").eq("id", gameId).maybeSingle();
+  // 조회가 실패하면 current가 비어 "이미 같다"로 새어 나간다 — 특히 연결 해제(loungeId = null)가
+  // 아무것도 안 하고 성공으로 보인다. 읽지 못했으면 저장 실패로 알린다.
+  const { data: current, error: readError } = await supabase.from("games").select("naver_lounge_id").eq("id", gameId).maybeSingle();
+  if (readError) {
+    console.warn("[lounge-connect] 현재 라운지를 읽지 못함", { gameId, readError });
+    return { ok: false, error: "save_failed" };
+  }
   if ((current?.naver_lounge_id ?? null) === loungeId) {
     return { ok: true, loungeId };
   }
@@ -31,10 +37,16 @@ export async function connectLounge(supabase: SupabaseClient, gameId: string, in
     }
   }
 
+  // 이전 라운지 항목을 먼저 지운다. 지우지 못하면 게임은 그대로 둬 두 라운지의 글이 섞이지 않게 한다.
+  const { error: deleteError } = await supabase.from("lounge_items").delete().eq("game_id", gameId);
+  if (deleteError) {
+    console.warn("[lounge-connect] 이전 라운지 항목을 지우지 못함", { gameId, deleteError });
+    return { ok: false, error: "save_failed" };
+  }
+
   const { error } = await supabase.from("games").update({ naver_lounge_id: loungeId, lounge_synced_at: null }).eq("id", gameId);
   if (error) {
     return { ok: false, error: "save_failed" };
   }
-  await supabase.from("lounge_items").delete().eq("game_id", gameId);
   return { ok: true, loungeId };
 }
