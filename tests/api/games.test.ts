@@ -7,6 +7,7 @@ import * as requireAdminSessionModule from "@/lib/require-admin-session";
 import * as opsDocModule from "@/lib/ops-doc";
 import * as sourcesModule from "@/lib/assistant-sources";
 import * as loungeConnectModule from "@/lib/lounge-connect";
+import * as gamePageImportModule from "@/lib/game-page-import";
 
 vi.mock("@/lib/supabase", () => ({
   getSupabaseServerClient: vi.fn(),
@@ -36,6 +37,11 @@ vi.mock("@/lib/assistant-sources", () => ({
 
 vi.mock("@/lib/lounge-connect", () => ({
   connectLounge: vi.fn(),
+}));
+
+vi.mock("@/lib/game-page-import", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/game-page-import")>()),
+  createSitePageForNewGame: vi.fn(),
 }));
 
 function buildFormData(overrides: Record<string, string> = {}) {
@@ -74,6 +80,7 @@ describe("POST /api/games", () => {
       .mockResolvedValue({ docId: "doc-1", title: "여신키우기 운영 현황 (AI 답변 근거)", url: "https://docs.google.com/document/d/doc-1/edit", unshared: [] });
     vi.mocked(sourcesModule.insertSource).mockReset().mockResolvedValue({ id: "src-1" } as never);
     vi.mocked(loungeConnectModule.connectLounge).mockReset();
+    vi.mocked(gamePageImportModule.createSitePageForNewGame).mockReset().mockResolvedValue(undefined);
   });
 
   it("creates the ops doc shared with the creator and registers it as a doc source", async () => {
@@ -292,5 +299,52 @@ describe("POST /api/games", () => {
     expect(key).toMatch(/^game-1\/[A-Za-z0-9-]+-logo\.png$/);
     expect(json.game.logoPath).toBe(key);
     expect(json.warning).toBeUndefined();
+  });
+
+  it("does not create a website page when the website fields are empty", async () => {
+    mockSupabaseSuccess();
+    const json = await (await POST(new Request("http://localhost/api/games", { method: "POST", body: buildFormData() }))).json();
+    expect(json.success).toBe(true);
+    expect(gamePageImportModule.createSitePageForNewGame).not.toHaveBeenCalled();
+  });
+
+  it("creates the website page from the website fields", async () => {
+    mockSupabaseSuccess();
+    const body = buildFormData({
+      onestoreUrl: "https://onesto.re/0001007974",
+      onestoreSync: "true",
+      slug: "goddess-idle",
+      releaseStatus: "live",
+      published: "true",
+    });
+    const json = await (await POST(new Request("http://localhost/api/games", { method: "POST", body }))).json();
+    expect(json.success).toBe(true);
+    expect(gamePageImportModule.createSitePageForNewGame).toHaveBeenCalledWith(expect.anything(), "game-1", "여신키우기", {
+      onestoreUrl: "https://onesto.re/0001007974",
+      googlePlayUrl: "",
+      appStoreUrl: "",
+      slug: "goddess-idle",
+      releaseStatus: "live",
+      published: true,
+      onestoreSync: true,
+    });
+  });
+
+  it("passes the website page warning through", async () => {
+    mockSupabaseSuccess();
+    vi.mocked(gamePageImportModule.createSitePageForNewGame).mockResolvedValue("site_slug_taken");
+    const json = await (await POST(new Request("http://localhost/api/games", { method: "POST", body: buildFormData({ slug: "goddess-idle" }) }))).json();
+    expect(json.success).toBe(true);
+    expect(json.warning).toBe("site_slug_taken");
+  });
+
+  it("rejects bad website fields before creating anything", async () => {
+    const client = mockSupabaseSuccess();
+    const response = await POST(
+      new Request("http://localhost/api/games", { method: "POST", body: buildFormData({ slug: "Goddess Idle", published: "true", onestoreUrl: "onesto.re" }) })
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).fields).toEqual(expect.arrayContaining(["slug", "onestoreUrl"]));
+    expect(client.from).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { gameFormSchema } from "@/lib/game-schema";
+import { gameFormSchema, gameSiteFormSchema } from "@/lib/game-schema";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { buildGameLogoPath } from "@/lib/storage";
 import { createDefaultCategoriesForGame } from "@/lib/categories";
@@ -9,6 +9,9 @@ import { getAdminSession } from "@/lib/require-admin-session";
 import { createOpsDoc, opsDocEditors, isOpsDocConfigured } from "@/lib/ops-doc";
 import { insertSource } from "@/lib/assistant-sources";
 import { connectLounge } from "@/lib/lounge-connect";
+import { createSitePageForNewGame, hasSiteInput } from "@/lib/game-page-import";
+
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   const session = await getAdminSession();
@@ -25,8 +28,20 @@ export async function POST(request: Request) {
     loungeUrl: formData.get("loungeUrl") ?? "",
   });
 
-  if (!parsed.success) {
-    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
+  // 웹사이트 칸은 게임을 만들기 전에 검사해, 주소 형식이 틀렸으면 아무것도 만들지 않는다.
+  const site = gameSiteFormSchema.safeParse({
+    onestoreUrl: formData.get("onestoreUrl") ?? "",
+    googlePlayUrl: formData.get("googlePlayUrl") ?? "",
+    appStoreUrl: formData.get("appStoreUrl") ?? "",
+    slug: formData.get("slug") ?? "",
+    releaseStatus: formData.get("releaseStatus") || undefined,
+    published: formData.get("published") === "true",
+    onestoreSync: formData.get("onestoreSync") === "true",
+  });
+
+  if (!parsed.success || !site.success) {
+    const fields = site.success ? [] : Array.from(new Set(site.error.issues.map((issue) => String(issue.path[0]))));
+    return NextResponse.json({ success: false, error: "invalid_input", ...(fields.length ? { fields } : {}) }, { status: 400 });
   }
 
   const input = parsed.data;
@@ -119,6 +134,12 @@ export async function POST(request: Request) {
       console.error("[api/games] lounge connect failed", { gameId: inserted.id, error: lounge.error });
       warning = warning ?? "lounge_unreachable";
     }
+  }
+
+  // 웹사이트 게임 페이지(선택). 원스토어 주소가 있으면 내용과 이미지를 원스토어에서 채운다.
+  if (hasSiteInput(site.data)) {
+    const siteWarning = await createSitePageForNewGame(supabase, inserted.id, input.name, site.data);
+    warning = warning ?? siteWarning;
   }
 
   return NextResponse.json(
