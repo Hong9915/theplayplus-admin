@@ -2,32 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { listGames } from "@/lib/categories";
-import { emptyGamePage, getGamePage, listNotices } from "@/lib/game-pages";
+import { emptyGamePage, getGamePage } from "@/lib/game-pages";
 import GamePageEditor from "@/components/site/GamePageEditor";
-import NoticeManager from "@/components/site/NoticeManager";
 
 export const dynamic = "force-dynamic";
 
-const TABS = [
-  { key: "page", label: "게임 페이지" },
-  { key: "notices", label: "공지사항" },
-] as const;
-
-export default async function GameSitePage({
-  params,
-  searchParams,
-}: {
-  params: { gameId: string };
-  searchParams: { tab?: string };
-}) {
+export default async function GameSitePage({ params }: { params: { gameId: string } }) {
   const supabase = getSupabaseServerClient();
-  const tab = searchParams.tab === "notices" ? "notices" : "page";
 
-  const [games, page, notices] = await Promise.all([
-    listGames(supabase),
-    getGamePage(supabase, params.gameId),
-    tab === "notices" ? listNotices(supabase, params.gameId) : Promise.resolve([]),
-  ]);
+  const [games, page] = await Promise.all([listGames(supabase), getGamePage(supabase, params.gameId)]);
 
   const game = games.find((entry) => entry.id === params.gameId);
   if (!game) {
@@ -53,29 +36,12 @@ export default async function GameSitePage({
         </span>
       </header>
 
-      <nav className="flex gap-1 border-b border-line" aria-label="웹사이트 게임 페이지">
-        {TABS.map((item) => {
-          const active = item.key === tab;
-          return (
-            <Link
-              key={item.key}
-              href={item.key === "page" ? `/games/${params.gameId}/site` : `/games/${params.gameId}/site?tab=notices`}
-              aria-current={active ? "page" : undefined}
-              className={`px-3 py-2 text-sm -mb-px border-b-2 transition-colors ${
-                active ? "border-accent text-ink font-semibold" : "border-transparent text-muted hover:text-ink"
-              }`}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {tab === "page" ? (
-        <GamePageEditor key={current.gameId} page={current} siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? null} />
-      ) : (
-        <NoticeManager gameId={game.id} notices={notices} />
-      )}
+      <GamePageEditor
+        key={current.gameId}
+        page={current}
+        loungeId={game.naverLoungeId ?? null}
+        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? null}
+      />
     </div>
   );
 }

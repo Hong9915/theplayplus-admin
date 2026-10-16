@@ -64,7 +64,16 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
-export default function GamePageEditor({ page, siteUrl }: { page: GamePage; siteUrl: string | null }) {
+export default function GamePageEditor({
+  page,
+  loungeId,
+  siteUrl,
+}: {
+  page: GamePage;
+  /** 문의함에서 연결한 네이버 라운지 ID. 웹사이트 공지사항과 라운지 버튼이 여기서 나온다. */
+  loungeId: string | null;
+  siteUrl: string | null;
+}) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(() => toDraft(page));
   const [invalid, setInvalid] = useState<string[]>([]);
@@ -195,6 +204,16 @@ export default function GamePageEditor({ page, siteUrl }: { page: GamePage; site
         </div>
       </Section>
 
+      <OneStoreImport
+        gameId={page.gameId}
+        url={draft.onestoreUrl}
+        onUrlChange={(value) => set("onestoreUrl", value)}
+        onImported={(fields) => {
+          setDraft((current) => ({ ...current, ...fields }));
+          setInvalid([]);
+        }}
+      />
+
       <Section title="기본 정보">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="게임 제목" error={errorFor("titleKo")}>
@@ -229,9 +248,6 @@ export default function GamePageEditor({ page, siteUrl }: { page: GamePage; site
           <Field label="앱스토어" error={errorFor("appStoreUrl")}>
             <input {...text("appStoreUrl")} type="url" placeholder="https://apps.apple.com/…" />
           </Field>
-          <Field label="네이버 라운지" error={errorFor("naverLoungeUrl")}>
-            <input {...text("naverLoungeUrl")} type="url" placeholder="https://game.naver.com/lounge/…" />
-          </Field>
           <Field label="유튜브 트레일러 ID" error={errorFor("youtubeId")}>
             <input {...text("youtubeId")} placeholder="Ky1PVk-TXu8" spellCheck={false} />
           </Field>
@@ -242,6 +258,29 @@ export default function GamePageEditor({ page, siteUrl }: { page: GamePage; site
       </Section>
 
       <ImageSection page={page} />
+
+      <Section title="공지사항" description="웹사이트 공지사항 탭은 네이버 라운지의 '공지사항' 게시판 글을 그대로 보여줍니다.">
+        {loungeId ? (
+          <p className="text-sm">
+            연결된 라운지:{" "}
+            <a
+              href={`https://game.naver.com/lounge/${loungeId}/home`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent hover:underline"
+            >
+              {loungeId} ↗
+            </a>
+            <span className="block text-xs text-muted mt-1">
+              라운지에 공지를 올리면 10분 안에 웹사이트에도 나옵니다. 상세 페이지의 &lsquo;네이버 라운지 바로가기&rsquo; 버튼도 이 라운지로 연결됩니다.
+            </span>
+          </p>
+        ) : (
+          <p className="text-sm text-muted">
+            연결된 네이버 라운지가 없어 웹사이트 공지사항 탭이 비어 있습니다. 문의함 왼쪽 아래 &lsquo;네이버 라운지 연결&rsquo;에서 연결하세요.
+          </p>
+        )}
+      </Section>
 
       <details className="bg-panel border border-line rounded-lg p-5 group">
         <summary className="cursor-pointer text-base font-bold">중국어·영어 (선택)</summary>
@@ -423,6 +462,117 @@ function ImageSection({ page }: { page: GamePage }) {
         )}
       </div>
       <StatusMessage className="text-sm">{error}</StatusMessage>
+    </Section>
+  );
+}
+
+type ImportedFields = Partial<Pick<Draft, "onestoreUrl" | "titleKo" | "genreKo" | "ageRating" | "taglineKo" | "descriptionKo">>;
+
+const IMPORT_ERRORS: Record<string, string> = {
+  invalid_url: "원스토어 상품 주소가 아닙니다. 예: https://onesto.re/0001007974",
+  not_found: "원스토어에서 이 상품을 찾지 못했습니다. 주소를 확인하세요.",
+  fetch_failed: "원스토어 페이지를 읽지 못했습니다. 잠시 뒤 다시 시도하세요.",
+};
+
+/** 원스토어 주소로 제목·장르·이용등급·한 줄 소개·게임 소개를 채우고, 고르면 스크린샷·대표 이미지도 가져온다. */
+function OneStoreImport({
+  gameId,
+  url,
+  onUrlChange,
+  onImported,
+}: {
+  gameId: string;
+  url: string;
+  onUrlChange: (value: string) => void;
+  onImported: (fields: ImportedFields) => void;
+}) {
+  const router = useRouter();
+  const [withImages, setWithImages] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "warning" | "error"; text: string } | null>(null);
+
+  async function handleImport() {
+    if (url.trim() === "") {
+      setMessage({ tone: "error", text: IMPORT_ERRORS.invalid_url });
+      return;
+    }
+    setLoading(true);
+    setMessage(null);
+
+    let json: {
+      success: boolean;
+      error?: string;
+      warning?: string;
+      product?: { url: string; title: string; genre: string | null; ageRating: string | null; tagline: string | null; description: string | null };
+      imported?: { card: boolean; screenshots: number };
+    };
+    try {
+      const response = await fetch(`/api/games/${gameId}/page/onestore`, {
+        method: "POST",
+        body: JSON.stringify({ url, images: withImages }),
+      });
+      json = await response.json();
+    } catch {
+      json = { success: false, error: "fetch_failed" };
+    }
+    setLoading(false);
+
+    if (!json.success || !json.product) {
+      setMessage({ tone: "error", text: IMPORT_ERRORS[json.error ?? ""] ?? IMPORT_ERRORS.fetch_failed });
+      return;
+    }
+
+    const { product, imported } = json;
+    const fields: ImportedFields = { onestoreUrl: product.url, titleKo: product.title };
+    if (product.genre) fields.genreKo = product.genre;
+    if (product.ageRating) fields.ageRating = product.ageRating;
+    if (product.tagline) fields.taglineKo = product.tagline;
+    if (product.description) fields.descriptionKo = product.description;
+    onImported(fields);
+
+    const parts = ["글을 채웠습니다. 확인한 뒤 아래 저장을 누르세요."];
+    if (imported && (imported.card || imported.screenshots > 0)) {
+      parts.push(`이미지는 바로 저장했습니다(${[imported.card ? "목록 카드" : null, imported.screenshots ? `스크린샷 ${imported.screenshots}장` : null].filter(Boolean).join(", ")}).`);
+      router.refresh();
+    }
+    if (json.warning) parts.push("일부 이미지는 가져오지 못했습니다.");
+    setMessage({ tone: json.warning ? "warning" : "success", text: parts.join(" ") });
+  }
+
+  return (
+    <Section title="원스토어에서 불러오기" description="원스토어 상품 페이지의 제목, 장르, 이용등급, 한 줄 소개, 게임 소개를 그대로 가져와 아래 칸을 채웁니다.">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <input
+          type="url"
+          value={url}
+          onChange={(event) => onUrlChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void handleImport();
+            }
+          }}
+          placeholder="https://onesto.re/0001007974"
+          aria-label="원스토어 상품 주소"
+          className={INPUT}
+        />
+        <button
+          type="button"
+          onClick={handleImport}
+          disabled={loading}
+          className="shrink-0 rounded border border-accent px-4 py-2 text-sm font-semibold text-accent hover:bg-accent hover:text-white disabled:opacity-60 transition-colors"
+        >
+          {loading ? "불러오는 중…" : "불러오기"}
+        </button>
+      </div>
+      <label className="flex items-center gap-2 text-sm cursor-pointer w-fit">
+        <input type="checkbox" checked={withImages} onChange={(event) => setWithImages(event.target.checked)} className="accent-accent" />
+        스크린샷과 대표 이미지도 가져오기
+        <span className="text-xs text-muted">(지금 올려 둔 스크린샷·목록 카드를 바꿉니다)</span>
+      </label>
+      <StatusMessage tone={message?.tone ?? "muted"} className="text-sm">
+        {message?.text}
+      </StatusMessage>
     </Section>
   );
 }

@@ -5,10 +5,8 @@ import {
   getGameSiteImageUrl,
   isStoragePath,
   mapGamePageRow,
-  noticeSchema,
   toGamePageColumns,
 } from "@/lib/game-pages";
-import { fromLocalInput } from "@/components/site/NoticeManager";
 
 function input(overrides: Record<string, unknown> = {}) {
   const { gameId: _g, kvPath: _k, cardPath: _c, screenshotPaths: _s, updatedAt: _u, ...rest } = emptyGamePage("game-1", "여신키우기");
@@ -73,18 +71,5 @@ describe("image paths", () => {
     expect(isStoragePath("/games/goddess-idle/kv-wide.png")).toBe(false);
     expect(isStoragePath("g/1-kv.png")).toBe(true);
     expect(isStoragePath(null)).toBe(false);
-  });
-});
-
-describe("notices", () => {
-  it("validates a notice and accepts a null publish date", () => {
-    expect(noticeSchema.safeParse({ category: "maintenance", title: "점검", body: "내용", pinned: false, publishedAt: null }).success).toBe(true);
-    expect(noticeSchema.safeParse({ category: "other", title: "점검", body: "내용", pinned: false, publishedAt: null }).success).toBe(false);
-    expect(noticeSchema.safeParse({ category: "notice", title: " ", body: "내용", pinned: false, publishedAt: null }).success).toBe(false);
-  });
-
-  it("reads the datetime-local value as Seoul time", () => {
-    expect(fromLocalInput("2026-10-22T10:00")).toBe("2026-10-22T01:00:00.000Z");
-    expect(fromLocalInput("")).toBeNull();
   });
 });

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PUT } from "@/app/api/games/[gameId]/page/route";
-import { POST as postNotice } from "@/app/api/games/[gameId]/notices/route";
 import * as supabaseModule from "@/lib/supabase";
 import * as requireAdminSessionModule from "@/lib/require-admin-session";
 import { emptyGamePage } from "@/lib/game-pages";
@@ -19,10 +18,9 @@ function request(method: string, payload: unknown) {
 
 function mockClient(result: { data: unknown; error: { code?: string; message: string } | null }) {
   const upsert = vi.fn(() => ({ select: vi.fn(() => ({ single: vi.fn().mockResolvedValue(result) })) }));
-  const insert = vi.fn().mockResolvedValue({ error: result.error });
-  const client = { from: vi.fn(() => ({ upsert, insert })) };
+  const client = { from: vi.fn(() => ({ upsert })) };
   vi.mocked(supabaseModule.getSupabaseServerClient).mockReturnValue(client as never);
-  return { upsert, insert };
+  return { upsert };
 }
 
 const params = { params: { gameId: "game-1" } };
@@ -66,30 +64,5 @@ describe("PUT /api/games/[gameId]/page", () => {
     const response = await PUT(request("PUT", body({ slug: "goddess-idle" })), params);
     expect(response.status).toBe(409);
     expect((await response.json()).error).toBe("slug_taken");
-  });
-});
-
-describe("POST /api/games/[gameId]/notices", () => {
-  beforeEach(() => {
-    vi.mocked(requireAdminSessionModule.requireAdminSession).mockResolvedValue(true as never);
-  });
-
-  it("creates a notice for the game", async () => {
-    const { insert } = mockClient({ data: null, error: null });
-    const response = await postNotice(
-      request("POST", { category: "maintenance", title: "정기점검", body: "10시~12시", pinned: true, publishedAt: null }),
-      params
-    );
-    expect(response.status).toBe(200);
-    expect(insert).toHaveBeenCalledWith(
-      expect.objectContaining({ game_id: "game-1", category: "maintenance", title: "정기점검", pinned: true })
-    );
-    expect(insert.mock.calls[0][0]).not.toHaveProperty("published_at");
-  });
-
-  it("rejects an empty title", async () => {
-    mockClient({ data: null, error: null });
-    const response = await postNotice(request("POST", { category: "notice", title: "", body: "x", pinned: false, publishedAt: null }), params);
-    expect(response.status).toBe(400);
   });
 });

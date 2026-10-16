@@ -11,16 +11,6 @@ export const RELEASE_STATUS_LABELS: Record<ReleaseStatus, string> = {
   upcoming: "출시 예정",
 };
 
-export const NOTICE_CATEGORIES = ["notice", "maintenance", "update", "event"] as const;
-export type NoticeCategory = (typeof NOTICE_CATEGORIES)[number];
-
-export const NOTICE_CATEGORY_LABELS: Record<NoticeCategory, string> = {
-  notice: "공지",
-  maintenance: "점검",
-  update: "업데이트",
-  event: "이벤트",
-};
-
 export const IMAGE_KINDS = ["kv", "card", "screenshot"] as const;
 export type ImageKind = (typeof IMAGE_KINDS)[number];
 
@@ -47,7 +37,6 @@ const TEXT_FIELDS = [
   "onestoreUrl",
   "googlePlayUrl",
   "appStoreUrl",
-  "naverLoungeUrl",
   "youtubeId",
   "probabilityUrl",
 ] as const;
@@ -65,16 +54,6 @@ export interface GamePage extends GamePageText {
   cardPath: string | null;
   screenshotPaths: string[];
   updatedAt: string | null;
-}
-
-export interface GameNotice {
-  id: string;
-  gameId: string;
-  category: NoticeCategory;
-  title: string;
-  body: string;
-  pinned: boolean;
-  publishedAt: string;
 }
 
 const COLUMN: Record<TextField, string> = {
@@ -95,7 +74,6 @@ const COLUMN: Record<TextField, string> = {
   onestoreUrl: "onestore_url",
   googlePlayUrl: "google_play_url",
   appStoreUrl: "app_store_url",
-  naverLoungeUrl: "naver_lounge_url",
   youtubeId: "youtube_id",
   probabilityUrl: "probability_url",
 };
@@ -136,7 +114,6 @@ export const gamePageSchema = z
     onestoreUrl: httpUrl,
     googlePlayUrl: httpUrl,
     appStoreUrl: httpUrl,
-    naverLoungeUrl: httpUrl,
     youtubeId: z
       .string()
       .trim()
@@ -152,17 +129,6 @@ export const gamePageSchema = z
   });
 
 export type GamePageInput = z.infer<typeof gamePageSchema>;
-
-export const noticeSchema = z.object({
-  category: z.enum(NOTICE_CATEGORIES),
-  title: z.string().trim().min(1).max(200),
-  body: z.string().trim().min(1).max(20000),
-  pinned: z.boolean(),
-  /** 게시일. 비우면 지금. 예약 게시용으로 미래 시각도 받는다. */
-  publishedAt: z.string().datetime({ offset: true }).nullable(),
-});
-
-export type NoticeInput = z.infer<typeof noticeSchema>;
 
 type Row = Record<string, unknown>;
 
@@ -286,67 +252,4 @@ export function getGameSiteImageUrl(path: string | null): string | null {
 /** 버킷에 올린 파일인지. 웹사이트 public 폴더 경로는 지울 대상이 아니다. */
 export function isStoragePath(path: string | null): path is string {
   return Boolean(path) && !path!.startsWith("/") && !/^https?:\/\//.test(path!);
-}
-
-function mapNoticeRow(row: Row): GameNotice {
-  return {
-    id: row.id as string,
-    gameId: row.game_id as string,
-    category: row.category as NoticeCategory,
-    title: row.title as string,
-    body: row.body as string,
-    pinned: Boolean(row.pinned),
-    publishedAt: row.published_at as string,
-  };
-}
-
-const NOTICE_COLUMNS = "id, game_id, category, title, body, pinned, published_at";
-
-export async function listNotices(supabase: SupabaseClient, gameId: string): Promise<GameNotice[]> {
-  const { data, error } = await supabase
-    .from("game_notices")
-    .select(NOTICE_COLUMNS)
-    .eq("game_id", gameId)
-    .order("pinned", { ascending: false })
-    .order("published_at", { ascending: false });
-  if (error || !data) return [];
-  return (data as unknown as Row[]).map(mapNoticeRow);
-}
-
-function toNoticeColumns(input: NoticeInput): Row {
-  return {
-    category: input.category,
-    title: input.title,
-    body: input.body,
-    pinned: input.pinned,
-    ...(input.publishedAt ? { published_at: input.publishedAt } : {}),
-    updated_at: new Date().toISOString(),
-  };
-}
-
-export async function createNotice(supabase: SupabaseClient, gameId: string, input: NoticeInput): Promise<boolean> {
-  const { error } = await supabase.from("game_notices").insert({ game_id: gameId, ...toNoticeColumns(input) });
-  if (error) {
-    console.error("[game-pages] notice create failed", { gameId, message: error.message });
-    return false;
-  }
-  return true;
-}
-
-export async function updateNotice(supabase: SupabaseClient, id: string, input: NoticeInput): Promise<boolean> {
-  const { error } = await supabase.from("game_notices").update(toNoticeColumns(input)).eq("id", id);
-  if (error) {
-    console.error("[game-pages] notice update failed", { id, message: error.message });
-    return false;
-  }
-  return true;
-}
-
-export async function deleteNotice(supabase: SupabaseClient, id: string): Promise<boolean> {
-  const { error } = await supabase.from("game_notices").delete().eq("id", id);
-  if (error) {
-    console.error("[game-pages] notice delete failed", { id, message: error.message });
-    return false;
-  }
-  return true;
 }
