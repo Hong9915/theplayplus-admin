@@ -190,6 +190,9 @@ export default function InboxNav({
           <Link href={`/games/${game.id}/templates`} className={`${ITEM} h-8 ${ITEM_IDLE}`}>
             답변 템플릿
           </Link>
+          <Link href={`/games/${game.id}/site`} className={`${ITEM} h-8 ${ITEM_IDLE}`}>
+            웹사이트 게임 페이지
+          </Link>
           <LoungeConnectDialog gameId={game.id} loungeId={game.naverLoungeId ?? null} />
           <div className="px-2.5">
             <DeleteGameButton gameId={game.id} gameName={game.name} inquiryCount={counts?.total ?? 0} />
