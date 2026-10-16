@@ -75,6 +75,16 @@ describe("fetchOneStoreProduct", () => {
     expect(product.description).toContain("◆ 편안한 방치 플레이");
   });
 
+  it("does not depend on field order and skips other products' data", async () => {
+    const reordered = { badge: { badgeCd: "" }, ...PRODUCT };
+    const html = pageHtml(reordered).replace(
+      "<html><body>",
+      `<html><body><script>self.__next_f.push([1,${JSON.stringify('1:{"product":{"badge":null,"prodId":"0000000001","prodNm":"비슷한 게임"}}\n')}])</script>`
+    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(html, { status: 200 })));
+    expect((await fetchOneStoreProduct("0001007974")).title).toBe("여신키우기: 방치형 RPG");
+  });
+
   it("throws a not-found error for a missing product", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 404 })));
     await expect(fetchOneStoreProduct("0000000000")).rejects.toBeInstanceOf(OneStoreNotFoundError);

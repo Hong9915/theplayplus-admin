@@ -73,10 +73,8 @@ function readFlightStream(html: string): string {
   return stream;
 }
 
-/** 스트림에서 `{"prodId":"{id}","prodNm"` 로 시작하는 객체 하나를 괄호를 세어 잘라 낸다. */
-function extractProductObject(stream: string, productId: string): unknown {
-  const start = stream.indexOf(`{"prodId":"${productId}","prodNm"`);
-  if (start === -1) throw new Error("onestore product data not found");
+/** `start`의 `{`부터 짝이 맞는 `}`까지 잘라 JSON으로 읽는다. 잘려 있으면 null. */
+function readObjectAt(stream: string, start: number): unknown {
   let depth = 0;
   let inString = false;
   for (let i = start; i < stream.length; i += 1) {
@@ -88,12 +86,24 @@ function extractProductObject(stream: string, productId: string): unknown {
     }
     if (char === '"') inString = true;
     else if (char === "{") depth += 1;
-    else if (char === "}") {
-      depth -= 1;
-      if (depth === 0) return JSON.parse(stream.slice(start, i + 1));
+    else if (char === "}" && --depth === 0) return JSON.parse(stream.slice(start, i + 1));
+  }
+  return null;
+}
+
+/**
+ * 스트림의 `"product":{…}` 객체 중 prodId가 이 상품인 것을 찾는다. 필드 순서는 원스토어가 바꾼 적이
+ * 있어(2026-10-17, 앞에 badge가 붙음) 기대하지 않는다. 같은 페이지의 다른 상품(비슷한 게임 등)은 건너뛴다.
+ */
+function findProduct(stream: string, productId: string): unknown {
+  const key = '"product":{';
+  for (let at = stream.indexOf(key); at !== -1; at = stream.indexOf(key, at + key.length)) {
+    const candidate = readObjectAt(stream, at + key.length - 1);
+    if (candidate && typeof candidate === "object" && (candidate as { prodId?: unknown }).prodId === productId) {
+      return candidate;
     }
   }
-  throw new Error("onestore product data is truncated");
+  throw new Error("onestore product data not found");
 }
 
 function ageRatingLabel(grade: z.infer<typeof productSchema>["useGrade"]): string | null {
@@ -137,7 +147,7 @@ export async function fetchOneStoreProduct(productId: string): Promise<OneStoreP
   if (response.status === 404) throw new OneStoreNotFoundError(productId);
   if (!response.ok) throw new Error(`onestore request failed: ${response.status}`);
   const stream = readFlightStream(await response.text());
-  return mapOneStoreProduct(extractProductObject(stream, productId));
+  return mapOneStoreProduct(findProduct(stream, productId));
 }
 
 export class OneStoreNotFoundError extends Error {
