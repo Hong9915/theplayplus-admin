@@ -47,6 +47,8 @@ export type GamePageText = Record<TextField, string>;
 export interface GamePage extends GamePageText {
   gameId: string;
   published: boolean;
+  /** 켜면 웹사이트가 원스토어를 직접 읽어 제목·장르·이용등급·게임 소개·스크린샷을 보여준다. */
+  onestoreSync: boolean;
   slug: string;
   releaseStatus: ReleaseStatus;
   sortOrder: number;
@@ -90,6 +92,7 @@ const longText = z.string().max(10000);
 export const gamePageSchema = z
   .object({
     published: z.boolean(),
+    onestoreSync: z.boolean(),
     slug: z
       .string()
       .trim()
@@ -126,6 +129,12 @@ export const gamePageSchema = z
     if (!value.published) return;
     if (value.slug === "") ctx.addIssue({ code: "custom", path: ["slug"], message: "required_to_publish" });
     if (value.titleKo.trim() === "") ctx.addIssue({ code: "custom", path: ["titleKo"], message: "required_to_publish" });
+  })
+  // 자동 반영은 읽어 올 원스토어 주소가 있어야 한다.
+  .superRefine((value, ctx) => {
+    if (value.onestoreSync && value.onestoreUrl.trim() === "") {
+      ctx.addIssue({ code: "custom", path: ["onestoreUrl"], message: "required_to_sync" });
+    }
   });
 
 export type GamePageInput = z.infer<typeof gamePageSchema>;
@@ -135,6 +144,7 @@ type Row = Record<string, unknown>;
 const PAGE_COLUMNS = [
   "game_id",
   "published",
+  "onestore_sync",
   "slug",
   "release_status",
   "sort_order",
@@ -152,6 +162,7 @@ export function emptyGamePage(gameId: string, gameName = ""): GamePage {
     titleKo: gameName,
     gameId,
     published: false,
+    onestoreSync: false,
     slug: "",
     releaseStatus: "upcoming",
     sortOrder: 0,
@@ -170,6 +181,7 @@ export function mapGamePageRow(row: Row): GamePage {
     ...text,
     gameId: row.game_id as string,
     published: Boolean(row.published),
+    onestoreSync: Boolean(row.onestore_sync),
     slug: (row.slug as string | null) ?? "",
     releaseStatus: row.release_status as ReleaseStatus,
     sortOrder: (row.sort_order as number | null) ?? 0,
@@ -184,6 +196,7 @@ export function mapGamePageRow(row: Row): GamePage {
 export function toGamePageColumns(input: GamePageInput): Row {
   const columns: Row = {
     published: input.published,
+    onestore_sync: input.onestoreSync,
     slug: input.slug === "" ? null : input.slug,
     release_status: input.releaseStatus,
     sort_order: input.sortOrder,

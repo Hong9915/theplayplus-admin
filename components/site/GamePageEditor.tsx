@@ -208,6 +208,9 @@ export default function GamePageEditor({
         gameId={page.gameId}
         url={draft.onestoreUrl}
         onUrlChange={(value) => set("onestoreUrl", value)}
+        sync={draft.onestoreSync}
+        onSyncChange={(value) => set("onestoreSync", value)}
+        urlInvalid={invalid.includes("onestoreUrl")}
         onImported={(fields) => {
           setDraft((current) => ({ ...current, ...fields }));
           setInvalid([]);
@@ -479,11 +482,17 @@ function OneStoreImport({
   gameId,
   url,
   onUrlChange,
+  sync,
+  onSyncChange,
+  urlInvalid,
   onImported,
 }: {
   gameId: string;
   url: string;
   onUrlChange: (value: string) => void;
+  sync: boolean;
+  onSyncChange: (value: boolean) => void;
+  urlInvalid: boolean;
   onImported: (fields: ImportedFields) => void;
 }) {
   const router = useRouter();
@@ -554,7 +563,8 @@ function OneStoreImport({
           }}
           placeholder="https://onesto.re/0001007974"
           aria-label="원스토어 상품 주소"
-          className={INPUT}
+          aria-invalid={urlInvalid || undefined}
+          className={`${INPUT} ${urlInvalid ? INPUT_INVALID : ""}`}
         />
         <button
           type="button"
@@ -573,6 +583,24 @@ function OneStoreImport({
       <StatusMessage tone={message?.tone ?? "muted"} className="text-sm">
         {message?.text}
       </StatusMessage>
+      <label className="flex items-center justify-between gap-4 rounded border border-line px-4 py-3 cursor-pointer">
+        <span className="flex flex-col">
+          <span className="font-medium text-sm">원스토어 내용 자동 반영</span>
+          <span className="text-xs text-muted">
+            {sync
+              ? "웹사이트가 원스토어를 직접 읽어 제목, 장르, 이용등급, 게임 소개, 스크린샷을 보여줍니다. 원스토어에서 바꾸면 1시간 안에 반영되고, 원스토어를 못 읽을 때는 아래 저장된 내용을 보여줍니다."
+              : "꺼져 있으면 아래 저장된 내용만 보여줍니다. 원스토어가 바뀌면 다시 불러온 뒤 저장해야 합니다."}
+          </span>
+          {urlInvalid && <span className="text-xs text-red-600 mt-1">자동 반영하려면 원스토어 주소를 입력하세요.</span>}
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          checked={sync}
+          onChange={(event) => onSyncChange(event.target.checked)}
+          className="w-10 h-5 accent-accent cursor-pointer shrink-0"
+        />
+      </label>
     </Section>
   );
 }

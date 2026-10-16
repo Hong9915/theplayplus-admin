@@ -73,3 +73,17 @@ describe("image paths", () => {
     expect(isStoragePath(null)).toBe(false);
   });
 });
+
+describe("onestore sync", () => {
+  it("needs a store link to turn on automatic sync", () => {
+    const result = gamePageSchema.safeParse(input({ onestoreSync: true, onestoreUrl: "" }));
+    expect(result.success).toBe(false);
+    expect(result.success ? [] : result.error.issues.map((issue) => issue.path[0])).toEqual(["onestoreUrl"]);
+  });
+
+  it("stores the sync switch", () => {
+    const parsed = gamePageSchema.parse(input({ onestoreSync: true, onestoreUrl: "https://onesto.re/0001007974" }));
+    expect(toGamePageColumns(parsed).onestore_sync).toBe(true);
+    expect(mapGamePageRow({ game_id: "g", release_status: "live", onestore_sync: true }).onestoreSync).toBe(true);
+  });
+});
