@@ -97,4 +97,25 @@ describe("LoungeItemList", () => {
     expect(screen.getByRole("button", { name: "모두 읽음" })).toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
   });
+
+  it("leads a comment with what was said and keeps the post title as context", () => {
+    render(<LoungeItemList gameId="g1" items={[item({ kind: "comment", title: "이벤트 안내", body: "보상이\n\n안 왔어요" })]} />);
+    const link = screen.getByRole("link");
+    const texts = Array.from(link.querySelectorAll("span")).map((el) => el.textContent);
+    expect(texts.indexOf("보상이 안 왔어요")).toBeGreaterThan(-1);
+    expect(texts.indexOf("보상이 안 왔어요")).toBeLessThan(texts.indexOf("이벤트 안내"));
+  });
+
+  it("marks operator items with a label instead of fading the whole row", () => {
+    render(<LoungeItemList gameId="g1" items={[item({ isUser: false, nickname: "토크" })]} />);
+    const link = screen.getByRole("link");
+    expect(within(link).getByText("운영자")).toBeInTheDocument();
+    expect(link.className).not.toMatch(/opacity/);
+  });
+
+  it("says when everything has been read", () => {
+    render(<LoungeItemList gameId="g1" items={[item({ readAt: "2026-09-21T10:00:00.000Z" })]} />);
+    expect(screen.getByText("모두 읽었습니다")).toBeInTheDocument();
+  });
 });
+

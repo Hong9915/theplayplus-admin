@@ -15,8 +15,23 @@ import {
 } from "@/lib/game-pages";
 
 const INPUT =
-  "w-full bg-panel border border-line rounded px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent transition-colors";
-const INPUT_INVALID = "border-red-500";
+  "w-full bg-panel border border-line rounded-[10px] px-3 py-2 text-[14px] text-ink placeholder:text-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent transition-colors";
+const INPUT_INVALID = "!border-heat-hot";
+const BTN_GHOST =
+  "inline-flex items-center justify-center h-[38px] px-3.5 rounded-[10px] text-[13.5px] font-semibold text-ink-2 ring-1 ring-inset ring-line bg-panel hover:bg-well hover:text-ink active:bg-line-soft disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 cursor-pointer";
+const LINK = "text-accent-ink font-medium underline-offset-2 hover:underline";
+
+/** 왼쪽 목차와 섹션 id. 긴 폼에서 "어디쯤인지, 어디로 갈 수 있는지"를 알려 준다. */
+const SECTIONS = [
+  { id: "publish", label: "공개 설정" },
+  { id: "onestore", label: "원스토어에서 불러오기" },
+  { id: "basics", label: "기본 정보" },
+  { id: "links", label: "다운로드와 링크" },
+  { id: "images", label: "이미지" },
+  { id: "notice", label: "공지사항" },
+  { id: "i18n", label: "중국어·영어" },
+] as const;
+type SectionId = (typeof SECTIONS)[number]["id"];
 
 const FIELD_ERRORS: Record<string, string> = {
   slug: "영문 소문자, 숫자, 하이픈(-)만 쓸 수 있습니다. 공개하려면 꼭 입력해야 합니다.",
@@ -44,20 +59,22 @@ function Field({
   children: ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
+    <label className="flex flex-col gap-1.5 text-[14px]">
+      <span className="text-[13px] font-semibold text-ink-2">{label}</span>
       {children}
-      {error ? <span className="text-xs text-red-600">{error}</span> : hint ? <span className="text-xs text-muted">{hint}</span> : null}
+      {error ? <span className="text-[12.5px] font-medium text-heat-hot">{error}</span> : hint ? <span className="text-[12.5px] text-muted">{hint}</span> : null}
     </label>
   );
 }
 
-function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+function Section({ id, title, description, children }: { id: SectionId; title: string; description?: string; children: ReactNode }) {
   return (
-    <section className="bg-panel border border-line rounded-lg p-5 flex flex-col gap-4">
+    <section id={id} className="scroll-mt-6 bg-panel rounded-2xl shadow-paper p-6 flex flex-col gap-5" aria-labelledby={`${id}-title`}>
       <div>
-        <h2 className="text-base font-bold">{title}</h2>
-        {description && <p className="text-xs text-muted mt-0.5">{description}</p>}
+        <h2 id={`${id}-title`} className="text-[16px] font-bold tracking-[-.02em]">
+          {title}
+        </h2>
+        {description && <p className="text-[13px] text-muted mt-1">{description}</p>}
       </div>
       {children}
     </section>
@@ -154,173 +171,198 @@ export default function GamePageEditor({
   const liveUrl = siteUrl && page.published && page.slug ? `${siteUrl.replace(/\/$/, "")}/games/${page.slug}` : null;
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5 max-w-3xl">
-      <Section title="공개 설정" description="공개를 켜면 웹사이트 게임 목록과 상세 페이지에 나옵니다.">
-        <label className="flex items-center justify-between gap-4 rounded border border-line px-4 py-3 cursor-pointer">
-          <span className="flex flex-col">
-            <span className="font-medium text-sm">웹사이트에 공개</span>
-            <span className="text-xs text-muted">
-              {draft.published ? "저장하면 웹사이트에 보입니다." : "꺼져 있으면 웹사이트에서 이 게임이 숨겨집니다."}
-            </span>
-          </span>
-          <input
-            type="checkbox"
-            role="switch"
-            checked={draft.published}
-            onChange={(event) => set("published", event.target.checked)}
-            className="w-10 h-5 accent-accent cursor-pointer"
-          />
-        </label>
-        {liveUrl && (
-          <a href={liveUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-accent hover:underline w-fit">
-            웹사이트에서 보기 ↗
+    <form onSubmit={handleSubmit} className="grid grid-cols-[176px_minmax(0,760px)] justify-center gap-8 px-6 pt-6">
+      <nav className="sticky top-6 self-start flex flex-col gap-0.5" aria-label="섹션">
+        {SECTIONS.map((section) => (
+          <a
+            key={section.id}
+            href={`#${section.id}`}
+            className="h-8 px-2.5 flex items-center rounded-lg text-[13.5px] font-medium text-ink-2 hover:bg-line-soft hover:text-ink active:bg-line transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          >
+            {section.label}
           </a>
-        )}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="페이지 주소" hint="예: goddess-idle → /games/goddess-idle" error={errorFor("slug")}>
-            <input {...text("slug")} placeholder="goddess-idle" autoComplete="off" spellCheck={false} />
-          </Field>
-          <Field label="출시 상태" hint="서비스 중이면 다운로드 버튼, 아니면 출시 예정 카드로 보입니다.">
-            <select
-              value={draft.releaseStatus}
-              onChange={(event) => set("releaseStatus", event.target.value as Draft["releaseStatus"])}
-              className={INPUT}
-            >
-              {RELEASE_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {RELEASE_STATUS_LABELS[status]}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="목록 순서" hint="작은 숫자가 먼저 나옵니다.">
-            <input
-              type="number"
-              value={draft.sortOrder}
-              onChange={(event) => set("sortOrder", Number.parseInt(event.target.value, 10) || 0)}
-              className={INPUT}
-            />
-          </Field>
-        </div>
-      </Section>
+        ))}
+      </nav>
 
-      <OneStoreImport
-        gameId={page.gameId}
-        url={draft.onestoreUrl}
-        onUrlChange={(value) => set("onestoreUrl", value)}
-        sync={draft.onestoreSync}
-        onSyncChange={(value) => set("onestoreSync", value)}
-        urlInvalid={invalid.includes("onestoreUrl")}
-        onImported={(fields) => {
-          // 원스토어 출시일은 새 버전을 올리면 바뀔 수 있어, 이미 적어 둔 출시일은 덮지 않는다.
-          setDraft((current) => ({ ...current, ...fields, ...(current.releaseDate.trim() !== "" ? { releaseDate: current.releaseDate } : {}) }));
-          setInvalid([]);
-        }}
-      />
-
-      <Section title="기본 정보">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="게임 제목" error={errorFor("titleKo")}>
-            <input {...text("titleKo")} placeholder="여신키우기: 방치형 RPG" />
-          </Field>
-          <Field label="장르">
-            <input {...text("genreKo")} placeholder="방치형 RPG" />
-          </Field>
-          <Field label="이용등급">
-            <input {...text("ageRating")} placeholder="15세 이용가" />
-          </Field>
-          <Field label="개발사">
-            <input {...text("developer")} placeholder="RunXuGame" />
-          </Field>
-          <Field label="출시일" hint="글자 그대로 나옵니다. 정해지지 않았으면 '2026년 4분기 출시 예정'처럼 적어도 됩니다.">
-            <input {...text("releaseDate")} placeholder="2026.08.20" />
-          </Field>
-          <Field label="사전예약 기간" hint="'사전예약 중'인 게임에만 나옵니다.">
-            <input {...text("preregPeriod")} placeholder="2026.09.30 ~ 2026.10.30" />
-          </Field>
-        </div>
-        <Field label="한 줄 소개" hint="게임 목록 카드와 상세 페이지 제목 아래에 나옵니다.">
-          <input {...text("taglineKo")} placeholder="손을 떼도, 여신은 계속 강해진다." />
-        </Field>
-        <Field label="게임 소개" hint="스토어 상품 설명을 그대로 붙여 넣으세요. 줄바꿈이 그대로 보이고, ◆로 시작하는 줄은 소제목이 됩니다.">
-          <textarea {...text("descriptionKo")} rows={14} className={`${text("descriptionKo").className} font-mono text-[13px] leading-relaxed`} />
-        </Field>
-      </Section>
-
-      <Section title="다운로드와 링크" description="비워 둔 링크는 웹사이트에서 버튼이 숨겨집니다.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="원스토어" error={errorFor("onestoreUrl")}>
-            <input {...text("onestoreUrl")} type="url" placeholder="https://onesto.re/0001007974" />
-          </Field>
-          <Field label="구글 플레이" error={errorFor("googlePlayUrl")}>
-            <input {...text("googlePlayUrl")} type="url" placeholder="https://play.google.com/store/apps/details?id=…" />
-          </Field>
-          <Field label="앱스토어" error={errorFor("appStoreUrl")}>
-            <input {...text("appStoreUrl")} type="url" placeholder="https://apps.apple.com/…" />
-          </Field>
-          <Field label="유튜브 트레일러 주소" error={errorFor("youtubeUrl")}>
-            <input {...text("youtubeUrl")} type="url" placeholder="https://youtu.be/Ky1PVk-TXu8" spellCheck={false} />
-          </Field>
-          <Field label="확률 정보 페이지" hint="운영정책 탭의 '확률 정보 보기' 버튼이 이 주소로 갑니다." error={errorFor("probabilityUrl")}>
-            <input {...text("probabilityUrl")} type="url" placeholder="https://…" />
-          </Field>
-        </div>
-      </Section>
-
-      <ImageSection page={page} />
-
-      <Section title="공지사항" description="웹사이트 공지사항 탭은 네이버 라운지의 '공지사항' 게시판 글을 그대로 보여줍니다.">
-        {loungeId ? (
-          <p className="text-sm">
-            연결된 라운지:{" "}
-            <a
-              href={`https://game.naver.com/lounge/${loungeId}/home`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent hover:underline"
-            >
-              {loungeId} ↗
-            </a>
-            <span className="block text-xs text-muted mt-1">
-              라운지에 공지를 올리면 10분 안에 웹사이트에도 나옵니다. 상세 페이지의 &lsquo;네이버 라운지 바로가기&rsquo; 버튼도 이 라운지로 연결됩니다.
+      <div className="flex flex-col gap-5 min-w-0">
+        <Section id="publish" title="공개 설정" description="공개를 켜면 웹사이트 게임 목록과 상세 페이지에 나옵니다.">
+          <label className="flex items-center justify-between gap-4 rounded-xl bg-well px-4 py-3.5 cursor-pointer">
+            <span className="flex flex-col">
+              <span className="font-semibold text-[14px]">웹사이트에 공개</span>
+              <span className="text-[12.5px] text-muted">
+                {draft.published ? "저장하면 웹사이트에 보입니다." : "꺼져 있으면 웹사이트에서 이 게임이 숨겨집니다."}
+              </span>
             </span>
-          </p>
-        ) : (
-          <p className="text-sm text-muted">
-            연결된 네이버 라운지가 없어 웹사이트 공지사항 탭이 비어 있습니다. 문의함 왼쪽 아래 &lsquo;네이버 라운지 연결&rsquo;에서 연결하세요.
-          </p>
-        )}
-      </Section>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={draft.published}
+              onChange={(event) => set("published", event.target.checked)}
+              className="switch"
+            />
+          </label>
+          {liveUrl && (
+            <a href={liveUrl} target="_blank" rel="noopener noreferrer" className={`text-[13.5px] w-fit ${LINK}`}>
+              웹사이트에서 보기 ↗
+            </a>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="페이지 주소" hint="예: goddess-idle → /games/goddess-idle" error={errorFor("slug")}>
+              <input {...text("slug")} placeholder="goddess-idle" autoComplete="off" spellCheck={false} />
+            </Field>
+            <Field label="출시 상태" hint="서비스 중이면 다운로드 버튼, 아니면 출시 예정 카드로 보입니다.">
+              <select
+                value={draft.releaseStatus}
+                onChange={(event) => set("releaseStatus", event.target.value as Draft["releaseStatus"])}
+                className={`${INPUT} appearance-none pr-8 select-chevron`}
+              >
+                {RELEASE_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {RELEASE_STATUS_LABELS[status]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="목록 순서" hint="작은 숫자가 먼저 나옵니다.">
+              <input
+                type="number"
+                value={draft.sortOrder}
+                onChange={(event) => set("sortOrder", Number.parseInt(event.target.value, 10) || 0)}
+                className={INPUT}
+              />
+            </Field>
+          </div>
+        </Section>
 
-      <details className="bg-panel border border-line rounded-lg p-5 group">
-        <summary className="cursor-pointer text-base font-bold">중국어·영어 (선택)</summary>
-        <p className="text-xs text-muted mt-1">비워 두면 중국어·영어 페이지에도 한국어가 나옵니다.</p>
-        <div className="grid gap-4 sm:grid-cols-2 mt-4">
-          <Field label="제목 (중국어)"><input {...text("titleZh")} /></Field>
-          <Field label="제목 (영어)"><input {...text("titleEn")} /></Field>
-          <Field label="장르 (중국어)"><input {...text("genreZh")} /></Field>
-          <Field label="장르 (영어)"><input {...text("genreEn")} /></Field>
-          <Field label="한 줄 소개 (중국어)"><input {...text("taglineZh")} /></Field>
-          <Field label="한 줄 소개 (영어)"><input {...text("taglineEn")} /></Field>
-        </div>
-        <div className="grid gap-4 mt-4">
-          <Field label="게임 소개 (중국어)"><textarea {...text("descriptionZh")} rows={6} /></Field>
-          <Field label="게임 소개 (영어)"><textarea {...text("descriptionEn")} rows={6} /></Field>
-        </div>
-      </details>
+        <OneStoreImport
+          gameId={page.gameId}
+          url={draft.onestoreUrl}
+          onUrlChange={(value) => set("onestoreUrl", value)}
+          sync={draft.onestoreSync}
+          onSyncChange={(value) => set("onestoreSync", value)}
+          urlInvalid={invalid.includes("onestoreUrl")}
+          onImported={(fields) => {
+            // 원스토어 출시일은 새 버전을 올리면 바뀔 수 있어, 이미 적어 둔 출시일은 덮지 않는다.
+            setDraft((current) => ({ ...current, ...fields, ...(current.releaseDate.trim() !== "" ? { releaseDate: current.releaseDate } : {}) }));
+            setInvalid([]);
+          }}
+        />
 
-      <div className="sticky bottom-0 z-10 -mx-1 px-1 pt-3 pb-4 bg-ground/95 backdrop-blur border-t border-line flex items-center gap-4">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded bg-accent px-5 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {saving ? "저장 중…" : "저장"}
-        </button>
-        {dirty && !saving && <span className="text-xs text-muted">저장하지 않은 변경이 있습니다.</span>}
-        <StatusMessage tone={message?.tone ?? "muted"} className="text-sm">
-          {message?.text}
-        </StatusMessage>
+        <Section id="basics" title="기본 정보">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="게임 제목" error={errorFor("titleKo")}>
+              <input {...text("titleKo")} placeholder="여신키우기: 방치형 RPG" />
+            </Field>
+            <Field label="장르">
+              <input {...text("genreKo")} placeholder="방치형 RPG" />
+            </Field>
+            <Field label="이용등급">
+              <input {...text("ageRating")} placeholder="15세 이용가" />
+            </Field>
+            <Field label="개발사">
+              <input {...text("developer")} placeholder="RunXuGame" />
+            </Field>
+            <Field label="출시일" hint="글자 그대로 나옵니다. 정해지지 않았으면 '2026년 4분기 출시 예정'처럼 적어도 됩니다.">
+              <input {...text("releaseDate")} placeholder="2026.08.20" />
+            </Field>
+            <Field label="사전예약 기간" hint="'사전예약 중'인 게임에만 나옵니다.">
+              <input {...text("preregPeriod")} placeholder="2026.09.30 ~ 2026.10.30" />
+            </Field>
+          </div>
+          <Field label="한 줄 소개" hint="게임 목록 카드와 상세 페이지 제목 아래에 나옵니다.">
+            <input {...text("taglineKo")} placeholder="손을 떼도, 여신은 계속 강해진다." />
+          </Field>
+          <Field label="게임 소개" hint="스토어 상품 설명을 그대로 붙여 넣으세요. 줄바꿈이 그대로 보이고, ◆로 시작하는 줄은 소제목이 됩니다.">
+            <textarea {...text("descriptionKo")} rows={14} className={`${text("descriptionKo").className} leading-[1.7]`} />
+          </Field>
+        </Section>
+
+        <Section id="links" title="다운로드와 링크" description="비워 둔 링크는 웹사이트에서 버튼이 숨겨집니다.">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="원스토어" error={errorFor("onestoreUrl")}>
+              <input {...text("onestoreUrl")} type="url" placeholder="https://onesto.re/0001007974" />
+            </Field>
+            <Field label="구글 플레이" error={errorFor("googlePlayUrl")}>
+              <input {...text("googlePlayUrl")} type="url" placeholder="https://play.google.com/store/apps/details?id=…" />
+            </Field>
+            <Field label="앱스토어" error={errorFor("appStoreUrl")}>
+              <input {...text("appStoreUrl")} type="url" placeholder="https://apps.apple.com/…" />
+            </Field>
+            <Field label="유튜브 트레일러 주소" error={errorFor("youtubeUrl")}>
+              <input {...text("youtubeUrl")} type="url" placeholder="https://youtu.be/Ky1PVk-TXu8" spellCheck={false} />
+            </Field>
+            <Field label="확률 정보 페이지" hint="운영정책 탭의 '확률 정보 보기' 버튼이 이 주소로 갑니다." error={errorFor("probabilityUrl")}>
+              <input {...text("probabilityUrl")} type="url" placeholder="https://…" />
+            </Field>
+          </div>
+        </Section>
+
+        <ImageSection page={page} />
+
+        <Section id="notice" title="공지사항" description="웹사이트 공지사항 탭은 네이버 라운지의 '공지사항' 게시판 글을 그대로 보여줍니다.">
+          {loungeId ? (
+            <p className="text-[14px]">
+              연결된 라운지:{" "}
+              <a
+                href={`https://game.naver.com/lounge/${loungeId}/home`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={LINK}
+              >
+                {loungeId} ↗
+              </a>
+              <span className="block text-[12.5px] text-muted mt-1">
+                라운지에 공지를 올리면 10분 안에 웹사이트에도 나옵니다. 상세 페이지의 &lsquo;네이버 라운지 바로가기&rsquo; 버튼도 이 라운지로 연결됩니다.
+              </span>
+            </p>
+          ) : (
+            <p className="text-[14px] text-muted">
+              연결된 네이버 라운지가 없어 웹사이트 공지사항 탭이 비어 있습니다. 문의함의 &lsquo;게임 설정 → 네이버 라운지 연결&rsquo;에서 연결하세요.
+            </p>
+          )}
+        </Section>
+
+        <details id="i18n" className="scroll-mt-6 bg-panel rounded-2xl shadow-paper p-6 group">
+          <summary className="flex items-center gap-2 cursor-pointer list-none text-[16px] font-bold tracking-[-.02em] [&::-webkit-details-marker]:hidden">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted transition-transform group-open:rotate-90" aria-hidden="true">
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+            중국어·영어 <span className="text-[13px] font-medium text-muted">선택</span>
+          </summary>
+          <p className="text-[13px] text-muted mt-1 ml-6">비워 두면 중국어·영어 페이지에도 한국어가 나옵니다.</p>
+          <div className="grid gap-4 sm:grid-cols-2 mt-4">
+            <Field label="제목 (중국어)"><input {...text("titleZh")} /></Field>
+            <Field label="제목 (영어)"><input {...text("titleEn")} /></Field>
+            <Field label="장르 (중국어)"><input {...text("genreZh")} /></Field>
+            <Field label="장르 (영어)"><input {...text("genreEn")} /></Field>
+            <Field label="한 줄 소개 (중국어)"><input {...text("taglineZh")} /></Field>
+            <Field label="한 줄 소개 (영어)"><input {...text("taglineEn")} /></Field>
+          </div>
+          <div className="grid gap-4 mt-4">
+            <Field label="게임 소개 (중국어)"><textarea {...text("descriptionZh")} rows={6} /></Field>
+            <Field label="게임 소개 (영어)"><textarea {...text("descriptionEn")} rows={6} /></Field>
+          </div>
+        </details>
+
+        {/* 떠 있는 반투명 막대. 내용이 아래로 지나가도 저장 버튼은 늘 같은 자리에 있다. */}
+        <div className="sticky bottom-0 z-10 -mx-3 mt-1 mb-0 px-4 py-3 rounded-t-2xl bg-panel/80 backdrop-blur-xl shadow-[0_-8px_24px_-16px_rgba(24,32,46,.35)] ring-1 ring-line-soft flex items-center gap-4">
+          <button
+            type="submit"
+            disabled={saving}
+            className="h-[38px] px-5 rounded-[10px] bg-accent text-[14px] font-semibold text-white hover:brightness-105 active:brightness-95 disabled:opacity-60 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          >
+            {saving ? "저장 중…" : "저장"}
+          </button>
+          {dirty && !saving && (
+            <span className="flex items-center gap-1.5 text-[13px] text-ink-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent" aria-hidden="true" />
+              저장하지 않은 변경이 있습니다.
+            </span>
+          )}
+          <StatusMessage tone={message?.tone ?? "muted"} className="text-[13.5px] font-medium">
+            {message?.text}
+          </StatusMessage>
+        </div>
       </div>
     </form>
   );
@@ -380,7 +422,7 @@ function ImageSection({ page }: { page: GamePage }) {
 
   function picker(kind: ImageKind, label: string) {
     return (
-      <label className={`inline-flex items-center rounded border border-line px-3 py-1.5 text-sm cursor-pointer hover:border-accent hover:text-accent transition-colors ${busy ? "pointer-events-none opacity-60" : ""}`}>
+      <label className={`${BTN_GHOST} ${busy ? "pointer-events-none opacity-60" : ""}`}>
         {busy === kind ? "올리는 중…" : label}
         <input
           type="file"
@@ -397,25 +439,25 @@ function ImageSection({ page }: { page: GamePage }) {
   }
 
   return (
-    <Section title="이미지" description="올리면 바로 저장됩니다. 4MB 이하 이미지만 올릴 수 있습니다.">
+    <Section id="images" title="이미지" description="올리면 바로 저장됩니다. 4MB 이하 이미지만 올릴 수 있습니다.">
       <div className="grid gap-5 sm:grid-cols-2">
         {IMAGE_SLOTS.map((slot) => {
           const path = slot.kind === "kv" ? page.kvPath : page.cardPath;
           const url = getGameSiteImageUrl(path);
           return (
             <div key={slot.kind} className={`flex flex-col gap-2 min-w-0 ${slot.span}`}>
-              <span className="text-sm font-medium">{slot.label}</span>
-              <div className={`${slot.ratio} w-full rounded border border-line bg-ground overflow-hidden flex items-center justify-center`}>
+              <span className="text-[13px] font-semibold text-ink-2">{slot.label}</span>
+              <div className={`${slot.ratio} w-full rounded-xl ring-1 ring-line-soft bg-well overflow-hidden flex items-center justify-center`}>
                 {url && !url.startsWith("/") ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={url} alt={`${slot.label} 미리보기`} className="w-full h-full object-cover" />
                 ) : url ? (
-                  <span className="text-xs text-muted px-3 text-center">웹사이트 기본 이미지 사용 중<br />{url}</span>
+                  <span className="text-[12.5px] text-muted px-3 text-center">웹사이트 기본 이미지 사용 중<br />{url}</span>
                 ) : (
-                  <span className="text-xs text-muted">이미지 없음</span>
+                  <span className="text-[12.5px] text-muted">이미지 없음</span>
                 )}
               </div>
-              <span className="text-xs text-muted">{slot.hint}</span>
+              <span className="text-[12.5px] text-muted">{slot.hint}</span>
               <div className="flex gap-2">
                 {picker(slot.kind, path ? "바꾸기" : "올리기")}
                 {path && (
@@ -423,7 +465,7 @@ function ImageSection({ page }: { page: GamePage }) {
                     type="button"
                     onClick={() => remove(slot.kind, path)}
                     disabled={busy !== null}
-                    className="rounded px-3 py-1.5 text-sm text-muted hover:text-red-600 disabled:opacity-60"
+                    className="h-[38px] px-3 rounded-[10px] text-[13.5px] font-medium text-muted hover:text-heat-hot hover:bg-well disabled:opacity-60 transition-colors"
                   >
                     {busy === path ? "지우는 중…" : "지우기"}
                   </button>
@@ -436,20 +478,20 @@ function ImageSection({ page }: { page: GamePage }) {
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">
+          <span className="text-[13px] font-semibold text-ink-2">
             스크린샷 <span className="text-muted font-normal tabular-nums">{page.screenshotPaths.length}/{MAX_SCREENSHOTS}</span>
           </span>
           {page.screenshotPaths.length < MAX_SCREENSHOTS && picker("screenshot", "추가")}
         </div>
         {page.screenshotPaths.length === 0 ? (
-          <p className="text-xs text-muted">스크린샷이 없으면 웹사이트에서 스크린샷 칸이 숨겨집니다.</p>
+          <p className="text-[12.5px] text-muted">스크린샷이 없으면 웹사이트에서 스크린샷 칸이 숨겨집니다.</p>
         ) : (
           // 스크린샷은 가로·세로가 섞여 있어 높이만 맞추고 원래 비율대로 보여준다.
           <ul className="flex flex-wrap gap-3">
             {page.screenshotPaths.map((path, index) => {
               const url = getGameSiteImageUrl(path);
               return (
-                <li key={path} className="relative group h-40 rounded border border-line bg-ground overflow-hidden">
+                <li key={path} className="relative group h-40 rounded-xl ring-1 ring-line-soft bg-well overflow-hidden">
                   {url && !url.startsWith("/") ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={url} alt={`스크린샷 ${index + 1}`} className="h-full w-auto max-w-[18rem] object-contain" />
@@ -464,7 +506,7 @@ function ImageSection({ page }: { page: GamePage }) {
                     onClick={() => remove("screenshot", path)}
                     disabled={busy !== null}
                     aria-label={`스크린샷 ${index + 1} 지우기`}
-                    className="absolute right-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-white hover:bg-red-600 focus-visible:bg-red-600 disabled:opacity-60 transition-colors"
+                    className="absolute right-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-white hover:bg-heat-hot focus-visible:bg-heat-hot disabled:opacity-60 transition-colors"
                   >
                     {busy === path ? "지우는 중…" : "지우기"}
                   </button>
@@ -574,7 +616,7 @@ function OneStoreImport({
   }
 
   return (
-    <Section title="원스토어에서 불러오기" description="원스토어 상품 페이지나 사전예약 페이지의 제목, 장르, 이용등급, 한 줄 소개, 게임 소개, 유튜브 트레일러를 그대로 가져와 아래 칸을 채웁니다. 사전예약 페이지에서는 출시 예정일과 사전예약 기간도 가져오고, 장르는 없습니다.">
+    <Section id="onestore" title="원스토어에서 불러오기" description="원스토어 상품 페이지나 사전예약 페이지의 제목, 장르, 이용등급, 한 줄 소개, 게임 소개, 유튜브 트레일러를 그대로 가져와 아래 칸을 채웁니다. 사전예약 페이지에서는 출시 예정일과 사전예약 기간도 가져오고, 장르는 없습니다.">
       <div className="flex flex-col gap-3 sm:flex-row">
         <input
           type="url"
@@ -595,35 +637,35 @@ function OneStoreImport({
           type="button"
           onClick={handleImport}
           disabled={loading}
-          className="shrink-0 rounded border border-accent px-4 py-2 text-sm font-semibold text-accent hover:bg-accent hover:text-white disabled:opacity-60 transition-colors"
+          className="shrink-0 h-[38px] px-4 rounded-[10px] bg-ink text-[13.5px] font-semibold text-white hover:bg-ink/90 active:bg-ink/80 disabled:opacity-60 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         >
           {loading ? "불러오는 중…" : "불러오기"}
         </button>
       </div>
-      <label className="flex items-center gap-2 text-sm cursor-pointer w-fit">
-        <input type="checkbox" checked={withImages} onChange={(event) => setWithImages(event.target.checked)} className="accent-accent" />
+      <label className="flex items-center gap-2 text-[14px] cursor-pointer w-fit">
+        <input type="checkbox" checked={withImages} onChange={(event) => setWithImages(event.target.checked)} className="w-4 h-4 accent-accent" />
         스크린샷과 대표 이미지도 가져오기
-        <span className="text-xs text-muted">(지금 올려 둔 스크린샷·목록 카드를 바꿉니다)</span>
+        <span className="text-[12.5px] text-muted">(지금 올려 둔 스크린샷·목록 카드를 바꿉니다)</span>
       </label>
       <StatusMessage tone={message?.tone ?? "muted"} className="text-sm">
         {message?.text}
       </StatusMessage>
-      <label className="flex items-center justify-between gap-4 rounded border border-line px-4 py-3 cursor-pointer">
+      <label className="flex items-center justify-between gap-4 rounded-xl bg-well px-4 py-3.5 cursor-pointer">
         <span className="flex flex-col">
-          <span className="font-medium text-sm">원스토어 내용 자동 반영</span>
-          <span className="text-xs text-muted">
+          <span className="font-semibold text-[14px]">원스토어 내용 자동 반영</span>
+          <span className="text-[12.5px] text-muted">
             {sync
               ? "웹사이트가 원스토어를 직접 읽어 제목, 장르, 이용등급, 게임 소개, 스크린샷을 보여줍니다. 원스토어에서 바꾸면 1시간 안에 반영되고, 원스토어를 못 읽을 때는 아래 저장된 내용을 보여줍니다."
               : "꺼져 있으면 아래 저장된 내용만 보여줍니다. 원스토어가 바뀌면 다시 불러온 뒤 저장해야 합니다."}
           </span>
-          {urlInvalid && <span className="text-xs text-red-600 mt-1">자동 반영하려면 원스토어 주소를 입력하세요.</span>}
+          {urlInvalid && <span className="text-[12.5px] font-medium text-heat-hot mt-1">자동 반영하려면 원스토어 주소를 입력하세요.</span>}
         </span>
         <input
           type="checkbox"
           role="switch"
           checked={sync}
           onChange={(event) => onSyncChange(event.target.checked)}
-          className="w-10 h-5 accent-accent cursor-pointer shrink-0"
+          className="switch"
         />
       </label>
     </Section>
