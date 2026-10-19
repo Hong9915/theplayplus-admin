@@ -87,4 +87,46 @@ describe("Dialog", () => {
     const dialog = screen.getByRole("dialog", { name: "테스트" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
   });
+
+  it("lets only the topmost of nested dialogs react to Escape", async () => {
+    const outer = vi.fn();
+    const inner = vi.fn();
+    render(
+      <Dialog label="바깥" onClose={outer}>
+        <button type="button">바깥 버튼</button>
+        <Dialog label="안쪽" onClose={inner}>
+          <button type="button">안쪽 버튼</button>
+        </Dialog>
+      </Dialog>
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(outer).not.toHaveBeenCalled();
+  });
+
+  it("keeps Tab inside the inner dialog while one is open", async () => {
+    render(
+      <Dialog label="바깥" onClose={vi.fn()}>
+        <button type="button">바깥 버튼</button>
+        <Dialog label="안쪽" onClose={vi.fn()}>
+          <button type="button">안쪽 하나</button>
+          <button type="button">안쪽 둘</button>
+        </Dialog>
+      </Dialog>
+    );
+    screen.getByRole("button", { name: "안쪽 둘" }).focus();
+    await userEvent.keyboard("{Tab}");
+    expect(screen.getByRole("button", { name: "안쪽 하나" })).toHaveFocus();
+  });
+
+  it("slides in from the right as a drawer when placed right", () => {
+    render(
+      <Dialog label="서랍" onClose={vi.fn()} placement="right">
+        <button type="button">안</button>
+      </Dialog>
+    );
+    const panel = screen.getByRole("dialog", { name: "서랍" });
+    expect(panel.className).toMatch(/h-full/);
+    expect(panel.parentElement?.className).toMatch(/justify-end/);
+  });
 });

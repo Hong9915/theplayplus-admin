@@ -20,15 +20,27 @@ const TAB_PARAM = "tab";
 const COLLAPSE_KEY = "inbox-detail-collapsed";
 
 const DOT: Record<EventRow["kind"], string> = {
-  status_changed: "bg-ink",
-  priority_changed: "bg-amber-600",
-  reply_sent: "bg-ink",
-  auto_reply_sent: "bg-ink",
-  note_added: "bg-amber-600",
+  status_changed: "border-ink-2",
+  priority_changed: "border-heat-hot",
+  reply_sent: "border-ink-2",
+  auto_reply_sent: "border-muted",
+  note_added: "border-memo-line",
 };
 
+const ICON_BTN =
+  "w-[30px] h-[30px] shrink-0 flex items-center justify-center rounded-lg text-ink-2 hover:bg-line-soft hover:text-ink active:bg-line transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50";
+
+function PanelIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M15 4v16" />
+    </svg>
+  );
+}
+
 function SectionTitle({ children }: { children: ReactNode }) {
-  return <h2 className="text-xs font-semibold text-muted">{children}</h2>;
+  return <h2 className="text-[13px] font-bold tracking-[-.01em] text-ink-2">{children}</h2>;
 }
 
 /**
@@ -62,50 +74,51 @@ export default function InboxDetailPanel({
   }
 
   const tabClass = (active: boolean) =>
-    `h-8 px-3 inline-flex items-center gap-1.5 text-[13px] border-b-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 rounded-t-md ${
-      active ? "border-ink text-ink font-semibold" : "border-transparent text-muted hover:text-ink"
+    `h-9 px-2.5 -mb-px inline-flex items-center gap-1.5 text-[13.5px] font-semibold border-b-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 rounded-t-md ${
+      active ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
     }`;
 
   const detail = (
     <>
-      <section className="px-4 py-3.5 border-b border-line flex flex-col gap-2.5">
+      <section className="px-4 pt-4 pb-5 flex flex-col gap-2.5">
         <SectionTitle>처리</SectionTitle>
         <StatusSelect inquiryId={inquiry.id} currentStatus={inquiry.status} />
         <PrioritySelect inquiryId={inquiry.id} currentPriority={inquiry.priority} />
       </section>
 
-      <section className="px-4 py-3.5 border-b border-line flex flex-col gap-2">
+      <section className="px-4 pb-5 flex flex-col gap-2.5">
         <SectionTitle>접수 정보</SectionTitle>
-        <dl className="flex flex-col gap-1.5 text-[13px]">
+        <dl className="flex flex-col gap-2 text-[13px]">
           {rows.map((row) => (
             <div key={row.key} className="flex items-start justify-between gap-3">
               <dt className="text-muted shrink-0">{row.label}</dt>
-              <dd className="text-right min-w-0 break-words">{row.value}</dd>
+              <dd className="text-right min-w-0 break-words font-medium">{row.value}</dd>
             </div>
           ))}
         </dl>
       </section>
 
-      <section className="px-4 py-3.5 flex flex-col gap-2">
+      <section className="px-4 pb-6 flex flex-col gap-2.5">
         <SectionTitle>처리 기록</SectionTitle>
-        <ol className="flex flex-col gap-2 text-xs">
+        {/* 세로선 위에 속이 빈 점. 점 색이 어떤 기록인지 알려 준다. */}
+        <ol className="flex flex-col gap-3 ml-1 pl-3.5 border-l-2 border-line text-[13px]">
           {events.map((event) => (
-            <li key={event.id} className="flex items-start gap-2.5">
-              <span className={`w-1.5 h-1.5 rounded-full mt-[5px] shrink-0 ${DOT[event.kind]}`} aria-hidden="true" />
+            <li key={event.id} className="relative flex items-start gap-2.5">
+              <span className={`absolute -left-[21px] top-[5px] w-2.5 h-2.5 rounded-full bg-well border-2 ${DOT[event.kind]}`} aria-hidden="true" />
               <span className="flex-1 min-w-0 break-words">
                 {describeEvent(event)}{" "}
                 <span className="text-muted" title={event.actorEmail}>
                   · {emailLocalPart(event.actorEmail)}
                 </span>
               </span>
-              <span className="text-muted font-mono text-[11px] shrink-0">{formatReceivedAt(event.createdAt)}</span>
+              <span className="text-muted text-[12px] tabular-nums shrink-0">{formatReceivedAt(event.createdAt)}</span>
             </li>
           ))}
           {/* 접수 이벤트는 저장하지 않는다. created_at이 같은 정보를 갖고 있다. */}
-          <li className="flex items-start gap-2.5">
-            <span className="w-1.5 h-1.5 rounded-full mt-[5px] shrink-0 bg-accent" aria-hidden="true" />
+          <li className="relative flex items-start gap-2.5">
+            <span className="absolute -left-[21px] top-[5px] w-2.5 h-2.5 rounded-full bg-well border-2 border-accent" aria-hidden="true" />
             <span className="flex-1">접수</span>
-            <span className="text-muted font-mono text-[11px] shrink-0">{formatReceivedAt(inquiry.createdAt)}</span>
+            <span className="text-muted text-[12px] tabular-nums shrink-0">{formatReceivedAt(inquiry.createdAt)}</span>
           </li>
         </ol>
       </section>
@@ -114,23 +127,17 @@ export default function InboxDetailPanel({
 
   if (collapsed) {
     return (
-      <aside className="w-8 shrink-0 h-full bg-panel flex flex-col items-center pt-3" aria-label="문의 상세 (접힘)">
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          aria-label="상세 펼치기"
-          title="상세 펼치기"
-          className="w-6 h-6 flex items-center justify-center rounded-md border border-line text-muted hover:text-ink hover:bg-ground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        >
-          ‹
+      <aside className="w-12 shrink-0 h-full bg-well flex flex-col items-center pt-3" aria-label="문의 상세 (접힘)">
+        <button type="button" onClick={() => setCollapsed(false)} aria-label="상세 펼치기" title="상세 펼치기" className={ICON_BTN}>
+          <PanelIcon />
         </button>
       </aside>
     );
   }
 
   return (
-    <aside className="w-[300px] shrink-0 h-full bg-panel flex flex-col overflow-hidden" aria-label="문의 상세">
-      <div className="flex items-center gap-1 h-[52px] px-3 border-b border-line shrink-0">
+    <aside className="w-[304px] shrink-0 h-full bg-well flex flex-col overflow-hidden" aria-label="문의 상세">
+      <div className="flex items-end gap-0.5 h-[52px] px-3 border-b border-line-soft shrink-0">
         {history !== null && (
           <div
             className="flex items-center gap-1 flex-1 min-w-0"
@@ -143,7 +150,7 @@ export default function InboxDetailPanel({
             </button>
             <button {...tabProps(TAB_PREFIX, "history", tab === "history")} onClick={() => changeTab("history")} className={tabClass(tab === "history")}>
               계정 이력
-              <span className="inline-flex min-w-[18px] h-4 px-1.5 rounded-full bg-ground text-muted text-[11px] leading-4 justify-center font-normal tabular-nums">
+              <span className="text-muted text-[12.5px] font-semibold tabular-nums">
                 {history.length}
               </span>
             </button>
@@ -154,9 +161,9 @@ export default function InboxDetailPanel({
           onClick={() => setCollapsed(true)}
           aria-label="상세 접기"
           title="상세 접기"
-          className="ml-auto shrink-0 w-6 h-6 flex items-center justify-center rounded-md border border-line text-muted hover:text-ink hover:bg-ground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          className={`ml-auto mb-[11px] ${ICON_BTN}`}
         >
-          ›
+          <PanelIcon />
         </button>
       </div>
 

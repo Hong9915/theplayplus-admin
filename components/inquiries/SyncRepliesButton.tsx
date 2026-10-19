@@ -42,13 +42,13 @@ export default function SyncRepliesButton({ inquiryId }: { inquiryId: string }) 
   }
 
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <div className="flex items-center gap-2 text-[12.5px]">
       <StatusMessage tone="muted">{message}</StatusMessage>
       <button
         type="button"
         onClick={handleSync}
         disabled={loading}
-        className="border border-line rounded-lg px-2.5 py-1 hover:bg-ground disabled:opacity-50 transition-colors"
+        className="h-[34px] px-3 rounded-[9px] text-[13.5px] font-semibold text-ink-2 ring-1 ring-inset ring-line whitespace-nowrap hover:bg-well hover:text-ink active:bg-line-soft disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
         {loading ? "확인 중…" : "회신 확인"}
       </button>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import InboxList from "@/components/inbox/InboxList";
 import type { InquiryPage, InquiryRow } from "@/lib/inquiries";
@@ -84,20 +84,22 @@ describe("InboxList", () => {
 
   it("shows the view label and total", () => {
     renderList(makePage([makeInquiry({})], 37));
-    expect(screen.getByText("전체")).toBeInTheDocument();
-    expect(screen.getByText("37건")).toBeInTheDocument();
+    const header = screen.getByRole("checkbox", { name: "이 페이지 전체 선택" }).closest("label") as HTMLElement;
+    expect(within(header).getByText("전체")).toBeInTheDocument();
+    expect(within(header).getByText("37건")).toBeInTheDocument();
   });
 
   it("renders a card row with number, elapsed, title, first content line, badge, type, and priority", () => {
     renderList(makePage([makeInquiry({ priority: "urgent" })]));
-    expect(screen.getByText("R-20260101-0001")).toBeInTheDocument();
-    expect(screen.getByText("0분")).toBeInTheDocument();
-    expect(screen.getByText("버그 신고합니다")).toBeInTheDocument();
-    expect(screen.getByText("첫 줄입니다")).toBeInTheDocument();
-    expect(screen.queryByText(/둘째 줄/)).not.toBeInTheDocument();
-    expect(screen.getByText("접수")).toBeInTheDocument();
-    expect(screen.getByText("버그·오류 신고")).toBeInTheDocument();
-    expect(screen.getByText("긴급")).toBeInTheDocument();
+    const row = within(screen.getByRole("list", { name: "문의" }));
+    expect(row.getByText("R-20260101-0001")).toBeInTheDocument();
+    expect(row.getByText("0분")).toBeInTheDocument();
+    expect(row.getByText("버그 신고합니다")).toBeInTheDocument();
+    expect(row.getByText("첫 줄입니다")).toBeInTheDocument();
+    expect(row.queryByText(/둘째 줄/)).not.toBeInTheDocument();
+    expect(row.getByText("접수")).toBeInTheDocument();
+    expect(row.getByText("버그·오류 신고")).toBeInTheDocument();
+    expect(row.getByText("긴급")).toBeInTheDocument();
   });
 
   it("marks rows that have an unread user reply", () => {
@@ -138,7 +140,7 @@ describe("InboxList", () => {
   it("highlights the clicked row right away while the navigation is pending", async () => {
     renderList(makePage([makeInquiry({}), makeInquiry({ id: "second", title: "두 번째" })]), DEFAULT_QUERY, "aaaabbbb-0000-0000-0000-000000000000");
     await userEvent.click(screen.getByText("두 번째"));
-    const rows = screen.getAllByRole("listitem");
+    const rows = within(screen.getByRole("list", { name: "문의" })).getAllByRole("listitem");
     expect(rows[1]).toHaveAttribute("aria-current", "true");
     expect(rows[1]).toHaveAttribute("aria-busy", "true");
     expect(rows[0]).not.toHaveAttribute("aria-current");
@@ -152,7 +154,7 @@ describe("InboxList", () => {
 
   it("marks the selected row", () => {
     renderList(makePage([makeInquiry({})]), DEFAULT_QUERY, "aaaabbbb-0000-0000-0000-000000000000");
-    expect(screen.getByRole("listitem")).toHaveAttribute("aria-current", "true");
+    expect(within(screen.getByRole("list", { name: "문의" })).getByRole("listitem")).toHaveAttribute("aria-current", "true");
   });
 
   it("changing the sort rewrites the URL and keeps the selection", async () => {

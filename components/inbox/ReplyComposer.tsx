@@ -224,34 +224,31 @@ export default function ReplyComposer({
   const showEvidence = isReply && settled && suggestion.evidence.length > 0;
   const showSuggestRow = isReply && (writing || settled) && (caption !== null || showUndo || showEvidence || suggestion.warnings.length > 0);
 
+  // 메모 모드는 입력창 전체가 호박색이 되어 고객에게 보낼 글과 헷갈리지 않는다. 보라는 AI가 쓰는 중에만.
   const box = writing
-    ? "border-dashed border-accent bg-panel"
+    ? "border-dashed border-ai bg-panel"
     : isReply
-      ? "border-line bg-panel focus-within:border-muted"
-      : "border-amber-200 bg-amber-50 focus-within:border-amber-400";
+      ? "border-line bg-panel focus-within:border-ink-2/50"
+      : "border-memo-line bg-memo focus-within:border-memo-ink/40";
 
   const tabClass = (active: boolean) =>
-    `h-7 px-2.5 inline-flex items-center rounded-md text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
-      active
-        ? isReply
-          ? "bg-ground text-ink font-semibold"
-          : "bg-amber-100 text-amber-900 font-semibold"
-        : "text-muted hover:text-ink"
+    `h-8 px-3 inline-flex items-center rounded-lg text-[13.5px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+      active ? (isReply ? "bg-well text-ink" : "bg-memo-line/45 text-memo-ink") : "text-muted hover:text-ink active:bg-well"
     }`;
 
   const sendClass = isReply
-    ? "bg-accent text-white hover:bg-accent/90 focus-visible:ring-accent/50"
-    : "bg-amber-700 text-white hover:bg-amber-700/90 focus-visible:ring-amber-400";
+    ? "bg-accent text-white hover:brightness-105 active:brightness-95 focus-visible:ring-accent/50"
+    : "bg-memo-ink text-white hover:bg-memo-ink/90 active:bg-memo-ink/80 focus-visible:ring-memo-line";
 
   return (
-    <div className="px-5 pt-3 pb-3 border-t border-line bg-panel">
+    <div className="px-[18px] pt-3 pb-3.5 border-t border-line-soft bg-panel">
       <form
         ref={formRef}
         onSubmit={handleSubmit}
         data-testid="composer"
         data-mode={mode}
         data-writing={writing || undefined}
-        className={`flex flex-col rounded-2xl border transition-colors ${box}`}
+        className={`flex flex-col rounded-xl border transition-colors ${box}`}
       >
         <textarea
           ref={textareaRef}
@@ -260,13 +257,13 @@ export default function ReplyComposer({
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           readOnly={writing}
-          rows={2}
+          rows={3}
           aria-label={isReply ? "답변 내용" : "내부 메모"}
           aria-busy={writing || undefined}
           placeholder={isReply ? "답변을 입력하세요. ⌘ Enter로 발송합니다." : "처리 과정, 확인한 내용을 적습니다. 사용자에게 보이지 않습니다."}
-          className="w-full bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed resize-none focus:outline-none placeholder:text-muted/70"
+          className="w-full bg-transparent px-3.5 pt-3 pb-1 text-[14.5px] leading-[1.65] resize-none focus:outline-none placeholder:text-muted/80"
         />
-        <div className="flex items-center gap-1 px-2 pb-2 min-w-0">
+        <div className="flex items-center gap-1.5 px-2 pb-2 min-w-0">
           <div
             role="tablist"
             aria-label="작성 종류"
@@ -287,14 +284,17 @@ export default function ReplyComposer({
               type="button"
               onClick={handleSuggest}
               disabled={submitting}
-              className="h-7 px-2.5 rounded-md text-xs text-muted hover:text-ink hover:bg-ground disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg text-[13.5px] font-semibold text-ai ring-1 ring-inset ring-ai/35 hover:bg-ai-wash active:bg-ai/15 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ai/50"
             >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
+              </svg>
               AI 답변 추천
             </button>
           )}
           {writing && (
-            <span className="flex items-center gap-2 text-xs text-accent pl-1.5" role="status" aria-live="polite">
-              <span className="inline-block w-[2px] h-[1em] bg-accent animate-pulse motion-reduce:animate-none" aria-hidden="true" />
+            <span className="flex items-center gap-2 text-[13px] font-medium text-ai pl-1.5" role="status" aria-live="polite">
+              <span className="inline-block w-[2px] h-[1em] bg-ai animate-pulse motion-reduce:animate-none" aria-hidden="true" />
               쓰는 중
               <button
                 type="button"
@@ -306,12 +306,12 @@ export default function ReplyComposer({
             </span>
           )}
 
-          {isReply && <span className="ml-auto text-[11px] text-muted truncate min-w-0">받는 사람 {replyEmail}</span>}
+          {isReply && <span className="ml-auto text-[12.5px] text-muted truncate min-w-0">받는 사람 {replyEmail}</span>}
           <button
             type="submit"
             disabled={submitting || writing}
             title="⌘/Ctrl+Enter"
-            className={`${isReply ? "" : "ml-auto"} shrink-0 h-7 px-3.5 rounded-full text-xs font-semibold disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-panel ${sendClass}`}
+            className={`${isReply ? "" : "ml-auto"} shrink-0 h-8 px-4 rounded-lg text-[13.5px] font-semibold disabled:opacity-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-panel ${sendClass}`}
           >
             {isReply ? (submitting ? "발송 중…" : "발송") : submitting ? "저장 중…" : "메모 남기기"}
           </button>
@@ -326,7 +326,7 @@ export default function ReplyComposer({
       </StatusMessage>
 
       {showSuggestRow && (
-        <div className="flex flex-col gap-1 mt-2 px-1 text-xs">
+        <div className="flex flex-col gap-1.5 mt-2 px-1 text-[12.5px]">
           {(caption || showUndo) && (
             <p className="flex items-center gap-3 text-muted">
               {caption && <span>{caption}</span>}
@@ -342,16 +342,16 @@ export default function ReplyComposer({
             </p>
           )}
           {suggestion.warnings.map((warning) => (
-            <p key={warning} className="text-amber-700" role="status">
+            <p key={warning} className="text-memo-ink" role="status">
               {warning}
             </p>
           ))}
           {showEvidence && (
-            <ul aria-label="참고한 자료" className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <ul aria-label="참고한 자료" className="flex flex-wrap items-center gap-1.5">
               {suggestion.evidence.map((item) => {
                 const kind = evidenceKind(item);
                 return (
-                  <li key={item} data-kind={kind} className="flex items-center gap-1.5 text-[13px] text-ink">
+                  <li key={item} data-kind={kind} className="flex items-center gap-1.5 h-6 px-2 rounded-md bg-well text-[12.5px] text-ink-2">
                     <EvidenceIcon kind={kind} />
                     {item}
                   </li>

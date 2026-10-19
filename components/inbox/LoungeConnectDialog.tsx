@@ -4,14 +4,18 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Dialog from "@/components/ui/Dialog";
 import StatusMessage from "@/components/ui/StatusMessage";
+import SettingsIcon from "@/components/ui/SettingsIcon";
 
 const ERRORS: Record<string, string> = {
   invalid_lounge: "네이버 게임 라운지 주소가 아닙니다. https://game.naver.com/lounge/… 주소를 붙여넣어 주세요.",
   lounge_unreachable: "라운지를 읽을 수 없습니다. 주소를 다시 확인해주세요.",
 };
 
-/** 문의함 보기 열의 "네이버 라운지 연결". 주소를 비우고 저장하면 연결이 해제된다. */
-export default function LoungeConnectDialog({ gameId, loungeId }: { gameId: string; loungeId: string | null }) {
+/**
+ * "네이버 라운지 연결". 주소를 비우고 저장하면 연결이 해제된다.
+ * asRow면 게임 설정 서랍의 다른 행과 같은 모양(아이콘·제목·설명)으로 그린다.
+ */
+export default function LoungeConnectDialog({ gameId, loungeId, asRow = false }: { gameId: string; loungeId: string | null; asRow?: boolean }) {
   const router = useRouter();
   const initial = loungeId ? `https://game.naver.com/lounge/${loungeId}/home` : "";
   const [open, setOpen] = useState(false);
@@ -47,13 +51,30 @@ export default function LoungeConnectDialog({ gameId, loungeId }: { gameId: stri
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex items-center h-8 px-2.5 rounded-lg text-[13px] text-muted hover:bg-ground hover:text-ink transition-colors text-left"
-      >
-        {loungeId ? "네이버 라운지 변경" : "네이버 라운지 연결"}
-      </button>
+      {asRow ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={loungeId ? "네이버 라운지 변경" : "네이버 라운지 연결"}
+          className="flex items-center gap-3.5 p-2.5 rounded-xl text-left hover:bg-well active:bg-line-soft transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        >
+          <SettingsIcon>
+            <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+          </SettingsIcon>
+          <span className="flex flex-col min-w-0">
+            <span className="font-semibold text-ink">네이버 라운지 연결</span>
+            <span className="text-[13px] text-muted">{loungeId ? "연결됨 · 새 글을 5분마다 확인" : "연결하면 유저 글·댓글을 알려드립니다"}</span>
+          </span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex items-center h-8 px-2.5 rounded-lg text-[13px] text-muted hover:bg-ground hover:text-ink transition-colors text-left"
+        >
+          {loungeId ? "네이버 라운지 변경" : "네이버 라운지 연결"}
+        </button>
+      )}
       {open && (
         <Dialog labelledBy="lounge-connect-title" onClose={close} dismissDisabled={saving} className="max-w-md">
           <h2 id="lounge-connect-title" className="text-lg font-bold mb-1">

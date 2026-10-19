@@ -20,7 +20,7 @@ describe("DeleteGameButton", () => {
   it("opens a confirm dialog showing the inquiry count", async () => {
     render(<DeleteGameButton gameId="game-1" gameName="여신 키우기" inquiryCount={5} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "게임 삭제" }));
+    await userEvent.click(screen.getByRole("button", { name: "게임 삭제…" }));
 
     expect(screen.getByRole("dialog", { name: "게임 삭제" })).toBeInTheDocument();
     expect(screen.getByText("5건")).toBeInTheDocument();
@@ -30,7 +30,7 @@ describe("DeleteGameButton", () => {
   it("cancel closes the dialog without deleting", async () => {
     render(<DeleteGameButton gameId="game-1" gameName="여신 키우기" inquiryCount={0} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "게임 삭제" }));
+    await userEvent.click(screen.getByRole("button", { name: "게임 삭제…" }));
     await userEvent.click(screen.getByRole("button", { name: "취소" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -40,7 +40,7 @@ describe("DeleteGameButton", () => {
   it("confirming calls the delete API and navigates home", async () => {
     render(<DeleteGameButton gameId="game-1" gameName="여신 키우기" inquiryCount={0} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "게임 삭제" }));
+    await userEvent.click(screen.getByRole("button", { name: "게임 삭제…" }));
     await userEvent.click(screen.getByRole("button", { name: "삭제" }));
 
     expect(global.fetch).toHaveBeenCalledWith("/api/games/game-1", { method: "DELETE" });
@@ -52,7 +52,7 @@ describe("DeleteGameButton", () => {
     global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: false }) }) as never;
     render(<DeleteGameButton gameId="game-1" gameName="여신 키우기" inquiryCount={0} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "게임 삭제" }));
+    await userEvent.click(screen.getByRole("button", { name: "게임 삭제…" }));
     await userEvent.click(screen.getByRole("button", { name: "삭제" }));
 
     expect(await screen.findByText("삭제에 실패했습니다. 다시 시도해주세요.")).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe("DeleteGameButton", () => {
   });
   it("focuses 취소 first, closes on Escape, and returns focus to the opener", async () => {
     render(<DeleteGameButton gameId="game-1" gameName="여신 키우기" inquiryCount={0} />);
-    const opener = screen.getByRole("button", { name: "게임 삭제" });
+    const opener = screen.getByRole("button", { name: "게임 삭제…" });
 
     await userEvent.click(opener);
     expect(screen.getByRole("button", { name: "취소" })).toHaveFocus();
@@ -76,7 +76,7 @@ describe("DeleteGameButton", () => {
     global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: false }) }) as never;
     render(<DeleteGameButton gameId="game-1" gameName="여신 키우기" inquiryCount={0} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "게임 삭제" }));
+    await userEvent.click(screen.getByRole("button", { name: "게임 삭제…" }));
     await userEvent.click(screen.getByRole("button", { name: "삭제" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("삭제에 실패했습니다. 다시 시도해주세요.");
