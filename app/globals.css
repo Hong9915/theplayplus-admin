@@ -18,6 +18,42 @@
     background-repeat: no-repeat;
     background-position: right 9px center;
   }
+
+  /* role="switch" 체크박스를 켬/끔 스위치 모양으로. 손잡이는 트랙 안에서 미끄러진다. */
+  .switch {
+    appearance: none;
+    position: relative;
+    flex-shrink: 0;
+    width: 38px;
+    height: 22px;
+    border-radius: 9999px;
+    /* 꺼진 트랙은 회색 카드 위에서도 보이게 잉크를 얇게 깐다. */
+    background: rgba(24, 32, 46, 0.2);
+    cursor: pointer;
+    transition: background-color 160ms ease;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .switch:checked {
+    background: theme("colors.accent.DEFAULT");
+  }
+  .switch:checked::after {
+    transform: translateX(16px);
+  }
+  .switch:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(234, 88, 31, 0.35);
+  }
 }
 
 /* 움직임을 줄이면 이동·확대는 빼고 상태만 바로 바뀌게 한다. */

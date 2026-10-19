@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { listCategoryLabels, listGames } from "@/lib/categories";
 import { listTemplates } from "@/lib/templates";
 import TemplateManager from "@/components/templates/TemplateManager";
+import SubpageShell from "@/components/layout/SubpageShell";
 
 export const dynamic = "force-dynamic";
 
@@ -22,18 +22,10 @@ export default async function TemplatesPage({ params }: { params: { gameId: stri
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-4">
-      <Link
-        href={`/games/${params.gameId}/inquiries`}
-        className="text-sm text-muted hover:text-ink transition-colors"
-      >
-        ← 문의함
-      </Link>
-      <header className="flex items-center gap-3">
-        <h1 className="text-xl font-bold">{game.name}</h1>
-        <span className="text-sm text-muted">답변 템플릿</span>
-      </header>
-      <TemplateManager gameId={params.gameId} templates={templates} typeLabels={labels.typeLabels} />
-    </div>
+    <SubpageShell gameId={game.id} gameName={game.name} title="답변 템플릿">
+      <div className="max-w-[880px] mx-auto px-6 py-6">
+        <TemplateManager gameId={params.gameId} templates={templates} typeLabels={labels.typeLabels} />
+      </div>
+    </SubpageShell>
   );
 }

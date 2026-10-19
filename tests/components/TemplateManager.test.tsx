@@ -99,7 +99,7 @@ describe("TemplateManager", () => {
   it("asks for inline confirmation before deleting", async () => {
     render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
 
-    await userEvent.click(screen.getAllByRole("button", { name: "삭제" })[0]);
+    await userEvent.click(screen.getAllByRole("button", { name: "삭제" })[1]);
 
     // 브라우저 confirm()을 쓰지 않는다 — 인라인 2단계 확인.
     expect(screen.getByText("삭제할까요?")).toBeInTheDocument();
@@ -119,15 +119,18 @@ describe("TemplateManager", () => {
     render(<TemplateManager gameId="game-1" templates={withAuto} typeLabels={typeLabels} />);
     const list = within(screen.getByRole("list"));
 
-    expect(list.getByText("자동 발송 중")).toBeInTheDocument();
+    // 공용이 먼저 나오므로 두 번째 줄이 환불 안내(tpl-1)다.
+    const [second, first] = list.getAllByRole("switch", { name: "자동 발송" });
+    expect(first).toHaveAttribute("aria-checked", "true");
+    expect(second).toHaveAttribute("aria-checked", "false");
 
-    await userEvent.click(list.getByRole("button", { name: "자동 발송 끄기" }));
+    await userEvent.click(first);
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/templates/tpl-1",
       expect.objectContaining({ method: "PATCH", body: JSON.stringify({ autoSend: false }) })
     );
 
-    await userEvent.click(list.getByRole("button", { name: "자동 발송 켜기" }));
+    await userEvent.click(second);
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/templates/tpl-2",
       expect.objectContaining({ method: "PATCH", body: JSON.stringify({ autoSend: true }) })
@@ -139,7 +142,7 @@ describe("TemplateManager", () => {
     global.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: false }) }) as never;
     render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
 
-    await userEvent.click(screen.getAllByRole("button", { name: "자동 발송 켜기" })[0]);
+    await userEvent.click(screen.getAllByRole("switch", { name: "자동 발송" })[0]);
 
     expect(await screen.findByText("자동 발송 설정에 실패했습니다.")).toBeInTheDocument();
     expect(refreshMock).not.toHaveBeenCalled();
@@ -149,7 +152,7 @@ describe("TemplateManager", () => {
     render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
     const list = within(screen.getByRole("list"));
 
-    await userEvent.click(list.getAllByRole("button", { name: "수정" })[0]);
+    await userEvent.click(list.getAllByRole("button", { name: "수정" })[1]);
 
     // 기존 값이 채워진 편집 폼이 그 자리에 뜬다.
     const title = list.getByLabelText("템플릿 제목");
@@ -178,7 +181,7 @@ describe("TemplateManager", () => {
     render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
     const list = within(screen.getByRole("list"));
 
-    await userEvent.click(list.getAllByRole("button", { name: "수정" })[0]);
+    await userEvent.click(list.getAllByRole("button", { name: "수정" })[1]);
     await userEvent.type(list.getByLabelText("템플릿 제목"), " 변경");
     await userEvent.click(list.getByRole("button", { name: "취소" }));
 
@@ -192,7 +195,7 @@ describe("TemplateManager", () => {
     render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
     const list = within(screen.getByRole("list"));
 
-    await userEvent.click(list.getAllByRole("button", { name: "수정" })[0]);
+    await userEvent.click(list.getAllByRole("button", { name: "수정" })[1]);
     await userEvent.clear(list.getByLabelText("템플릿 제목"));
     await userEvent.click(list.getByRole("button", { name: "저장" }));
     expect(global.fetch).not.toHaveBeenCalled();
@@ -207,10 +210,28 @@ describe("TemplateManager", () => {
   it("cancels the delete when 아니오 is chosen", async () => {
     render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
 
-    await userEvent.click(screen.getAllByRole("button", { name: "삭제" })[0]);
+    await userEvent.click(screen.getAllByRole("button", { name: "삭제" })[1]);
     await userEvent.click(screen.getByRole("button", { name: "아니오" }));
 
     expect(screen.queryByText("삭제할까요?")).not.toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the add form behind 새 템플릿 once there are templates", async () => {
+    render(<TemplateManager gameId="game-1" templates={templates} typeLabels={typeLabels} />);
+    expect(screen.queryByRole("button", { name: "템플릿 추가" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "새 템플릿" }));
+    expect(screen.getByRole("button", { name: "템플릿 추가" })).toBeInTheDocument();
+  });
+
+  it("lists shared templates first, then by type order", () => {
+    const mixed = [
+      { id: "a", typeKey: "bug_report", title: "버그 접수", content: "x", autoSend: false },
+      { id: "b", typeKey: "payment_refund", title: "환불", content: "x", autoSend: false },
+      { id: "c", typeKey: null, title: "인사", content: "x", autoSend: false },
+    ];
+    render(<TemplateManager gameId="game-1" templates={mixed} typeLabels={typeLabels} />);
+    const titles = within(screen.getByRole("list")).getAllByRole("listitem").map((li) => li.querySelector("p")?.textContent);
+    expect(titles).toEqual(["인사", "환불", "버그 접수"]);
   });
 });

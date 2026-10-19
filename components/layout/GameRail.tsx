@@ -106,7 +106,7 @@ export default function GameRail({
   return (
     <>
       <aside className="w-[72px] shrink-0 h-screen sticky top-0 bg-rail flex flex-col items-center pt-4 pb-3 gap-1.5">
-        <div className="mb-2 text-[15px] font-extrabold tracking-[-.04em] text-white select-none" title="THE PLAY+ Admin">
+        <div className="mb-2 text-[14px] font-extrabold tracking-[-.04em] text-white select-none" title="THE PLAY+ Admin">
           theplay<span className="text-ink">+</span>
         </div>
 

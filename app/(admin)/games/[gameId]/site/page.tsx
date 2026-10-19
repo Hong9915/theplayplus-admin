@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { listGames } from "@/lib/categories";
 import { emptyGamePage, getGamePage } from "@/lib/game-pages";
 import GamePageEditor from "@/components/site/GamePageEditor";
+import SubpageShell from "@/components/layout/SubpageShell";
 
 export const dynamic = "force-dynamic";
 
@@ -20,29 +20,23 @@ export default async function GameSitePage({ params }: { params: { gameId: strin
   const current = page ?? emptyGamePage(game.id, game.name);
 
   return (
-    // 아래 여백 없음: 편집기의 저장 바(sticky bottom-0)가 화면 맨 아래에 붙게 한다.
-    <div className="flex-1 overflow-y-auto px-8 pt-6 flex flex-col gap-4">
-      <Link href={`/games/${params.gameId}/inquiries`} className="text-sm text-muted hover:text-ink transition-colors">
-        ← 문의함
-      </Link>
-      <header className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold">{game.name}</h1>
-        <span className="text-sm text-muted">웹사이트 게임 페이지</span>
+    <SubpageShell
+      gameId={game.id}
+      gameName={game.name}
+      title="웹사이트 게임 페이지"
+      badge={
         <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
-            current.published ? "bg-emerald-100 text-emerald-700" : "bg-ground text-muted border border-line"
+          className={`inline-flex items-center gap-1.5 h-[22px] px-2 rounded-md text-xs font-semibold tracking-normal shrink-0 ${
+            current.published ? "bg-done-wash text-done" : "bg-line-soft text-muted"
           }`}
         >
+          {current.published && <span className="w-1.5 h-1.5 rounded-full bg-[#2FA36B]" aria-hidden="true" />}
           {current.published ? "공개 중" : "비공개"}
         </span>
-      </header>
-
-      <GamePageEditor
-        key={current.gameId}
-        page={current}
-        loungeId={game.naverLoungeId ?? null}
-        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? null}
-      />
-    </div>
+      }
+    >
+      {/* 아래 여백 없음: 편집기의 저장 바(sticky bottom-0)가 작업면 맨 아래에 붙게 한다. */}
+      <GamePageEditor key={current.gameId} page={current} loungeId={game.naverLoungeId ?? null} siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? null} />
+    </SubpageShell>
   );
 }
