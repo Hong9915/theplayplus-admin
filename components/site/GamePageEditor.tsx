@@ -21,7 +21,7 @@ const INPUT_INVALID = "border-red-500";
 const FIELD_ERRORS: Record<string, string> = {
   slug: "영문 소문자, 숫자, 하이픈(-)만 쓸 수 있습니다. 공개하려면 꼭 입력해야 합니다.",
   titleKo: "공개하려면 한국어 제목을 입력해야 합니다.",
-  youtubeId: "유튜브 영상 ID만 입력하세요. 예: Ky1PVk-TXu8",
+  youtubeUrl: "유튜브 영상 주소를 입력하세요. 예: https://youtu.be/Ky1PVk-TXu8",
 };
 const URL_ERROR = "https:// 로 시작하는 주소를 입력하세요.";
 
@@ -251,8 +251,8 @@ export default function GamePageEditor({
           <Field label="앱스토어" error={errorFor("appStoreUrl")}>
             <input {...text("appStoreUrl")} type="url" placeholder="https://apps.apple.com/…" />
           </Field>
-          <Field label="유튜브 트레일러 ID" error={errorFor("youtubeId")}>
-            <input {...text("youtubeId")} placeholder="Ky1PVk-TXu8" spellCheck={false} />
+          <Field label="유튜브 트레일러 주소" error={errorFor("youtubeUrl")}>
+            <input {...text("youtubeUrl")} type="url" placeholder="https://youtu.be/Ky1PVk-TXu8" spellCheck={false} />
           </Field>
           <Field label="확률 정보 페이지" hint="운영정책 탭의 '확률 정보 보기' 버튼이 이 주소로 갑니다." error={errorFor("probabilityUrl")}>
             <input {...text("probabilityUrl")} type="url" placeholder="https://…" />
@@ -469,10 +469,10 @@ function ImageSection({ page }: { page: GamePage }) {
   );
 }
 
-type ImportedFields = Partial<Pick<Draft, "onestoreUrl" | "titleKo" | "genreKo" | "ageRating" | "taglineKo" | "descriptionKo">>;
+type ImportedFields = Partial<Pick<Draft, "onestoreUrl" | "titleKo" | "genreKo" | "ageRating" | "taglineKo" | "descriptionKo" | "youtubeUrl">>;
 
 const IMPORT_ERRORS: Record<string, string> = {
-  invalid_url: "원스토어 상품 주소가 아닙니다. 예: https://onesto.re/0001007974",
+  invalid_url: "원스토어 상품·사전예약 주소가 아닙니다. 예: https://onesto.re/0001007974",
   not_found: "원스토어에서 이 상품을 찾지 못했습니다. 주소를 확인하세요.",
   fetch_failed: "원스토어 페이지를 읽지 못했습니다. 잠시 뒤 다시 시도하세요.",
 };
@@ -512,7 +512,15 @@ function OneStoreImport({
       success: boolean;
       error?: string;
       warning?: string;
-      product?: { url: string; title: string; genre: string | null; ageRating: string | null; tagline: string | null; description: string | null };
+      product?: {
+        url: string;
+        title: string;
+        genre: string | null;
+        ageRating: string | null;
+        tagline: string | null;
+        description: string | null;
+        youtubeUrl: string | null;
+      };
       imported?: { card: boolean; screenshots: number };
     };
     try {
@@ -537,6 +545,7 @@ function OneStoreImport({
     if (product.ageRating) fields.ageRating = product.ageRating;
     if (product.tagline) fields.taglineKo = product.tagline;
     if (product.description) fields.descriptionKo = product.description;
+    if (product.youtubeUrl) fields.youtubeUrl = product.youtubeUrl;
     onImported(fields);
 
     const parts = ["글을 채웠습니다. 확인한 뒤 아래 저장을 누르세요."];
@@ -549,7 +558,7 @@ function OneStoreImport({
   }
 
   return (
-    <Section title="원스토어에서 불러오기" description="원스토어 상품 페이지의 제목, 장르, 이용등급, 한 줄 소개, 게임 소개를 그대로 가져와 아래 칸을 채웁니다.">
+    <Section title="원스토어에서 불러오기" description="원스토어 상품 페이지나 사전예약 페이지의 제목, 장르, 이용등급, 한 줄 소개, 게임 소개, 유튜브 트레일러를 그대로 가져와 아래 칸을 채웁니다. 사전예약 페이지에는 장르가 없습니다.">
       <div className="flex flex-col gap-3 sm:flex-row">
         <input
           type="url"

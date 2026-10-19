@@ -87,3 +87,18 @@ describe("onestore sync", () => {
     expect(mapGamePageRow({ game_id: "g", release_status: "live", onestore_sync: true }).onestoreSync).toBe(true);
   });
 });
+
+describe("youtube trailer", () => {
+  it("takes a video address and stores only the video id", () => {
+    const parsed = gamePageSchema.parse(input({ youtubeUrl: "https://youtu.be/Ky1PVk-TXu8?si=x" }));
+    expect(toGamePageColumns(parsed).youtube_id).toBe("Ky1PVk-TXu8");
+    expect(mapGamePageRow({ game_id: "g", release_status: "live", youtube_id: "Ky1PVk-TXu8" }).youtubeUrl).toBe(
+      "https://www.youtube.com/watch?v=Ky1PVk-TXu8"
+    );
+  });
+
+  it("rejects an address that is not a video", () => {
+    const result = gamePageSchema.safeParse(input({ youtubeUrl: "https://www.youtube.com/channel/UCdAzWy7LurRqUJ6BQTMZhPQ" }));
+    expect(result.success ? [] : result.error.issues.map((issue) => issue.path[0])).toEqual(["youtubeUrl"]);
+  });
+});

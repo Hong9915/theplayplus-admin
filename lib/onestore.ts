@@ -3,10 +3,13 @@ import { z } from "zod";
 /**
  * 원스토어 상품 페이지 읽기. 공식 API가 없어 모바일 웹 상품 페이지(Next.js)가 HTML에 실어 보내는
  * 상품 데이터(`self.__next_f.push` 스트림 안의 product 객체)를 꺼낸다(2026-10-17 실측).
+ * 출시 전 사전예약 게임은 상품 페이지가 비어 있고 사전예약 페이지에만 prodInfo·imageInfo 로 실린다
+ * (2026-10-19 실측, 0001009277). 상품 페이지에 없으면 사전예약 페이지를 읽는다.
  * 모양이 바뀌면 zod 검증이 던져 화면에 "불러오지 못했다"가 뜬다. 원스토어를 아는 파일은 여기 하나다.
  */
 
 const PAGE_BASE = "https://m.onestore.co.kr/v2/ko-kr/app";
+const PREREG_BASE = "https://m.onestore.co.kr/v2/ko-kr/event/preregistrations";
 const TIMEOUT_MS = 10_000;
 const HEADERS = {
   "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
@@ -14,6 +17,7 @@ const HEADERS = {
 };
 const PRODUCT_ID = /^\d{10}$/;
 const LOUNGE_SITE_CODE = "PD016402";
+const LOUNGE_URL = /^https:\/\/game\.naver\.com\/lounge\//;
 
 const productSchema = z.object({
   prodId: z.string(),
@@ -25,6 +29,22 @@ const productSchema = z.object({
   descImage: z.object({ path: z.string().nullish() }).nullish(),
   screenshotList: z.array(z.object({ path: z.string() })).nullish(),
   siteList: z.array(z.object({ siteClsfCd: z.string(), siteUrl: z.string() })).nullish(),
+  videos: z.object({ youtube: z.object({ youtubeUrl: z.string().nullish() }).nullish() }).nullish(),
+});
+
+const preregInfoSchema = z.object({
+  prodId: z.string(),
+  prodName: z.string(),
+  oneLineDesc: z.string().nullish(),
+  detailInfo: z.string().nullish(),
+  gradeInfo: z.object({ minAge: z.string().nullish(), adultGradeYn: z.string().nullish() }).nullish(),
+  videoUrl: z.string().nullish(),
+  officialCommunity: z.array(z.object({ address: z.string() })).nullish(),
+});
+
+const preregImagesSchema = z.object({
+  videoImage: z.string().nullish(),
+  slideImages: z.array(z.string()).nullish(),
 });
 
 export interface OneStoreProduct {
@@ -39,6 +59,7 @@ export interface OneStoreProduct {
   promoImageUrl: string | null;
   screenshotUrls: string[];
   naverLoungeUrl: string | null;
+  youtubeUrl: string | null;
 }
 
 /** onesto.re 단축 주소, 원스토어 웹 주소, 상품 ID(10자리) 어느 것이든 상품 ID를 뽑는다. */
@@ -57,7 +78,7 @@ export function parseOneStoreProductId(input: string): string | null {
     return PRODUCT_ID.test(id) ? id : null;
   }
   if (!host.endsWith("onestore.co.kr")) return null;
-  const fromPath = url.pathname.match(/\/app\/(\d{10})(?:\/|$)/)?.[1];
+  const fromPath = url.pathname.match(/\/(?:app|preregistrations)\/(\d{10})(?:\/|$)/)?.[1];
   const fromQuery = url.searchParams.get("param") ?? url.searchParams.get("prodId");
   const id = fromPath ?? fromQuery;
   return id && PRODUCT_ID.test(id) ? id : null;
@@ -92,18 +113,23 @@ function readObjectAt(stream: string, start: number): unknown {
 }
 
 /**
- * 스트림의 `"product":{…}` 객체 중 prodId가 이 상품인 것을 찾는다. 필드 순서는 원스토어가 바꾼 적이
+ * 스트림의 `"{name}":{…}` 객체 중 prodId가 이 상품인 것을 찾는다. 필드 순서는 원스토어가 바꾼 적이
  * 있어(2026-10-17, 앞에 badge가 붙음) 기대하지 않는다. 같은 페이지의 다른 상품(비슷한 게임 등)은 건너뛴다.
+ * prodId 를 보지 않으면(`productId` 없음) 처음 나온 객체를 돌려준다. 없으면 null.
  */
-function findProduct(stream: string, productId: string): unknown {
-  const key = '"product":{';
+function findObject(stream: string, name: string, productId?: string): unknown {
+  const key = `"${name}":{`;
   for (let at = stream.indexOf(key); at !== -1; at = stream.indexOf(key, at + key.length)) {
     const candidate = readObjectAt(stream, at + key.length - 1);
-    if (candidate && typeof candidate === "object" && (candidate as { prodId?: unknown }).prodId === productId) {
+    if (candidate && typeof candidate === "object" && (!productId || (candidate as { prodId?: unknown }).prodId === productId)) {
       return candidate;
     }
   }
-  throw new Error("onestore product data not found");
+  return null;
+}
+
+function youtubeUrl(url: string | null | undefined): string | null {
+  return url && /^https:\/\/(?:www\.|m\.)?(?:youtube\.com|youtu\.be)\//.test(url) ? url : null;
 }
 
 function ageRatingLabel(grade: z.infer<typeof productSchema>["useGrade"]): string | null {
@@ -135,19 +161,50 @@ export function mapOneStoreProduct(raw: unknown): OneStoreProduct {
     promoImageUrl: fullSizeImage(product.descImage?.path),
     screenshotUrls: (product.screenshotList ?? []).map((shot) => fullSizeImage(shot.path)).filter((url): url is string => url !== null),
     naverLoungeUrl: product.siteList?.find((site) => site.siteClsfCd === LOUNGE_SITE_CODE)?.siteUrl ?? null,
+    youtubeUrl: youtubeUrl(product.videos?.youtube?.youtubeUrl),
   };
 }
 
+/**
+ * 사전예약 페이지의 prodInfo·imageInfo 를 상품과 같은 모양으로. 장르 이름은 실려 있지 않다(코드만 있음).
+ * 가로형 영상 썸네일(videoImage, 1024×578)을 목록 카드로, 슬라이드 이미지를 스크린샷으로 쓴다.
+ */
+export function mapOneStorePreregistration(rawInfo: unknown, rawImages: unknown): OneStoreProduct {
+  const info = preregInfoSchema.parse(rawInfo);
+  const images = preregImagesSchema.nullish().parse(rawImages);
+  const minAge = info.gradeInfo?.minAge ? Number(info.gradeInfo.minAge) : null;
+  return {
+    productId: info.prodId,
+    url: `${PREREG_BASE}/${info.prodId}`,
+    title: info.prodName.trim(),
+    genre: null,
+    ageRating: ageRatingLabel(info.gradeInfo ? { minAge: Number.isFinite(minAge) ? minAge : null, adultGrdYn: info.gradeInfo.adultGradeYn } : null),
+    tagline: info.oneLineDesc?.trim() || null,
+    description: info.detailInfo?.replace(/\r\n/g, "\n").trim() || null,
+    promoImageUrl: fullSizeImage(images?.videoImage),
+    screenshotUrls: (images?.slideImages ?? []).map(fullSizeImage).filter((url): url is string => url !== null),
+    naverLoungeUrl: info.officialCommunity?.find((site) => LOUNGE_URL.test(site.address))?.address ?? null,
+    youtubeUrl: youtubeUrl(info.videoUrl),
+  };
+}
+
+async function fetchStream(url: string): Promise<{ status: number; stream: string }> {
+  const response = await fetch(url, { headers: HEADERS, cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!response.ok && response.status !== 404) throw new Error(`onestore request failed: ${response.status}`);
+  return { status: response.status, stream: response.ok ? readFlightStream(await response.text()) : "" };
+}
+
 export async function fetchOneStoreProduct(productId: string): Promise<OneStoreProduct> {
-  const response = await fetch(`${PAGE_BASE}/${productId}`, {
-    headers: HEADERS,
-    cache: "no-store",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (response.status === 404) throw new OneStoreNotFoundError(productId);
-  if (!response.ok) throw new Error(`onestore request failed: ${response.status}`);
-  const stream = readFlightStream(await response.text());
-  return mapOneStoreProduct(findProduct(stream, productId));
+  const app = await fetchStream(`${PAGE_BASE}/${productId}`);
+  const product = findObject(app.stream, "product", productId);
+  if (product) return mapOneStoreProduct(product);
+
+  const prereg = await fetchStream(`${PREREG_BASE}/${productId}`);
+  const info = findObject(prereg.stream, "prodInfo", productId);
+  if (info) return mapOneStorePreregistration(info, findObject(prereg.stream, "imageInfo"));
+
+  if (app.status === 404 && prereg.status === 404) throw new OneStoreNotFoundError(productId);
+  throw new Error("onestore product data not found");
 }
 
 export class OneStoreNotFoundError extends Error {

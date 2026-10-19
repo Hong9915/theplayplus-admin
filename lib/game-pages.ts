@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { parseYouTubeId, youtubeWatchUrl } from "@/lib/youtube";
 
 /** 웹사이트 게임 페이지(game_pages, 마이그레이션 0026). 게임당 한 행. */
 export const RELEASE_STATUSES = ["live", "prereg", "upcoming"] as const;
@@ -37,7 +38,7 @@ const TEXT_FIELDS = [
   "onestoreUrl",
   "googlePlayUrl",
   "appStoreUrl",
-  "youtubeId",
+  "youtubeUrl",
   "probabilityUrl",
 ] as const;
 type TextField = (typeof TEXT_FIELDS)[number];
@@ -76,7 +77,8 @@ const COLUMN: Record<TextField, string> = {
   onestoreUrl: "onestore_url",
   googlePlayUrl: "google_play_url",
   appStoreUrl: "app_store_url",
-  youtubeId: "youtube_id",
+  // 화면에서는 주소로 받고, DB에는 웹사이트가 쓰는 영상 ID만 저장한다.
+  youtubeUrl: "youtube_id",
   probabilityUrl: "probability_url",
 };
 
@@ -117,11 +119,11 @@ export const gamePageSchema = z
     onestoreUrl: httpUrl,
     googlePlayUrl: httpUrl,
     appStoreUrl: httpUrl,
-    youtubeId: z
+    youtubeUrl: z
       .string()
       .trim()
-      .max(20)
-      .refine((value) => value === "" || /^[A-Za-z0-9_-]+$/.test(value), "youtube"),
+      .max(500)
+      .refine((value) => value === "" || parseYouTubeId(value) !== null, "youtube"),
     probabilityUrl: httpUrl,
   })
   // 공개하려면 주소와 한국어 제목은 있어야 한다. 나머지는 비어 있으면 웹에서 그 칸을 숨긴다.
@@ -177,6 +179,7 @@ export function mapGamePageRow(row: Row): GamePage {
   const text = Object.fromEntries(
     TEXT_FIELDS.map((field) => [field, (row[COLUMN[field]] as string | null) ?? ""])
   ) as GamePageText;
+  if (text.youtubeUrl !== "") text.youtubeUrl = youtubeWatchUrl(text.youtubeUrl);
   return {
     ...text,
     gameId: row.game_id as string,
@@ -206,6 +209,7 @@ export function toGamePageColumns(input: GamePageInput): Row {
     const value = input[field];
     columns[COLUMN[field]] = value.trim() === "" ? null : value;
   }
+  columns[COLUMN.youtubeUrl] = parseYouTubeId(input.youtubeUrl);
   return columns;
 }
 

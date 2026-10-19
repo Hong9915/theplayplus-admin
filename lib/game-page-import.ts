@@ -116,6 +116,7 @@ export async function createSitePageForNewGame(
     taglineKo: product?.tagline ?? "",
     descriptionKo: product?.description ?? "",
     onestoreUrl: product?.url ?? site.onestoreUrl,
+    youtubeUrl: product?.youtubeUrl ?? "",
     googlePlayUrl: site.googlePlayUrl,
     appStoreUrl: site.appStoreUrl,
   });
