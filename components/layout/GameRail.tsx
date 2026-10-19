@@ -11,15 +11,17 @@ import GameForm from "@/components/games/GameForm";
 import Dialog from "@/components/ui/Dialog";
 import { SERVICE_RAIL_KEY, SERVICE_SCOPE_TITLE } from "@/lib/inbox-scope";
 
+// 주황 레일 위의 타일. 현재 위치는 테두리 대신 왼쪽 끝의 흰 막대와 밝아진 바닥으로 알린다.
 const TILE =
-  "relative w-10 h-10 rounded-xl flex items-center justify-center transition-[opacity,box-shadow] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-panel";
-const TILE_ACTIVE = "ring-2 ring-accent ring-offset-2 ring-offset-panel";
-const TILE_IDLE = "opacity-70 hover:opacity-100 hover:ring-2 hover:ring-line hover:ring-offset-2 hover:ring-offset-panel";
+  "relative w-12 h-12 rounded-[14px] flex items-center justify-center text-white/85 transition-colors active:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
+const TILE_ACTIVE =
+  "bg-white/20 text-white before:absolute before:-left-3 before:top-3 before:bottom-3 before:w-1 before:rounded-r before:bg-white";
+const TILE_IDLE = "hover:bg-white/10 hover:text-white";
 
 function NewBadge({ pending }: { pending: number }) {
   if (pending <= 0) return null;
   return (
-    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-white text-[10px] font-semibold leading-[18px] text-center ring-2 ring-panel tabular-nums">
+    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-ink text-white text-[10px] font-semibold leading-[18px] text-center ring-2 ring-rail tabular-nums">
       {/* 눈에는 숫자만, 보조기기에는 뜻까지. span의 aria-label은 읽히지 않는 경우가 많다. */}
       <span aria-hidden="true">{pending > 99 ? "99+" : pending}</span>
       <span className="sr-only">접수 {pending}건</span>
@@ -31,7 +33,7 @@ function NewBadge({ pending }: { pending: number }) {
 function LoungeBadge({ unread }: { unread: number }) {
   if (unread <= 0) return null;
   return (
-    <span className="absolute -bottom-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#03C75A] text-white text-[10px] font-semibold leading-[18px] text-center ring-2 ring-panel tabular-nums">
+    <span className="absolute -bottom-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#03C75A] text-white text-[10px] font-semibold leading-[18px] text-center ring-2 ring-rail tabular-nums">
       <span aria-hidden="true">{unread > 99 ? "99+" : unread}</span>
       <span className="sr-only">라운지 새 글 {unread}건</span>
     </span>
@@ -48,8 +50,8 @@ function ServiceTile({ active, pending }: { active: boolean; pending: number }) 
       aria-current={active ? "page" : undefined}
       className={`${TILE} ${active ? TILE_ACTIVE : TILE_IDLE}`}
     >
-      <span className="w-10 h-10 bg-ground border border-line rounded-xl flex items-center justify-center text-muted">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <span className="w-10 h-10 rounded-xl flex items-center justify-center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="3" y="5" width="18" height="14" rx="2" />
           <path d="M3 7l9 6 9-6" />
         </svg>
@@ -103,17 +105,15 @@ export default function GameRail({
 
   return (
     <>
-      <aside className="w-16 shrink-0 h-screen sticky top-0 bg-panel border-r border-line flex flex-col items-center py-3 gap-2">
-        <div className="w-10 h-10 rounded-xl bg-ink flex items-center justify-center select-none" title="THE PLAY+ Admin">
-          <img src="/brand/theplayplus-mark-white.png" alt="THE PLAY+" width={160} height={160} className="w-7 h-7 object-contain" draggable={false} />
+      <aside className="w-[72px] shrink-0 h-screen sticky top-0 bg-rail flex flex-col items-center pt-4 pb-3 gap-1.5">
+        <div className="mb-2 text-[15px] font-extrabold tracking-[-.04em] text-white select-none" title="THE PLAY+ Admin">
+          theplay<span className="text-ink">+</span>
         </div>
 
-        <div className="w-8 border-t border-line my-1" />
-
-        <nav className="flex-1 w-full overflow-y-auto flex flex-col items-center gap-2" aria-label="게임 목록">
+        <nav className="flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-2 py-1" aria-label="게임 목록">
           <ServiceTile active={pathname.startsWith("/service/")} pending={newCounts[SERVICE_RAIL_KEY] ?? 0} />
 
-          <div className="w-8 border-t border-line my-1" aria-hidden="true" />
+          <div className="w-7 h-px bg-white/25 my-1.5 shrink-0" aria-hidden="true" />
 
           {games.map((game) => {
             const active = pathname.startsWith(`/games/${game.id}/`);
@@ -132,9 +132,9 @@ export default function GameRail({
                 className={`${TILE} ${active ? TILE_ACTIVE : TILE_IDLE}`}
               >
                 {logoUrl ? (
-                  <Image src={logoUrl} alt={game.name} width={40} height={40} className="w-10 h-10 rounded-xl object-cover" unoptimized />
+                  <Image src={logoUrl} alt={game.name} width={40} height={40} className={`w-10 h-10 rounded-xl object-cover ${game.status === "active" ? "" : "grayscale brightness-75"}`} unoptimized />
                 ) : (
-                  <span className="w-10 h-10 bg-ground border border-line rounded-xl flex items-center justify-center font-semibold text-muted">
+                  <span className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center text-[17px] font-bold tracking-[-.04em] text-white">
                     <span aria-hidden="true">{game.name.charAt(0)}</span>
                     <span className="sr-only">{game.name}</span>
                   </span>
@@ -150,9 +150,11 @@ export default function GameRail({
             onClick={() => setShowAddModal(true)}
             title="게임 추가"
             aria-label="게임 추가"
-            className="w-10 h-10 rounded-xl border border-dashed border-line text-muted hover:text-accent hover:border-accent flex items-center justify-center text-xl leading-none transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="w-12 h-12 rounded-[14px] text-white/85 hover:bg-white/10 hover:text-white active:bg-white/25 flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
-            <span aria-hidden="true">+</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
           </button>
         </nav>
 
@@ -160,9 +162,9 @@ export default function GameRail({
           type="button"
           onClick={handleLogout}
           title="로그아웃"
-          className="w-10 h-10 rounded-xl text-muted hover:text-ink hover:bg-ground flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="w-12 h-12 rounded-[14px] text-white/85 hover:text-white hover:bg-white/10 active:bg-white/25 flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
@@ -180,7 +182,7 @@ export default function GameRail({
             <button
               type="button"
               onClick={requestCloseAddModal}
-              className="text-muted hover:text-ink text-xl leading-none rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="text-muted hover:text-ink text-xl leading-none rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
               aria-label="닫기"
             >
               ×

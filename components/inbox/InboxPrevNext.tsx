@@ -2,12 +2,12 @@ import Link from "next/link";
 import { inquiryHref, type InquiryListQuery } from "@/lib/inquiry-filters";
 import type { InboxScope } from "@/lib/inbox-scope";
 
-const BTN = "w-7 h-[26px] inline-flex items-center justify-center rounded-md text-muted hover:bg-ground hover:text-ink transition-colors";
-const BTN_OFF = "w-7 h-[26px] inline-flex items-center justify-center rounded-md text-muted opacity-40";
+const BTN = "w-[30px] h-[30px] inline-flex items-center justify-center rounded-lg text-ink-2 hover:bg-well hover:text-ink active:bg-line-soft transition-colors";
+const BTN_OFF = "w-[30px] h-[30px] inline-flex items-center justify-center rounded-lg text-muted opacity-40";
 
 function Chevron({ dir }: { dir: "left" | "right" }) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d={dir === "left" ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"} />
     </svg>
   );
@@ -32,7 +32,7 @@ export default function InboxPrevNext({
   const nextId = index < ids.length - 1 ? ids[index + 1] : null;
 
   return (
-    <nav className="flex items-center gap-0.5 border border-line rounded-lg p-0.5" aria-label="문의 이동">
+    <nav className="flex items-center gap-0.5 h-[34px] rounded-[9px] ring-1 ring-inset ring-line px-0.5" aria-label="문의 이동">
       {prevId ? (
         <Link href={inquiryHref(scope, prevId, query)} className={BTN} aria-label="이전 문의" rel="prev">
           <Chevron dir="left" />
@@ -42,7 +42,7 @@ export default function InboxPrevNext({
           <Chevron dir="left" />
         </span>
       )}
-      <span className="font-mono text-[11px] text-muted px-1">
+      <span className="text-[12px] text-muted tabular-nums px-1">
         {index + 1} / {ids.length}
       </span>
       {nextId ? (

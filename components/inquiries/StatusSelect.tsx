@@ -51,12 +51,12 @@ export default function StatusSelect({
 
   return (
     <div>
-      <label className="flex items-center justify-between gap-2 text-sm">
+      <label className="flex items-center justify-between gap-2 text-[13px]">
         <span className="text-muted">상태</span>
         <select
           value={status}
           onChange={(e) => handleChange(e.target.value as InquiryStatus)}
-          className="bg-panel border border-line rounded-lg px-2.5 py-1.5 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent transition-colors"
+          className="appearance-none w-[150px] h-8 pl-3 pr-7 rounded-lg bg-panel ring-1 ring-inset ring-line text-[13.5px] font-medium text-ink select-chevron focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           {OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

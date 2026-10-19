@@ -1,3 +1,32 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    font-size: 14px;
+    line-height: 1.55;
+    word-break: keep-all;
+    font-feature-settings: "tnum" 1;
+  }
+}
+
+@layer components {
+  /* appearance-none으로 기본 화살표를 지운 select에 같은 굵기의 화살표를 다시 그린다. */
+  .select-chevron {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23667085' fill='none' stroke-width='1.6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+  }
+}
+
+/* 움직임을 줄이면 이동·확대는 빼고 상태만 바로 바뀌게 한다. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

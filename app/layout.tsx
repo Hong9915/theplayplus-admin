@@ -6,13 +6,16 @@ export const metadata = {
 };
 
 export const viewport = {
-  themeColor: "#F4F4F6",
+  themeColor: "#E9ECF1",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ko">
-      <body className="min-h-screen bg-ground text-ink antialiased">
+      <head>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+      </head>
+      <body className="min-h-screen bg-ground font-sans text-ink antialiased">
         {/* 키보드 사용자가 게임 레일·보기·목록을 매번 지나치지 않도록 본문으로 바로 가는 링크. 초점을 받을 때만 보인다. */}
         <a
           href="#main"

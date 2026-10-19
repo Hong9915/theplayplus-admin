@@ -3,14 +3,16 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { InquiryPage, InquiryRow, InquiryStatus } from "@/lib/inquiries";
+import type { InquiryFacetCounts, InquiryPage, InquiryRow, InquiryStatus } from "@/lib/inquiries";
 import type { CategoryLabelMaps } from "@/lib/categories";
-import { SORT_OPTIONS, inboxHref, inquiryHref, type InquiryListQuery } from "@/lib/inquiry-filters";
+import { inboxHref, inquiryHref, type InquiryListQuery } from "@/lib/inquiry-filters";
 import type { InboxScope } from "@/lib/inbox-scope";
 import StatusBadge from "@/components/ui/StatusBadge";
+import InboxFilters from "@/components/inbox/InboxFilters";
 import StatusMessage from "@/components/ui/StatusMessage";
 import { usePersistedBoolean } from "@/components/ui/usePersistedBoolean";
 import { formatElapsed } from "@/lib/format";
+import { HEAT_BG, HEAT_LABELS, HEAT_TEXT, heatLevel } from "@/lib/heat";
 
 const COLLAPSE_KEY = "inbox-list-collapsed";
 
@@ -22,14 +24,26 @@ const STATUS_OPTIONS: Array<{ value: InquiryStatus; label: string }> = [
 
 /** 보통·낮음은 소음이라 표시하지 않는다. */
 const PRIORITY_MARK: Partial<Record<InquiryRow["priority"], { label: string; className: string }>> = {
-  urgent: { label: "긴급", className: "text-red-600 font-semibold" },
-  high: { label: "높음", className: "text-amber-600 font-medium" },
+  urgent: { label: "긴급", className: "bg-heat-hot text-white" },
+  high: { label: "높음", className: "ring-[1.5px] ring-inset ring-heat-hot text-heat-hot" },
 };
 
 const SELECT =
-  "bg-panel border border-line rounded-lg px-2 py-1 text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent transition-colors";
+  "appearance-none h-7 pl-2.5 pr-7 rounded-[7px] bg-white/10 text-[13px] text-white select-chevron focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60";
 
-const PAGE_BTN = "border border-line rounded-lg px-2 py-0.5 transition-colors";
+const ICON_BTN =
+  "w-[30px] h-[30px] flex items-center justify-center rounded-lg text-ink-2 hover:bg-line-soft hover:text-ink active:bg-line transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50";
+
+const PAGE_BTN = "h-7 px-2.5 inline-flex items-center rounded-lg transition-colors";
+
+function PanelIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+    </svg>
+  );
+}
 
 function hasFilter(query: InquiryListQuery): boolean {
   return Boolean(query.group || query.type || query.status || query.priority || query.stale || query.unread || query.q);
@@ -44,6 +58,7 @@ export default function InboxList({
   page,
   query,
   labels,
+  counts = null,
   selectedId,
   viewLabel,
   now = Date.now(),
@@ -52,6 +67,8 @@ export default function InboxList({
   page: InquiryPage;
   query: InquiryListQuery;
   labels: CategoryLabelMaps;
+  /** 보기·유형·우선순위 옆 건수. 없으면 숫자 없이 그린다. */
+  counts?: InquiryFacetCounts | null;
   selectedId: string | null;
   /** 머리에 보여줄 현재 보기 이름 (접수, 처리중, 전체 …). */
   viewLabel: string;
@@ -91,10 +108,6 @@ export default function InboxList({
   function markPending(inquiryId: string) {
     if (inquiryId === selectedId) return;
     setPendingId(inquiryId);
-  }
-
-  function navigate(next: Partial<InquiryListQuery>) {
-    router.replace(inboxHref(scope, selectedId, { ...query, ...next, page: 1 }));
   }
 
   function pageHref(pageNo: number): string {
@@ -149,64 +162,65 @@ export default function InboxList({
 
   if (collapsed) {
     return (
-      <section className="w-8 shrink-0 h-full bg-panel border-r border-line flex flex-col items-center pt-3" aria-label="문의 목록 (접힘)">
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          aria-label="목록 펼치기"
-          title="목록 펼치기"
-          className="w-6 h-6 flex items-center justify-center rounded-md border border-line text-muted hover:text-ink hover:bg-ground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        >
-          ›
+      <section className="w-12 shrink-0 h-full bg-well flex flex-col items-center pt-3" aria-label="문의 목록 (접힘)">
+        <button type="button" onClick={() => setCollapsed(false)} aria-label="목록 펼치기" title="목록 펼치기" className={ICON_BTN}>
+          <PanelIcon />
         </button>
       </section>
     );
   }
 
   return (
-    <section className="w-[340px] shrink-0 h-full bg-panel border-r border-line flex flex-col overflow-hidden" aria-label="문의 목록">
-      <header className="flex items-center justify-between gap-2 h-[52px] px-4 border-b border-line shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="이 페이지 전체 선택" className="accent-accent" />
-          <span className="text-[13px] font-semibold truncate">
+    <section className="w-[376px] shrink-0 h-full bg-well flex flex-col overflow-hidden" aria-label="문의 목록">
+      <InboxFilters scope={scope} query={query} labels={labels} counts={counts} selectedId={selectedId} />
+
+      <header className="flex items-center justify-between gap-2 h-11 pl-[22px] pr-2.5 shrink-0">
+        <label className="flex items-center gap-2.5 min-w-0 text-[13px] font-semibold">
+          <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="이 페이지 전체 선택" className="w-4 h-4 accent-accent" />
+          <span className="truncate">
             <span>{viewLabel}</span> <span className="text-muted font-normal tabular-nums">{total}건</span>
           </span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <select
-            value={query.sort}
-            onChange={(e) => navigate({ sort: e.target.value as InquiryListQuery["sort"] })}
-            className={SELECT}
-            aria-label="정렬"
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
+        </label>
+        <button type="button" onClick={() => setCollapsed(true)} aria-label="목록 접기" title="목록 접기" className={ICON_BTN}>
+          <PanelIcon />
+        </button>
+      </header>
+
+      {checked.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 px-3.5 py-2 bg-ink text-white text-[13px] shrink-0">
+          <span className="font-semibold tabular-nums">선택 {checked.size}건</span>
+          <select value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value as InquiryStatus)} className={SELECT} aria-label="일괄 변경 상태">
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value} className="text-ink">
                 {option.label}
               </option>
             ))}
           </select>
           <button
             type="button"
-            onClick={() => setCollapsed(true)}
-            aria-label="목록 접기"
-            title="목록 접기"
-            className="w-6 h-6 flex items-center justify-center rounded-md border border-line text-muted hover:text-ink hover:bg-ground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            onClick={applyBulkStatus}
+            disabled={bulkBusy}
+            className="h-7 px-3 rounded-[7px] bg-accent font-semibold hover:brightness-105 active:brightness-95 disabled:opacity-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
-            ‹
+            {bulkBusy ? "변경 중…" : "상태 변경"}
           </button>
+          {/* 어두운 막대 위라 기본 글자색 대신 밝은 톤으로. */}
+          <StatusMessage tone={bulkFailed ? "error" : "muted"} className={bulkFailed ? "!text-[#FF9A8A]" : "!text-white/80"}>
+            {bulkMessage}
+          </StatusMessage>
         </div>
-      </header>
+      )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
         {rows.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-muted">
             {hasFilter(query) ? "조건에 맞는 문의가 없습니다." : "접수된 문의가 없습니다."}
           </p>
         ) : (
-          <ul>
+          <ul className="flex flex-col gap-0.5" aria-label="문의">
             {rows.map((inquiry) => {
               const elapsed = formatElapsed(inquiry.createdAt, reference);
-              const stale = inquiry.status !== "resolved" && elapsed.endsWith("일");
+              const heat = heatLevel(inquiry.createdAt, inquiry.status, reference);
               const selected = inquiry.id === shownId;
               const pending = pendingId !== null && inquiry.id === pendingId;
               const priority = PRIORITY_MARK[inquiry.priority];
@@ -216,16 +230,21 @@ export default function InboxList({
                   key={inquiry.id}
                   aria-current={selected ? "true" : undefined}
                   aria-busy={pending ? "true" : undefined}
-                  className={`flex gap-2 px-4 py-3 border-b border-line transition-colors border-l-2 ${
-                    selected || inquiry.status === "new" ? "border-l-accent" : "border-l-transparent"
-                  } ${selected || checked.has(inquiry.id) ? "bg-accent/5" : "hover:bg-ground/60"}`}
+                  data-heat={heat}
+                  className={`group relative flex gap-2.5 pl-[22px] pr-3 py-[11px] rounded-xl transition-[background-color,box-shadow] ${
+                    selected ? "bg-panel shadow-paper" : checked.has(inquiry.id) ? "bg-panel/70" : "hover:bg-panel/60 active:bg-panel"
+                  }`}
                 >
+                  {/* 경과 열 띠: 미처리 시간이 길수록 청록 → 황토 → 적색 → 자두. 완료는 회색. */}
+                  <span className={`absolute left-[7px] top-3 bottom-3 w-1 rounded ${HEAT_BG[heat]}`} title={HEAT_LABELS[heat]} aria-hidden="true" />
                   <input
                     type="checkbox"
                     checked={checked.has(inquiry.id)}
                     onChange={() => toggleOne(inquiry.id)}
                     aria-label={`${inquiry.title} 선택`}
-                    className="accent-accent mt-0.5 shrink-0"
+                    className={`w-4 h-4 accent-accent mt-0.5 shrink-0 transition-opacity ${
+                      checked.size > 0 || checked.has(inquiry.id) ? "opacity-100" : "opacity-35 group-hover:opacity-100 focus-visible:opacity-100"
+                    }`}
                   />
                   {/* 행 본문은 진짜 링크다. 키보드 초점·Cmd+클릭 새 탭·가운데 클릭이 그대로 된다. */}
                   <Link
@@ -236,21 +255,28 @@ export default function InboxList({
                       pending ? "cursor-progress" : ""
                     }`}
                   >
-                    <span className="flex items-center justify-between gap-2 font-mono text-[11px] text-muted">
-                      <span>{inquiry.inquiryNo ?? "—"}</span>
-                      <span className={stale ? "text-accent font-semibold" : ""}>{elapsed}</span>
+                    <span className="flex items-center justify-between gap-2 text-[12.5px] text-muted tracking-[.01em]">
+                      <span className="font-semibold text-ink-2">{inquiry.inquiryNo ?? "—"}</span>
+                      <span className={`font-semibold ${HEAT_TEXT[heat]}`}>{elapsed}</span>
                     </span>
-                    <span className="block text-sm font-semibold text-ink truncate">{inquiry.title}</span>
-                    <span className="block text-xs text-muted truncate">{firstLine(inquiry.content)}</span>
-                    <span className="flex items-center gap-1.5 mt-0.5 text-xs">
+                    <span className="flex items-baseline gap-1.5 min-w-0">
+                      {inquiry.unreadReplyAt && <span className="w-[7px] h-[7px] rounded-full bg-accent shrink-0 -translate-y-px" aria-hidden="true" />}
+                      <span className="block text-[14.5px] leading-snug font-semibold tracking-[-.01em] text-ink truncate">{inquiry.title}</span>
+                    </span>
+                    <span className="block text-[13px] text-muted truncate">{firstLine(inquiry.content)}</span>
+                    <span className="flex flex-wrap items-center gap-1.5 mt-1">
                       <StatusBadge status={inquiry.status} />
                       {inquiry.unreadReplyAt && (
-                        <span className="inline-flex items-center h-[18px] px-1.5 rounded-full bg-accent/10 text-accent text-[11px] font-semibold whitespace-nowrap shrink-0">
+                        <span className="inline-flex items-center h-[22px] px-2 rounded-md bg-accent-wash text-accent-ink text-xs font-semibold whitespace-nowrap shrink-0">
                           회신 옴
                         </span>
                       )}
-                      <span className="text-muted truncate">{labels.typeLabels[inquiry.typeKey] ?? inquiry.typeKey}</span>
-                      {priority && <span className={`ml-auto ${priority.className}`}>{priority.label}</span>}
+                      {priority && (
+                        <span className={`inline-flex items-center h-[22px] px-2 rounded-md text-xs font-semibold whitespace-nowrap ${priority.className}`}>{priority.label}</span>
+                      )}
+                      <span className="inline-flex items-center h-[22px] px-2 rounded-md bg-line-soft text-ink-2 text-xs font-medium truncate max-w-[140px]">
+                        {labels.typeLabels[inquiry.typeKey] ?? inquiry.typeKey}
+                      </span>
                     </span>
                   </Link>
                 </li>
@@ -260,41 +286,20 @@ export default function InboxList({
         )}
       </div>
 
-      {checked.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-t border-line bg-accent/5 text-xs shrink-0">
-          <span className="font-medium tabular-nums">선택 {checked.size}건</span>
-          <select value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value as InquiryStatus)} className={SELECT} aria-label="일괄 변경 상태">
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={applyBulkStatus}
-            disabled={bulkBusy}
-            className="bg-accent text-white rounded-lg px-3 py-1 hover:bg-accent/90 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-          >
-            {bulkBusy ? "변경 중…" : "상태 변경"}
-          </button>
-          <StatusMessage tone={bulkFailed ? "error" : "muted"}>{bulkMessage}</StatusMessage>
-        </div>
-      )}
       {checked.size === 0 && (
-        <StatusMessage tone={bulkFailed ? "error" : "muted"} className={bulkMessage ? "px-4 py-2 border-t border-line text-xs shrink-0" : ""}>
+        <StatusMessage tone={bulkFailed ? "error" : "muted"} className={bulkMessage ? "px-4 py-2 border-t border-line-soft text-xs shrink-0" : ""}>
           {bulkMessage}
         </StatusMessage>
       )}
 
-      <footer className="flex items-center justify-between gap-2 h-11 px-4 border-t border-line text-xs text-muted shrink-0" aria-label="페이지">
+      <footer className="flex items-center justify-between gap-2 h-11 px-4 border-t border-line-soft text-[12.5px] text-muted shrink-0" aria-label="페이지">
         <span className="tabular-nums">
           {firstIndex}–{lastIndex} / {total}건
         </span>
         {total > pageSize && (
           <nav className="flex items-center gap-1.5" aria-label="페이지 이동">
             {query.page > 1 ? (
-              <Link href={pageHref(query.page - 1)} rel="prev" className={`${PAGE_BTN} hover:bg-ground`}>
+              <Link href={pageHref(query.page - 1)} rel="prev" className={`${PAGE_BTN} text-ink-2 hover:bg-line-soft active:bg-line`}>
                 이전
               </Link>
             ) : (
@@ -302,11 +307,11 @@ export default function InboxList({
                 이전
               </span>
             )}
-            <span className="font-mono">
+            <span className="tabular-nums">
               {query.page} / {totalPages}
             </span>
             {query.page < totalPages ? (
-              <Link href={pageHref(query.page + 1)} rel="next" className={`${PAGE_BTN} hover:bg-ground`}>
+              <Link href={pageHref(query.page + 1)} rel="next" className={`${PAGE_BTN} text-ink-2 hover:bg-line-soft active:bg-line`}>
                 다음
               </Link>
             ) : (

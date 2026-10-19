@@ -55,11 +55,9 @@ export default function ResolveButton({
         type="button"
         onClick={handleClick}
         disabled={busy}
-        className={
-          resolved
-            ? "border border-line rounded-lg px-3 py-1.5 text-sm hover:bg-ground disabled:opacity-50 transition-colors"
-            : "bg-emerald-600 text-white rounded-lg px-3 py-1.5 text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-        }
+        className={`h-[34px] px-3 rounded-[9px] text-[13.5px] font-semibold whitespace-nowrap disabled:opacity-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+          resolved ? "text-ink-2 ring-1 ring-inset ring-line hover:bg-well active:bg-line-soft" : "bg-ink text-white hover:bg-ink/90 active:bg-ink/80"
+        }`}
       >
         {busy ? "변경 중…" : resolved ? "다시 열기" : "완료로 표시"}
       </button>

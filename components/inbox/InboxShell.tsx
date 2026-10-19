@@ -7,7 +7,7 @@ import type { MessageRow } from "@/lib/messages";
 import type { InquiryListQuery } from "@/lib/inquiry-filters";
 import { buildAccountTimeline, type AccountThread } from "@/lib/timeline";
 import type { InboxScope } from "@/lib/inbox-scope";
-import InboxNav from "@/components/inbox/InboxNav";
+import InboxTopBar from "@/components/inbox/InboxTopBar";
 import InboxList from "@/components/inbox/InboxList";
 import InboxConversation from "@/components/inbox/InboxConversation";
 import InboxDetailPanel from "@/components/inbox/InboxDetailPanel";
@@ -41,7 +41,10 @@ export function describeView(query: InquiryListQuery): string {
   }
 }
 
-/** 4단 배치. 게임 레일은 관리자 layout이 그리므로 여기에는 보기·목록·대화·상세만 있다. */
+/**
+ * 상단 바 아래에 목록·대화·상세가 한 장의 둥근 작업면으로 붙는다. 게임 레일은 관리자 layout이 그린다.
+ * 테두리 대신 면의 명도로 나눈다: 목록·상세는 옅은 회색(well), 대화는 그림자를 가진 흰 종이로 가장 앞에.
+ */
 export default function InboxShell({
   scope,
   title,
@@ -66,30 +69,32 @@ export default function InboxShell({
   const selectedId = selected?.inquiry.id ?? null;
 
   return (
-    <div className="flex h-screen min-w-[1180px] flex-1">
-      <InboxNav scope={scope} title={title} game={game} query={query} labels={labels} counts={counts} selectedId={selectedId} loungeUnread={loungeUnread} />
-      <InboxList scope={scope} page={listPage} query={query} labels={labels} selectedId={selectedId} viewLabel={describeView(query)} now={Date.now()} />
-      {selected ? (
-        <>
-          <InboxConversation
-            scope={scope}
-            inquiry={selected.inquiry}
-            labels={labels}
-            query={query}
-            siblingIds={selected.siblingIds}
-            entries={buildAccountTimeline(
-              [
-                ...selected.pastThreads,
-                { inquiry: selected.inquiry, attachments: selected.attachments, messages: selected.messages, notes: selected.notes },
-              ],
-              selected.inquiry.id
-            )}
-          />
-          <InboxDetailPanel inquiry={selected.inquiry} events={selected.events} history={selected.history} />
-        </>
-      ) : (
-        <InboxEmptyState />
-      )}
+    <div className="flex flex-col h-screen min-w-[1180px] flex-1">
+      <InboxTopBar scope={scope} title={title} game={game} query={query} counts={counts} selectedId={selectedId} loungeUnread={loungeUnread} />
+      <div className="flex flex-1 min-h-0 mx-2.5 mb-2.5 rounded-2xl overflow-hidden ring-1 ring-line-soft">
+        <InboxList scope={scope} page={listPage} query={query} labels={labels} counts={counts} selectedId={selectedId} viewLabel={describeView(query)} now={Date.now()} />
+        {selected ? (
+          <>
+            <InboxConversation
+              scope={scope}
+              inquiry={selected.inquiry}
+              labels={labels}
+              query={query}
+              siblingIds={selected.siblingIds}
+              entries={buildAccountTimeline(
+                [
+                  ...selected.pastThreads,
+                  { inquiry: selected.inquiry, attachments: selected.attachments, messages: selected.messages, notes: selected.notes },
+                ],
+                selected.inquiry.id
+              )}
+            />
+            <InboxDetailPanel inquiry={selected.inquiry} events={selected.events} history={selected.history} />
+          </>
+        ) : (
+          <InboxEmptyState />
+        )}
+      </div>
     </div>
   );
 }

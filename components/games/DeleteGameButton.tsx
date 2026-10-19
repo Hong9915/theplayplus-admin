@@ -49,9 +49,9 @@ export default function DeleteGameButton({
       <button
         type="button"
         onClick={() => setShowConfirm(true)}
-        className="ml-auto text-xs text-muted hover:text-red-600 border border-line hover:border-red-300 rounded-lg px-2.5 py-1.5 transition-colors"
+        className="h-8 px-3 rounded-lg text-[13px] font-semibold text-heat-hot ring-1 ring-inset ring-heat-hot hover:bg-heat-hot/5 active:bg-heat-hot/10 transition-colors focus:outline-none focus-visible:ring-2"
       >
-        게임 삭제
+        게임 삭제…
       </button>
 
       {showConfirm && (

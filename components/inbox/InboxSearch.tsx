@@ -7,7 +7,7 @@ import type { InboxScope } from "@/lib/inbox-scope";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
-/** 문의함 보기 열의 검색창. 입력을 300ms 모았다가 URL의 q로 옮기고 1페이지로 돌아간다. */
+/** 문의함 상단 바의 검색창. 입력을 300ms 모았다가 URL의 q로 옮기고 1페이지로 돌아간다. */
 export default function InboxSearch({
   scope,
   query,
@@ -41,8 +41,8 @@ export default function InboxSearch({
   }
 
   return (
-    <label className="flex items-center gap-2 h-[34px] px-2.5 border border-line rounded-lg bg-ground text-muted focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/40 transition-colors">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <label className="flex items-center gap-2.5 h-9 px-3 rounded-[10px] bg-panel text-muted ring-1 ring-inset ring-line focus-within:ring-2 focus-within:ring-accent/40 transition-shadow">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="11" cy="11" r="7" />
         <line x1="20" y1="20" x2="16.5" y2="16.5" />
       </svg>
@@ -52,9 +52,9 @@ export default function InboxSearch({
         autoComplete="off"
         value={value}
         onChange={(e) => handleChange(e.target.value)}
-        placeholder="제목·접수번호·계정·본문 검색…"
+        placeholder="제목, 접수번호, 계정, 본문 검색"
         aria-label="검색"
-        className="flex-1 min-w-0 bg-transparent text-[13px] text-ink placeholder:text-muted focus:outline-none"
+        className="flex-1 min-w-0 bg-transparent text-[13.5px] text-ink placeholder:text-muted focus:outline-none"
       />
     </label>
   );
