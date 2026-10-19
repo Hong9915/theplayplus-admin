@@ -20,7 +20,8 @@ export default async function GameSitePage({ params }: { params: { gameId: strin
   const current = page ?? emptyGamePage(game.id, game.name);
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-4">
+    // 아래 여백 없음: 편집기의 저장 바(sticky bottom-0)가 화면 맨 아래에 붙게 한다.
+    <div className="flex-1 overflow-y-auto px-8 pt-6 flex flex-col gap-4">
       <Link href={`/games/${params.gameId}/inquiries`} className="text-sm text-muted hover:text-ink transition-colors">
         ← 문의함
       </Link>

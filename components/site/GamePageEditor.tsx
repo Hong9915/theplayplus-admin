@@ -302,7 +302,7 @@ export default function GamePageEditor({
         </div>
       </details>
 
-      <div className="sticky bottom-0 -mx-1 px-1 py-3 bg-ground/95 backdrop-blur border-t border-line flex items-center gap-4">
+      <div className="sticky bottom-0 z-10 -mx-1 px-1 pt-3 pb-4 bg-ground/95 backdrop-blur border-t border-line flex items-center gap-4">
         <button
           type="submit"
           disabled={saving}
@@ -319,9 +319,9 @@ export default function GamePageEditor({
   );
 }
 
-const IMAGE_SLOTS: Array<{ kind: Exclude<ImageKind, "screenshot">; label: string; hint: string; ratio: string }> = [
-  { kind: "kv", label: "키 비주얼", hint: "상세 페이지 맨 위. 가로 4:1, 1280×320 이상 권장.", ratio: "aspect-[4/1]" },
-  { kind: "card", label: "목록 카드", hint: "게임 목록에 나오는 이미지. 16:9 권장.", ratio: "aspect-video" },
+const IMAGE_SLOTS: Array<{ kind: Exclude<ImageKind, "screenshot">; label: string; hint: string; ratio: string; span: string }> = [
+  { kind: "kv", label: "키 비주얼", hint: "상세 페이지 맨 위. 가로 4:1, 1280×320 이상 권장.", ratio: "aspect-[4/1]", span: "sm:col-span-2" },
+  { kind: "card", label: "목록 카드", hint: "게임 목록에 나오는 이미지. 16:9 권장.", ratio: "aspect-video", span: "" },
 ];
 
 const UPLOAD_ERRORS: Record<string, string> = {
@@ -396,7 +396,7 @@ function ImageSection({ page }: { page: GamePage }) {
           const path = slot.kind === "kv" ? page.kvPath : page.cardPath;
           const url = getGameSiteImageUrl(path);
           return (
-            <div key={slot.kind} className="flex flex-col gap-2 min-w-0">
+            <div key={slot.kind} className={`flex flex-col gap-2 min-w-0 ${slot.span}`}>
               <span className="text-sm font-medium">{slot.label}</span>
               <div className={`${slot.ratio} w-full rounded border border-line bg-ground overflow-hidden flex items-center justify-center`}>
                 {url && !url.startsWith("/") ? (
@@ -437,26 +437,29 @@ function ImageSection({ page }: { page: GamePage }) {
         {page.screenshotPaths.length === 0 ? (
           <p className="text-xs text-muted">스크린샷이 없으면 웹사이트에서 스크린샷 칸이 숨겨집니다.</p>
         ) : (
-          <ul className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          // 스크린샷은 가로·세로가 섞여 있어 높이만 맞추고 원래 비율대로 보여준다.
+          <ul className="flex flex-wrap gap-3">
             {page.screenshotPaths.map((path, index) => {
               const url = getGameSiteImageUrl(path);
               return (
-                <li key={path} className="flex flex-col gap-1 min-w-0">
-                  <div className="aspect-[9/16] rounded border border-line bg-ground overflow-hidden flex items-center justify-center">
-                    {url && !url.startsWith("/") ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={url} alt={`스크린샷 ${index + 1}`} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-[11px] text-muted px-2 text-center break-all">{path}</span>
-                    )}
-                  </div>
+                <li key={path} className="relative group h-40 rounded border border-line bg-ground overflow-hidden">
+                  {url && !url.startsWith("/") ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={url} alt={`스크린샷 ${index + 1}`} className="h-full w-auto max-w-[18rem] object-contain" />
+                  ) : (
+                    <span className="flex h-full w-24 items-center text-[11px] text-muted px-2 text-center break-all">{path}</span>
+                  )}
+                  <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 text-[11px] font-medium text-white tabular-nums">
+                    {index + 1}
+                  </span>
                   <button
                     type="button"
                     onClick={() => remove("screenshot", path)}
                     disabled={busy !== null}
-                    className="text-xs text-muted hover:text-red-600 disabled:opacity-60 text-left"
+                    aria-label={`스크린샷 ${index + 1} 지우기`}
+                    className="absolute right-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-white hover:bg-red-600 focus-visible:bg-red-600 disabled:opacity-60 transition-colors"
                   >
-                    {busy === path ? "지우는 중…" : `${index + 1}번 지우기`}
+                    {busy === path ? "지우는 중…" : "지우기"}
                   </button>
                 </li>
               );
