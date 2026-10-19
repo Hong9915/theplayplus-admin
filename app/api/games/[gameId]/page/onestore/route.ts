@@ -50,6 +50,8 @@ export async function POST(request: Request, { params }: { params: { gameId: str
       tagline: product.tagline,
       description: product.description,
       youtubeUrl: product.youtubeUrl,
+      releaseDate: product.releaseDate,
+      preregPeriod: product.preregPeriod,
     },
     imported: { card: images.card, screenshots: images.screenshots },
     ...("warning" in images && images.warning ? { warning: images.warning } : {}),

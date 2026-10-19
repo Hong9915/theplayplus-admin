@@ -231,6 +231,12 @@ export default function GamePageEditor({
           <Field label="개발사">
             <input {...text("developer")} placeholder="RunXuGame" />
           </Field>
+          <Field label="출시일" hint="글자 그대로 나옵니다. 정해지지 않았으면 '2026년 4분기 출시 예정'처럼 적어도 됩니다.">
+            <input {...text("releaseDate")} placeholder="2026.08.20" />
+          </Field>
+          <Field label="사전예약 기간" hint="'사전예약 중'인 게임에만 나옵니다.">
+            <input {...text("preregPeriod")} placeholder="2026.09.30 ~ 2026.10.30" />
+          </Field>
         </div>
         <Field label="한 줄 소개" hint="게임 목록 카드와 상세 페이지 제목 아래에 나옵니다.">
           <input {...text("taglineKo")} placeholder="손을 떼도, 여신은 계속 강해진다." />
@@ -472,7 +478,9 @@ function ImageSection({ page }: { page: GamePage }) {
   );
 }
 
-type ImportedFields = Partial<Pick<Draft, "onestoreUrl" | "titleKo" | "genreKo" | "ageRating" | "taglineKo" | "descriptionKo" | "youtubeUrl">>;
+type ImportedFields = Partial<
+  Pick<Draft, "onestoreUrl" | "titleKo" | "genreKo" | "ageRating" | "taglineKo" | "descriptionKo" | "youtubeUrl" | "releaseDate" | "preregPeriod">
+>;
 
 const IMPORT_ERRORS: Record<string, string> = {
   invalid_url: "원스토어 상품·사전예약 주소가 아닙니다. 예: https://onesto.re/0001007974",
@@ -523,6 +531,8 @@ function OneStoreImport({
         tagline: string | null;
         description: string | null;
         youtubeUrl: string | null;
+        releaseDate: string | null;
+        preregPeriod: string | null;
       };
       imported?: { card: boolean; screenshots: number };
     };
@@ -549,6 +559,8 @@ function OneStoreImport({
     if (product.tagline) fields.taglineKo = product.tagline;
     if (product.description) fields.descriptionKo = product.description;
     if (product.youtubeUrl) fields.youtubeUrl = product.youtubeUrl;
+    if (product.releaseDate) fields.releaseDate = product.releaseDate;
+    if (product.preregPeriod) fields.preregPeriod = product.preregPeriod;
     onImported(fields);
 
     const parts = ["글을 채웠습니다. 확인한 뒤 아래 저장을 누르세요."];
@@ -561,7 +573,7 @@ function OneStoreImport({
   }
 
   return (
-    <Section title="원스토어에서 불러오기" description="원스토어 상품 페이지나 사전예약 페이지의 제목, 장르, 이용등급, 한 줄 소개, 게임 소개, 유튜브 트레일러를 그대로 가져와 아래 칸을 채웁니다. 사전예약 페이지에는 장르가 없습니다.">
+    <Section title="원스토어에서 불러오기" description="원스토어 상품 페이지나 사전예약 페이지의 제목, 장르, 이용등급, 한 줄 소개, 게임 소개, 유튜브 트레일러를 그대로 가져와 아래 칸을 채웁니다. 사전예약 페이지에서는 출시 예정일과 사전예약 기간도 가져오고, 장르는 없습니다.">
       <div className="flex flex-col gap-3 sm:flex-row">
         <input
           type="url"

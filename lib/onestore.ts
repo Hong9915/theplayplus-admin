@@ -35,6 +35,9 @@ const productSchema = z.object({
 const preregInfoSchema = z.object({
   prodId: z.string(),
   prodName: z.string(),
+  startDate: z.string().nullish(),
+  endDate: z.string().nullish(),
+  releasePlanDay: z.string().nullish(),
   oneLineDesc: z.string().nullish(),
   detailInfo: z.string().nullish(),
   gradeInfo: z.object({ minAge: z.string().nullish(), adultGradeYn: z.string().nullish() }).nullish(),
@@ -60,6 +63,10 @@ export interface OneStoreProduct {
   screenshotUrls: string[];
   naverLoungeUrl: string | null;
   youtubeUrl: string | null;
+  /** 사전예약 페이지의 출시 예정 표기(숫자가 있을 때만). 상품 페이지의 releaseDate 는 최신 버전 배포일이라 쓰지 않는다. */
+  releaseDate: string | null;
+  /** 사전예약 기간 "2026.09.30 ~ 2026.10.30". 사전예약 페이지에만 있다. */
+  preregPeriod: string | null;
 }
 
 /** onesto.re 단축 주소, 원스토어 웹 주소, 상품 ID(10자리) 어느 것이든 상품 ID를 뽑는다. */
@@ -162,6 +169,8 @@ export function mapOneStoreProduct(raw: unknown): OneStoreProduct {
     screenshotUrls: (product.screenshotList ?? []).map((shot) => fullSizeImage(shot.path)).filter((url): url is string => url !== null),
     naverLoungeUrl: product.siteList?.find((site) => site.siteClsfCd === LOUNGE_SITE_CODE)?.siteUrl ?? null,
     youtubeUrl: youtubeUrl(product.videos?.youtube?.youtubeUrl),
+    releaseDate: null,
+    preregPeriod: null,
   };
 }
 
@@ -185,7 +194,22 @@ export function mapOneStorePreregistration(rawInfo: unknown, rawImages: unknown)
     screenshotUrls: (images?.slideImages ?? []).map(fullSizeImage).filter((url): url is string => url !== null),
     naverLoungeUrl: info.officialCommunity?.find((site) => LOUNGE_URL.test(site.address))?.address ?? null,
     youtubeUrl: youtubeUrl(info.videoUrl),
+    // "출시 예정"처럼 날짜가 없는 표기는 관리자가 적은 값을 덮지 않게 버린다.
+    releaseDate: info.releasePlanDay && /\d/.test(info.releasePlanDay) ? info.releasePlanDay.trim() : null,
+    preregPeriod: preregPeriod(info.startDate, info.endDate),
   };
+}
+
+/** "20260930190000" → "2026.09.30". 모양이 다르면 null. */
+function dotDate(value: string | null | undefined): string | null {
+  const match = value?.match(/^(\d{4})(\d{2})(\d{2})/);
+  return match ? `${match[1]}.${match[2]}.${match[3]}` : null;
+}
+
+function preregPeriod(start: string | null | undefined, end: string | null | undefined): string | null {
+  const from = dotDate(start);
+  const to = dotDate(end);
+  return from && to ? `${from} ~ ${to}` : null;
 }
 
 async function fetchStream(url: string): Promise<{ status: number; stream: string }> {

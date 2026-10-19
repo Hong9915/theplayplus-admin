@@ -23,6 +23,9 @@ const PRODUCT = {
 const PREREG_INFO = {
   prodId: "0001009277",
   prodName: "숲의 소환단:방치형 판타지 수집 RPG",
+  startDate: "20260930190000",
+  endDate: "20261030135900",
+  releasePlanDay: "출시 예정",
   categoryId: "DP01",
   oneLineDesc: "매력적인 미소녀들과 함께하는 숲의 소환단!",
   detailInfo: "[네이버 라운지] - 숲의 소환단\r\n사전예약 진행중!",
@@ -97,6 +100,9 @@ describe("mapOneStorePreregistration", () => {
     expect(product.screenshotUrls).toHaveLength(2);
     expect(product.naverLoungeUrl).toBe("https://game.naver.com/lounge/Tree_World/board");
     expect(product.youtubeUrl).toBe("https://youtu.be/oEtDkARJtxI");
+    expect(product.preregPeriod).toBe("2026.09.30 ~ 2026.10.30");
+    expect(product.releaseDate).toBeNull();
+    expect(mapOneStorePreregistration({ ...PREREG_INFO, releasePlanDay: "2026.11 출시 예정" }, PREREG_IMAGES).releaseDate).toBe("2026.11 출시 예정");
     expect(product.url).toBe("https://m.onestore.co.kr/v2/ko-kr/event/preregistrations/0001009277");
   });
 });
