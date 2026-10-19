@@ -17,6 +17,7 @@ const PRODUCT = {
   ],
   siteList: [{ siteClsfCd: "PD016402", siteUrl: "https://game.naver.com/lounge/My_Goddess_Idle_RPG/home" }],
   videos: { movieList: null, youtube: { youtubeUrl: "https://youtu.be/Ky1PVk-TXu8", youtubeImage: null } },
+  app: { binaryType: "APK", packageVerNm: "2.9.1", releaseDate: "20260820100240" },
 };
 
 /** 사전예약 페이지(2026-10-19 실측, 0001009277)의 prodInfo·imageInfo 를 줄인 것. */
@@ -77,6 +78,7 @@ describe("mapOneStoreProduct", () => {
     expect(product.naverLoungeUrl).toBe("https://game.naver.com/lounge/My_Goddess_Idle_RPG/home");
     expect(product.url).toBe("https://onesto.re/0001007974");
     expect(product.youtubeUrl).toBe("https://youtu.be/Ky1PVk-TXu8");
+    expect(product.releaseDate).toBe("2026.08.20");
   });
 
   it.each([

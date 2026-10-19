@@ -212,7 +212,8 @@ export default function GamePageEditor({
         onSyncChange={(value) => set("onestoreSync", value)}
         urlInvalid={invalid.includes("onestoreUrl")}
         onImported={(fields) => {
-          setDraft((current) => ({ ...current, ...fields }));
+          // 원스토어 출시일은 새 버전을 올리면 바뀔 수 있어, 이미 적어 둔 출시일은 덮지 않는다.
+          setDraft((current) => ({ ...current, ...fields, ...(current.releaseDate.trim() !== "" ? { releaseDate: current.releaseDate } : {}) }));
           setInvalid([]);
         }}
       />

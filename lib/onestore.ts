@@ -30,6 +30,7 @@ const productSchema = z.object({
   screenshotList: z.array(z.object({ path: z.string() })).nullish(),
   siteList: z.array(z.object({ siteClsfCd: z.string(), siteUrl: z.string() })).nullish(),
   videos: z.object({ youtube: z.object({ youtubeUrl: z.string().nullish() }).nullish() }).nullish(),
+  app: z.object({ releaseDate: z.string().nullish() }).nullish(),
 });
 
 const preregInfoSchema = z.object({
@@ -63,7 +64,11 @@ export interface OneStoreProduct {
   screenshotUrls: string[];
   naverLoungeUrl: string | null;
   youtubeUrl: string | null;
-  /** 사전예약 페이지의 출시 예정 표기(숫자가 있을 때만). 상품 페이지의 releaseDate 는 최신 버전 배포일이라 쓰지 않는다. */
+  /**
+   * 출시일. 상품 페이지는 app.releaseDate("20260820100240" → "2026.08.20"), 사전예약 페이지는 출시 예정 표기
+   * (숫자가 있을 때만). app.releaseDate 는 설치 파일 정보 안에 있어 새 버전을 올리면 바뀔 수 있으므로,
+   * 화면은 출시일 칸이 비어 있을 때만 채운다(2026-10-19, 여신키우기·갓생 사는 토크 실제 출시일과 일치 확인).
+   */
   releaseDate: string | null;
   /** 사전예약 기간 "2026.09.30 ~ 2026.10.30". 사전예약 페이지에만 있다. */
   preregPeriod: string | null;
@@ -169,7 +174,7 @@ export function mapOneStoreProduct(raw: unknown): OneStoreProduct {
     screenshotUrls: (product.screenshotList ?? []).map((shot) => fullSizeImage(shot.path)).filter((url): url is string => url !== null),
     naverLoungeUrl: product.siteList?.find((site) => site.siteClsfCd === LOUNGE_SITE_CODE)?.siteUrl ?? null,
     youtubeUrl: youtubeUrl(product.videos?.youtube?.youtubeUrl),
-    releaseDate: null,
+    releaseDate: dotDate(product.app?.releaseDate),
     preregPeriod: null,
   };
 }
