@@ -287,6 +287,9 @@ export default function GamePageEditor({
             <Field label="앱스토어" error={errorFor("appStoreUrl")}>
               <input {...text("appStoreUrl")} type="url" placeholder="https://apps.apple.com/…" />
             </Field>
+            <Field label="앱인토스" hint="토스 공유 링크(https)를 넣으세요. intoss:// 주소는 토스 앱 밖에서 열리지 않습니다." error={errorFor("tossUrl")}>
+              <input {...text("tossUrl")} type="url" placeholder="https://…" />
+            </Field>
             <Field label="유튜브 트레일러 주소" error={errorFor("youtubeUrl")}>
               <input {...text("youtubeUrl")} type="url" placeholder="https://youtu.be/Ky1PVk-TXu8" spellCheck={false} />
             </Field>

@@ -40,6 +40,7 @@ const TEXT_FIELDS = [
   "onestoreUrl",
   "googlePlayUrl",
   "appStoreUrl",
+  "tossUrl",
   "youtubeUrl",
   "probabilityUrl",
 ] as const;
@@ -81,6 +82,7 @@ const COLUMN: Record<TextField, string> = {
   onestoreUrl: "onestore_url",
   googlePlayUrl: "google_play_url",
   appStoreUrl: "app_store_url",
+  tossUrl: "toss_url",
   // 화면에서는 주소로 받고, DB에는 웹사이트가 쓰는 영상 ID만 저장한다.
   youtubeUrl: "youtube_id",
   probabilityUrl: "probability_url",
@@ -124,6 +126,7 @@ export const gamePageSchema = z
     onestoreUrl: httpUrl,
     googlePlayUrl: httpUrl,
     appStoreUrl: httpUrl,
+    tossUrl: httpUrl,
     youtubeUrl: z
       .string()
       .trim()
