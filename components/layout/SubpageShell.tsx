@@ -44,7 +44,8 @@ export default function SubpageShell({
         </div>
         {actions && <div className="ml-auto flex items-center gap-1.5 shrink-0">{actions}</div>}
       </header>
-      <div className="flex-1 min-h-0 mx-2.5 mb-2.5 rounded-2xl bg-well ring-1 ring-line-soft overflow-y-auto">{children}</div>
+      {/* relative: 파일 선택 input 같은 sr-only(absolute) 요소가 main을 기준으로 잡히면, 포커스될 때 main이 통째로 스크롤돼 화면이 비어 버린다. */}
+      <div className="relative flex-1 min-h-0 mx-2.5 mb-2.5 rounded-2xl bg-well ring-1 ring-line-soft overflow-y-auto">{children}</div>
     </div>
   );
 }
