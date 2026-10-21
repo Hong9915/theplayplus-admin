@@ -105,7 +105,6 @@ export const gamePageSchema = z
       .max(60)
       .refine((value) => value === "" || /^[a-z0-9]+(-[a-z0-9]+)*$/.test(value), "slug"),
     releaseStatus: z.enum(RELEASE_STATUSES),
-    sortOrder: z.number().int().min(-999).max(999),
     titleKo: shortText,
     titleZh: shortText,
     titleEn: shortText,
@@ -208,7 +207,6 @@ export function toGamePageColumns(input: GamePageInput): Row {
     onestore_sync: input.onestoreSync,
     slug: input.slug === "" ? null : input.slug,
     release_status: input.releaseStatus,
-    sort_order: input.sortOrder,
     updated_at: new Date().toISOString(),
   };
   for (const field of TEXT_FIELDS) {
@@ -245,6 +243,51 @@ export async function saveGamePage(
     return { ok: false, error: "save_failed" };
   }
   return { ok: true, page: mapGamePageRow(data as unknown as Row) };
+}
+
+/** 웹사이트 목록 순서 화면의 한 줄. */
+export interface GamePageOrderItem {
+  gameId: string;
+  title: string;
+  published: boolean;
+}
+
+/**
+ * 웹사이트 게임 목록에 나오는 순서. 웹(theplayplus-web listSiteGames)과 같은 기준
+ * (sort_order → 최근 수정 순)으로 읽는다. 아직 페이지 행이 없는 게임은 빠진다.
+ */
+export async function listGamePageOrder(supabase: SupabaseClient): Promise<GamePageOrderItem[]> {
+  const { data, error } = await supabase
+    .from("game_pages")
+    .select("game_id, published, title_ko, games(name)")
+    .order("sort_order", { ascending: true })
+    .order("updated_at", { ascending: false });
+  if (error || !data) {
+    console.error("[game-pages] order list failed", { message: error?.message });
+    return [];
+  }
+  return (data as unknown as Row[]).map((row) => ({
+    gameId: row.game_id as string,
+    title: (row.title_ko as string | null) || ((row.games as { name?: string } | null)?.name ?? ""),
+    published: Boolean(row.published),
+  }));
+}
+
+export const gamePageOrderSchema = z.object({ gameIds: z.array(z.string().uuid()).min(1).max(200) });
+
+/** 넘겨받은 순서대로 sort_order 를 0, 1, 2… 로 다시 매긴다. 행이 없는 게임은 비공개로 만든다. */
+export async function saveGamePageOrder(supabase: SupabaseClient, gameIds: string[]): Promise<boolean> {
+  const { error } = await supabase
+    .from("game_pages")
+    .upsert(
+      gameIds.map((gameId, index) => ({ game_id: gameId, sort_order: index })),
+      { onConflict: "game_id" }
+    );
+  if (error) {
+    console.error("[game-pages] order save failed", { message: error.message });
+    return false;
+  }
+  return true;
 }
 
 /** 이미지 경로만 바꾼다. 행이 없으면 만든다(공개는 꺼진 채로). */

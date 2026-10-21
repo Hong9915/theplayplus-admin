@@ -5,6 +5,7 @@ import {
   getGameSiteImageUrl,
   isStoragePath,
   mapGamePageRow,
+  saveGamePageOrder,
   toGamePageColumns,
 } from "@/lib/game-pages";
 
@@ -100,5 +101,25 @@ describe("youtube trailer", () => {
   it("rejects an address that is not a video", () => {
     const result = gamePageSchema.safeParse(input({ youtubeUrl: "https://www.youtube.com/channel/UCdAzWy7LurRqUJ6BQTMZhPQ" }));
     expect(result.success ? [] : result.error.issues.map((issue) => issue.path[0])).toEqual(["youtubeUrl"]);
+  });
+});
+
+describe("saveGamePageOrder", () => {
+  it("renumbers sort_order from 0 in the given order", async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const supabase = { from: vi.fn(() => ({ upsert })) };
+    expect(await saveGamePageOrder(supabase as never, ["b", "a", "c"])).toBe(true);
+    expect(upsert).toHaveBeenCalledWith(
+      [
+        { game_id: "b", sort_order: 0 },
+        { game_id: "a", sort_order: 1 },
+        { game_id: "c", sort_order: 2 },
+      ],
+      { onConflict: "game_id" }
+    );
+  });
+
+  it("does not let the page form overwrite the order", () => {
+    expect(toGamePageColumns(gamePageSchema.parse(input({ sortOrder: 5 })))).not.toHaveProperty("sort_order");
   });
 });

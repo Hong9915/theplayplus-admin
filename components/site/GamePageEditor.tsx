@@ -11,6 +11,7 @@ import {
   getGameSiteImageUrl,
   type GamePage,
   type GamePageInput,
+  type GamePageOrderItem,
   type ImageKind,
 } from "@/lib/game-pages";
 
@@ -43,7 +44,8 @@ const URL_ERROR = "https:// 로 시작하는 주소를 입력하세요.";
 type Draft = GamePageInput;
 
 function toDraft(page: GamePage): Draft {
-  const { gameId: _gameId, kvPath: _kv, cardPath: _card, screenshotPaths: _shots, updatedAt: _updated, ...rest } = page;
+  // 목록 순서는 PageOrder 가 따로 저장한다.
+  const { gameId: _gameId, kvPath: _kv, cardPath: _card, screenshotPaths: _shots, updatedAt: _updated, sortOrder: _sort, ...rest } = page;
   return rest;
 }
 
@@ -83,10 +85,13 @@ function Section({ id, title, description, children }: { id: SectionId; title: s
 
 export default function GamePageEditor({
   page,
+  order,
   loungeId,
   siteUrl,
 }: {
   page: GamePage;
+  /** 웹사이트 게임 목록 순서(이 게임 포함). */
+  order: GamePageOrderItem[];
   /** 문의함에서 연결한 네이버 라운지 ID. 웹사이트 공지사항과 라운지 버튼이 여기서 나온다. */
   loungeId: string | null;
   siteUrl: string | null;
@@ -223,15 +228,8 @@ export default function GamePageEditor({
                 ))}
               </select>
             </Field>
-            <Field label="목록 순서" hint="작은 숫자가 먼저 나옵니다.">
-              <input
-                type="number"
-                value={draft.sortOrder}
-                onChange={(event) => set("sortOrder", Number.parseInt(event.target.value, 10) || 0)}
-                className={INPUT}
-              />
-            </Field>
           </div>
+          <PageOrder gameId={page.gameId} items={order} />
         </Section>
 
         <OneStoreImport
@@ -378,6 +376,79 @@ const UPLOAD_ERRORS: Record<string, string> = {
   too_large: "4MB 이하 이미지만 올릴 수 있습니다.",
   too_many: `스크린샷은 ${MAX_SCREENSHOTS}장까지 올릴 수 있습니다.`,
 };
+
+/**
+ * 웹사이트 게임 목록 순서. 다른 게임 번호를 몰라도 되게 전체 순서를 보여주고, 위·아래로 옮기면 바로 저장한다.
+ * 배너·대표 게임·전체 게임이 모두 이 순서를 따른다.
+ */
+function PageOrder({ gameId, items: initial }: { gameId: string; items: GamePageOrderItem[] }) {
+  const [items, setItems] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function move(index: number, step: -1 | 1) {
+    const target = index + step;
+    if (target < 0 || target >= items.length) return;
+    const previous = items;
+    const next = [...items];
+    [next[index], next[target]] = [next[target], next[index]];
+    setItems(next);
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/games/page-order", {
+        method: "PUT",
+        body: JSON.stringify({ gameIds: next.map((item) => item.gameId) }),
+      });
+      const json: { success: boolean } = await response.json();
+      if (!json.success) throw new Error("save_failed");
+    } catch {
+      setItems(previous);
+      setError("순서를 저장하지 못했습니다. 다시 시도해주세요.");
+    }
+    setSaving(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[13px] font-semibold text-ink-2">목록 순서</span>
+      <ol className="rounded-xl ring-1 ring-line-soft divide-y divide-line-soft overflow-hidden">
+        {items.map((item, index) => {
+          const current = item.gameId === gameId;
+          return (
+            <li key={item.gameId} className={`flex items-center gap-3 pl-3 pr-1.5 h-11 text-[14px] ${current ? "bg-accent/10" : ""}`}>
+              <span className="w-5 text-right text-muted tabular-nums">{index + 1}</span>
+              <span className={`flex-1 min-w-0 truncate ${current ? "font-semibold text-ink" : "text-ink-2"}`}>{item.title || "(제목 없음)"}</span>
+              {!item.published && <span className="text-[12px] text-muted shrink-0">비공개</span>}
+              <span className="flex shrink-0">
+                {([-1, 1] as const).map((step) => {
+                  const disabled = saving || index + step < 0 || index + step >= items.length;
+                  return (
+                    <button
+                      key={step}
+                      type="button"
+                      onClick={() => move(index, step)}
+                      disabled={disabled}
+                      aria-label={`${item.title} ${step < 0 ? "위로" : "아래로"}`}
+                      className="w-8 h-8 rounded-lg text-muted hover:text-ink hover:bg-well disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                    >
+                      {step < 0 ? "↑" : "↓"}
+                    </button>
+                  );
+                })}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {error ? (
+        <span className="text-[12.5px] font-medium text-heat-hot">{error}</span>
+      ) : (
+        <span className="text-[12.5px] text-muted">위에 있을수록 웹사이트에서 먼저 나옵니다. 옮기면 바로 저장됩니다.</span>
+      )}
+    </div>
+  );
+}
 
 function ImageSection({ page }: { page: GamePage }) {
   const router = useRouter();

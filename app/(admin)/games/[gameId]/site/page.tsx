@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { listGames } from "@/lib/categories";
-import { emptyGamePage, getGamePage } from "@/lib/game-pages";
+import { emptyGamePage, getGamePage, listGamePageOrder } from "@/lib/game-pages";
 import GamePageEditor from "@/components/site/GamePageEditor";
 import SubpageShell from "@/components/layout/SubpageShell";
 
@@ -10,7 +10,11 @@ export const dynamic = "force-dynamic";
 export default async function GameSitePage({ params }: { params: { gameId: string } }) {
   const supabase = getSupabaseServerClient();
 
-  const [games, page] = await Promise.all([listGames(supabase), getGamePage(supabase, params.gameId)]);
+  const [games, page, order] = await Promise.all([
+    listGames(supabase),
+    getGamePage(supabase, params.gameId),
+    listGamePageOrder(supabase),
+  ]);
 
   const game = games.find((entry) => entry.id === params.gameId);
   if (!game) {
@@ -18,6 +22,10 @@ export default async function GameSitePage({ params }: { params: { gameId: strin
   }
 
   const current = page ?? emptyGamePage(game.id, game.name);
+  // 아직 저장한 적 없는 게임도 순서 목록에서 자리를 정할 수 있게 맨 뒤에 붙인다.
+  const pageOrder = order.some((item) => item.gameId === game.id)
+    ? order
+    : [...order, { gameId: game.id, title: current.titleKo || game.name, published: false }];
 
   return (
     <SubpageShell
@@ -36,7 +44,7 @@ export default async function GameSitePage({ params }: { params: { gameId: strin
       }
     >
       {/* 아래 여백 없음: 편집기의 저장 바(sticky bottom-0)가 작업면 맨 아래에 붙게 한다. */}
-      <GamePageEditor key={current.gameId} page={current} loungeId={game.naverLoungeId ?? null} siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? null} />
+      <GamePageEditor key={current.gameId} page={current} order={pageOrder} loungeId={game.naverLoungeId ?? null} siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? null} />
     </SubpageShell>
   );
 }
