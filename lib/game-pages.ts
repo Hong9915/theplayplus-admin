@@ -43,6 +43,7 @@ const TEXT_FIELDS = [
   "tossUrl",
   "youtubeUrl",
   "probabilityUrl",
+  "policyUrl",
 ] as const;
 type TextField = (typeof TEXT_FIELDS)[number];
 
@@ -86,6 +87,7 @@ const COLUMN: Record<TextField, string> = {
   // 화면에서는 주소로 받고, DB에는 웹사이트가 쓰는 영상 ID만 저장한다.
   youtubeUrl: "youtube_id",
   probabilityUrl: "probability_url",
+  policyUrl: "policy_url",
 };
 
 const httpUrl = z
@@ -133,6 +135,7 @@ export const gamePageSchema = z
       .max(500)
       .refine((value) => value === "" || parseYouTubeId(value) !== null, "youtube"),
     probabilityUrl: httpUrl,
+    policyUrl: httpUrl,
   })
   // 공개하려면 주소와 한국어 제목은 있어야 한다. 나머지는 비어 있으면 웹에서 그 칸을 숨긴다.
   .superRefine((value, ctx) => {

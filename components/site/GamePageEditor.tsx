@@ -296,6 +296,9 @@ export default function GamePageEditor({
             <Field label="확률 정보 페이지" hint="운영정책 탭의 '확률 정보 보기' 버튼이 이 주소로 갑니다." error={errorFor("probabilityUrl")}>
               <input {...text("probabilityUrl")} type="url" placeholder="https://…" />
             </Field>
+            <Field label="운영정책" hint="웹사이트 게임 상세 맨 아래 '운영정책' 링크가 이 주소로 갑니다. 네이버 라운지 운영정책 글 주소를 넣으세요." error={errorFor("policyUrl")}>
+              <input {...text("policyUrl")} type="url" placeholder="https://game.naver.com/lounge/…/board/detail/…" />
+            </Field>
           </div>
         </Section>
 
