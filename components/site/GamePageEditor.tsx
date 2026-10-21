@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import StatusMessage from "@/components/ui/StatusMessage";
+import { shrinkImage } from "@/lib/shrink-image";
 import {
   MAX_IMAGE_BYTES,
   MAX_SCREENSHOTS,
@@ -373,7 +374,7 @@ const IMAGE_SLOTS: Array<{ kind: Exclude<ImageKind, "screenshot">; label: string
 
 const UPLOAD_ERRORS: Record<string, string> = {
   not_image: "이미지 파일만 올릴 수 있습니다.",
-  too_large: "4MB 이하 이미지만 올릴 수 있습니다.",
+  too_large: "4MB 아래로 줄이지 못했습니다. 더 작은 이미지를 올려주세요.",
   too_many: `스크린샷은 ${MAX_SCREENSHOTS}장까지 올릴 수 있습니다.`,
 };
 
@@ -453,13 +454,21 @@ function PageOrder({ gameId, items: initial }: { gameId: string; items: GamePage
 function ImageSection({ page }: { page: GamePage }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // 오류는 누른 버튼 바로 아래에 띄운다(kv·card·screenshot, 지우기는 그 이미지의 kind).
+  const [error, setErrorState] = useState<{ kind: ImageKind; text: string } | null>(null);
+  const errorFor = (kind: ImageKind) => (error?.kind === kind ? error.text : null);
 
-  async function upload(kind: ImageKind, file: File) {
-    if (!file.type.startsWith("image/")) return setError(UPLOAD_ERRORS.not_image);
-    if (file.size > MAX_IMAGE_BYTES) return setError(UPLOAD_ERRORS.too_large);
+  async function upload(kind: ImageKind, picked: File) {
+    const setError = (text: string) => setErrorState({ kind, text });
+    if (!picked.type.startsWith("image/")) return setError(UPLOAD_ERRORS.not_image);
     setBusy(kind);
-    setError(null);
+    setErrorState(null);
+    // 4MB가 넘으면 서버로 보내기 전에 브라우저에서 JPG로 줄인다.
+    const file = picked.size > MAX_IMAGE_BYTES ? await shrinkImage(picked, MAX_IMAGE_BYTES) : picked;
+    if (!file) {
+      setBusy(null);
+      return setError(UPLOAD_ERRORS.too_large);
+    }
     const formData = new FormData();
     formData.set("kind", kind);
     formData.set("file", file);
@@ -475,8 +484,9 @@ function ImageSection({ page }: { page: GamePage }) {
   }
 
   async function remove(kind: ImageKind, path: string) {
+    const setError = (text: string) => setErrorState({ kind, text });
     setBusy(path);
-    setError(null);
+    setErrorState(null);
     try {
       const response = await fetch(`/api/games/${page.gameId}/page/images`, {
         method: "DELETE",
@@ -510,7 +520,7 @@ function ImageSection({ page }: { page: GamePage }) {
   }
 
   return (
-    <Section id="images" title="이미지" description="올리면 바로 저장됩니다. 4MB 이하 이미지만 올릴 수 있습니다.">
+    <Section id="images" title="이미지" description="올리면 바로 저장됩니다. 4MB가 넘는 이미지는 올릴 때 자동으로 줄입니다.">
       <div className="grid gap-5 sm:grid-cols-2">
         {IMAGE_SLOTS.map((slot) => {
           const path = slot.kind === "kv" ? page.kvPath : page.cardPath;
@@ -542,6 +552,7 @@ function ImageSection({ page }: { page: GamePage }) {
                   </button>
                 )}
               </div>
+              <StatusMessage className="text-[12.5px] font-medium">{errorFor(slot.kind)}</StatusMessage>
             </div>
           );
         })}
@@ -554,6 +565,7 @@ function ImageSection({ page }: { page: GamePage }) {
           </span>
           {page.screenshotPaths.length < MAX_SCREENSHOTS && picker("screenshot", "추가")}
         </div>
+        <StatusMessage className="text-[12.5px] font-medium">{errorFor("screenshot")}</StatusMessage>
         {page.screenshotPaths.length === 0 ? (
           <p className="text-[12.5px] text-muted">스크린샷이 없으면 웹사이트에서 스크린샷 칸이 숨겨집니다.</p>
         ) : (
@@ -587,7 +599,6 @@ function ImageSection({ page }: { page: GamePage }) {
           </ul>
         )}
       </div>
-      <StatusMessage className="text-sm">{error}</StatusMessage>
     </Section>
   );
 }
