@@ -58,7 +58,7 @@ describe("InboxDetailPanel", () => {
   });
 
   it("shows processing controls, meta rows, and the event log on the 상세 tab", () => {
-    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
     expect(screen.getByLabelText("상태")).toHaveValue("in_progress");
     expect(screen.getByLabelText("우선순위")).toHaveValue("high");
     expect(screen.getByText("게임 계정")).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe("InboxDetailPanel", () => {
   });
 
   it("switches to the account history tab and shows the count", async () => {
-    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
     const tab = screen.getByRole("tab", { name: /계정 이력/ });
     expect(tab).toHaveTextContent("1");
     await userEvent.click(tab);
@@ -80,7 +80,7 @@ describe("InboxDetailPanel", () => {
   });
 
   it("hides the account history tab entirely when history is null (service inquiries)", () => {
-    render(<InboxDetailPanel inquiry={{ ...inquiry, gameAccount: null, companyName: "플레이컴퍼니" }} events={events} history={null} />);
+    render(<InboxDetailPanel inquiry={{ ...inquiry, gameAccount: null, companyName: "플레이컴퍼니" }} events={events} history={null} afterDeleteHref="/games/game-1/inquiries" />);
     expect(screen.queryByRole("tab", { name: /계정 이력/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.getByText("접수 정보")).toBeInTheDocument();
@@ -90,13 +90,13 @@ describe("InboxDetailPanel", () => {
   });
   it("opens on the history tab when the URL says ?tab=history", () => {
     searchParams = new URLSearchParams("tab=history");
-    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
     expect(screen.getByRole("tab", { name: /계정 이력/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("link", { name: /예전 문의/ })).toBeInTheDocument();
   });
 
   it("writes the open tab into the URL without a navigation", async () => {
-    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
     await userEvent.click(screen.getByRole("tab", { name: /계정 이력/ }));
     expect(window.location.search).toBe("?tab=history");
     await userEvent.click(screen.getByRole("tab", { name: "상세" }));
@@ -105,14 +105,14 @@ describe("InboxDetailPanel", () => {
 
   describe("collapse", () => {
     it("hides the panel content and shows an expand button when collapsed", async () => {
-      render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+      render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
       await userEvent.click(screen.getByRole("button", { name: "상세 접기" }));
       expect(screen.queryByText("접수 정보")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "상세 펼치기" })).toBeInTheDocument();
     });
 
     it("shows the panel again after expanding", async () => {
-      render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+      render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
       await userEvent.click(screen.getByRole("button", { name: "상세 접기" }));
       await userEvent.click(screen.getByRole("button", { name: "상세 펼치기" }));
       expect(screen.getByText("접수 정보")).toBeInTheDocument();
@@ -120,13 +120,13 @@ describe("InboxDetailPanel", () => {
 
     it("remembers the collapsed state across remounts", () => {
       window.localStorage.setItem("inbox-detail-collapsed", "true");
-      render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+      render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
       expect(screen.queryByText("접수 정보")).not.toBeInTheDocument();
     });
   });
 
   it("moves between tabs with the arrow keys and keeps only the active tab in the Tab order", async () => {
-    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} />);
+    render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
     const detail = screen.getByRole("tab", { name: "상세" });
     const historyTab = screen.getByRole("tab", { name: /계정 이력/ });
     expect(detail).toHaveAttribute("tabindex", "0");

@@ -12,6 +12,7 @@ import { usePersistedBoolean } from "@/components/ui/usePersistedBoolean";
 import StatusSelect from "@/components/inquiries/StatusSelect";
 import PrioritySelect from "@/components/inquiries/PrioritySelect";
 import AccountHistoryPanel from "@/components/inquiries/AccountHistoryPanel";
+import DeleteInquiryButton from "@/components/inquiries/DeleteInquiryButton";
 
 type Tab = "detail" | "history";
 const TABS: readonly Tab[] = ["detail", "history"];
@@ -51,10 +52,13 @@ export default function InboxDetailPanel({
   inquiry,
   events,
   history,
+  afterDeleteHref,
 }: {
   inquiry: InquiryRow;
   events: EventRow[];
   history: AccountHistoryEntry[] | null;
+  /** 문의를 지운 뒤 돌아갈 목록 URL. */
+  afterDeleteHref: string;
 }) {
   const searchParams = useSearchParams();
   const [collapsed, setCollapsed] = usePersistedBoolean(COLLAPSE_KEY, false);
@@ -121,6 +125,10 @@ export default function InboxDetailPanel({
             <span className="text-muted text-[12px] tabular-nums shrink-0">{formatReceivedAt(inquiry.createdAt)}</span>
           </li>
         </ol>
+      </section>
+
+      <section className="px-4 pb-6 pt-4 border-t border-line-soft">
+        <DeleteInquiryButton inquiryId={inquiry.id} inquiryNo={inquiry.inquiryNo} afterDeleteHref={afterDeleteHref} />
       </section>
     </>
   );

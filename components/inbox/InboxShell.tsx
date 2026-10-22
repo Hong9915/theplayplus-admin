@@ -4,7 +4,7 @@ import type { AccountHistoryEntry } from "@/lib/account-history";
 import type { NoteRow } from "@/lib/notes";
 import type { EventRow } from "@/lib/events";
 import type { MessageRow } from "@/lib/messages";
-import type { InquiryListQuery } from "@/lib/inquiry-filters";
+import { inquiryListHref, type InquiryListQuery } from "@/lib/inquiry-filters";
 import { buildAccountTimeline, type AccountThread } from "@/lib/timeline";
 import type { InboxScope } from "@/lib/inbox-scope";
 import InboxTopBar from "@/components/inbox/InboxTopBar";
@@ -89,7 +89,12 @@ export default function InboxShell({
                 selected.inquiry.id
               )}
             />
-            <InboxDetailPanel inquiry={selected.inquiry} events={selected.events} history={selected.history} />
+            <InboxDetailPanel
+              inquiry={selected.inquiry}
+              events={selected.events}
+              history={selected.history}
+              afterDeleteHref={inquiryListHref(scope, query)}
+            />
           </>
         ) : (
           <InboxEmptyState />
