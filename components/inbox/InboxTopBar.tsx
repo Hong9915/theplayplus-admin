@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { assistantChatEnabled } from "@/lib/assistant-flags";
 import type { GameRow } from "@/lib/categories";
 import type { InquiryFacetCounts } from "@/lib/inquiries";
 import type { InquiryListQuery } from "@/lib/inquiry-filters";
@@ -20,9 +19,9 @@ function Icon({ children, size = 16 }: { children: ReactNode; size?: number }) {
 }
 
 /**
- * 문의함 상단 바. 지금 어느 게임에 있는지, 검색, 그리고 문의함 밖으로 나가는 길(어시스턴트·라운지·게임 설정)을 둔다.
+ * 문의함 상단 바. 지금 어느 게임에 있는지, 검색, 그리고 문의함 밖으로 나가는 길(라운지·게임 설정)을 둔다.
  * 보기·유형·우선순위 같은 목록 조건은 목록 머리(InboxFilters)에 있다.
- * game은 게임 스코프에서만 온다. 서비스 문의에는 상태·어시스턴트·라운지·설정이 없다.
+ * game은 게임 스코프에서만 온다. 서비스 문의에는 상태·라운지·설정이 없다.
  */
 export default function InboxTopBar({
   scope,
@@ -64,15 +63,6 @@ export default function InboxTopBar({
 
       {game && (
         <nav className="flex items-center gap-0.5" aria-label="게임 도구">
-          <Link href={`/games/${game.id}/assistant`} target="_blank" rel="noopener" className={TLINK}>
-            <Icon>
-              <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
-            </Icon>
-            {assistantChatEnabled() ? "운영 어시스턴트" : "운영 자료"}
-            <Icon size={12}>
-              <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
-            </Icon>
-          </Link>
           {game.naverLoungeId && (
             <Link href={`/games/${game.id}/lounge`} className={TLINK}>
               <Icon>

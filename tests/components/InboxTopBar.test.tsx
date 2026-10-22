@@ -48,23 +48,10 @@ describe("InboxTopBar", () => {
     expect(screen.queryByRole("link", { name: /라운지 새 글/ })).not.toBeInTheDocument();
   });
 
-  it("links to the operations sources page in a new tab while the assistant chat is off", () => {
+  it("has no operations sources or assistant link (운영 자료는 운영정책 임베딩으로 대체됐다)", () => {
     renderBar();
-    const link = screen.getByRole("link", { name: /운영 자료/ });
-    expect(link).toHaveAttribute("href", "/games/g1/assistant");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener");
-    expect(screen.queryByRole("link", { name: /운영 어시스턴트/ })).not.toBeInTheDocument();
-  });
-
-  it("calls the link the operations assistant when the chat flag is on", () => {
-    process.env.ASSISTANT_CHAT_ENABLED = "1";
-    try {
-      renderBar();
-      expect(screen.getByRole("link", { name: /운영 어시스턴트/ })).toHaveAttribute("href", "/games/g1/assistant");
-    } finally {
-      delete process.env.ASSISTANT_CHAT_ENABLED;
-    }
+    expect(screen.queryByRole("link", { name: /운영 자료|운영 어시스턴트/ })).not.toBeInTheDocument();
+    expect(document.querySelector('a[href="/games/g1/assistant"]')).toBeNull();
   });
 
   it("keeps templates, the site page, the lounge connection, and deletion behind 게임 설정", async () => {

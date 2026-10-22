@@ -30,8 +30,6 @@ export interface SuggestInput {
   /** autoSend가 켜진 템플릿은 접수 시 자동 발송된 안내라 답변 본보기가 아니다. */
   templates: Array<{ title: string; content: string; autoSend?: boolean }>;
   pastReplies: PastReply[];
-  /** serializeSources 결과. 자료가 없거나 서비스 문의면 "". */
-  sourcesText: string;
   /** 문의와 가까운 운영정책 조각, 가까운 순. 정책이 없거나 서비스 문의면 []. */
   policies: Array<Pick<PolicyChunk, "title" | "content">>;
   /** 이 문의의 보낸 답변·자동 답변·사용자 회신·내부 메모, 시간순. */
@@ -41,7 +39,7 @@ export interface SuggestInput {
 }
 
 export type SuggestErrorReason = "not_configured" | "refused" | "failed";
-export type SuggestWarningReason = "sources_unavailable" | "similar_unavailable";
+export type SuggestWarningReason = "similar_unavailable";
 
 /**
  * 스트리밍 이벤트. warning은 라우트가 근거를 모으다 실패한 것을 본문보다 먼저
@@ -51,7 +49,7 @@ export type SuggestWarningReason = "sources_unavailable" | "similar_unavailable"
  */
 export type SuggestEvent =
   | { type: "text"; text: string }
-  | { type: "warning"; reason: SuggestWarningReason; sourceTitle?: string }
+  | { type: "warning"; reason: SuggestWarningReason }
   | { type: "error"; reason: SuggestErrorReason };
 
 const DEFAULT_MODEL = "gpt-5-mini";
@@ -66,8 +64,8 @@ const SYSTEM_RULES = [
   "- 메일 본문만 출력하세요. 머리말, 설명, 따옴표, 코드블록을 붙이지 마세요.",
   "- 확인되지 않은 사실을 지어내지 마세요. 보상 지급, 환불 승인, 수정 일정처럼",
   "  확인이 필요한 사항은 약속하지 말고 '확인 후 안내드리겠습니다'로 남기세요.",
-  "- 참고 자료에 있는 사실(이벤트 기간, 지급 기준, 운영 정책 등)로 답할 수 있으면",
-  "  그 사실을 답변에 쓰세요. 자료에 없는 사실은 지어내지 말고 '확인 후 안내드리겠습니다'로 남기세요.",
+  "- 운영정책·대화 이력·초안에 있는 사실로 답할 수 있으면 그 사실을 답변에 쓰세요.",
+  "  거기에 없는 사실은 지어내지 말고 '확인 후 안내드리겠습니다'로 남기세요.",
   "- '운영정책'이 주어지면 그 게임의 공식 정책(이용약관·환불 정책 등)에서 이 문의와 가까운 조항입니다.",
   "  환불·제재·보상의 가능 여부와 절차는 그 조항에 맞게 쓰고, 조항에 없는 예외를 약속하지 마세요.",
   "  조항 문장을 길게 그대로 붙이지 말고 이 문의에 해당하는 내용만 풀어 쓰세요.",
@@ -96,7 +94,7 @@ const SYSTEM_RULES = [
   "- 단락마다 빈 줄을 두고, 한 단락은 한두 문장으로 짧게 쓰세요.",
   "- 순서는 다음과 같습니다. 해당 사항이 없는 단락은 빼고, 자리를 채우려고 뻔한 문장을 넣지 마세요.",
   "  1) 불편·지연에 대한 사과 또는 문의해 주신 데 대한 감사 한 문장.",
-  "  2) 배경·현재 상황 설명. 참고 자료·대화 이력·초안에 있는 사실로만 쓰세요.",
+  "  2) 배경·현재 상황 설명. 운영정책·대화 이력·초안에 있는 사실로만 쓰세요.",
   "  3) 이 건을 어떻게 처리하는지와 다음 단계. '담당 부서에 전달하겠습니다', '원인이 확인되면",
   "     수정하겠습니다', '확인 후 본 메일로 안내드리겠습니다'처럼 무엇을 언제 하는지 구체적으로 쓰세요.",
   "     이런 절차 약속은 써도 되지만, 결과(지급·환불·수정 완료)와 기한은 확인된 것만 쓰세요.",
@@ -107,8 +105,7 @@ const SYSTEM_RULES = [
   "",
   "출력 형식:",
   `- 본문을 다 쓴 뒤 다음 줄에 ${EVIDENCE_DELIMITER}를 쓰고, 그 아래에 참고한 자료를 한 줄에 하나씩 적으세요.`,
-  "  시트는 'VIP 시트 VIP 탭 7행', 문서는 '운영 가이드 문서 환불 항목', 운영정책은 '운영정책 문서 환불 정책 안내',",
-  "  과거 답변은 '과거 답변 R-20260902-0001'처럼 적으세요.",
+  "  운영정책은 '운영정책 문서 환불 정책 안내', 과거 답변은 '과거 답변 R-20260902-0001'처럼 적으세요.",
   "- 참고한 것이 없으면 구분선 아래에 '없음'이라고 적으세요.",
 ].join("\n");
 
@@ -117,7 +114,7 @@ const SYSTEM_RULES = [
  * 아무도 고치지 못하므로 순수 함수로 분리한다.
  */
 export function buildSuggestPrompt(input: SuggestInput): { system: string; userMessage: string } {
-  const system = input.sourcesText.trim() === "" ? SYSTEM_RULES : `${SYSTEM_RULES}\n\n# 참고 자료\n\n${input.sourcesText}`;
+  const system = SYSTEM_RULES;
 
   const lines: string[] = [
     `게임: ${input.gameName}`,
@@ -260,7 +257,7 @@ export async function* streamSuggestion(input: SuggestInput): AsyncGenerator<Sug
     // 관리자가 버튼을 누르고 기다리는 화면이라 한 번에 받으면 몇 초간 아무것도
     // 안 보인다. 조각이 오는 대로 흘려보낸다.
     const stream = await client.chat.completions.create({
-      // 모델 이름은 서버 쪽에서 바뀐다. 어시스턴트와 같은 환경변수를 쓴다.
+      // 모델 이름은 서버 쪽에서 바뀐다. 환경변수로 바꿀 수 있게 둔다.
       model: process.env.OPENAI_MODEL ?? DEFAULT_MODEL,
       stream: true,
       // minimal은 초안("환불 됐다")과 결론이 다른 템플릿("스토어에 신청하라")이

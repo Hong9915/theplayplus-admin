@@ -91,13 +91,13 @@ describe("useSuggestion", () => {
   it("keeps the evidence apart from the text and never shows the delimiter", async () => {
     mockStream([
       { type: "text", text: `${FULL}\n` },
-      { type: "text", text: "=== 근거 ===\n- VIP 시트 VIP 탭 7행\n- 과거 답변 R-20260902-0001" },
+      { type: "text", text: "=== 근거 ===\n- 운영정책 문서 환불 정책 안내\n- 과거 답변 R-20260902-0001" },
     ]);
     render(<Harness />);
     await userEvent.click(screen.getByText("start"));
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("done"));
     expect(screen.getByTestId("text").textContent).toBe(FULL);
-    expect(screen.getByTestId("evidence")).toHaveTextContent("VIP 시트 VIP 탭 7행");
+    expect(screen.getByTestId("evidence")).toHaveTextContent("운영정책 문서 환불 정책 안내");
     expect(screen.getByTestId("evidence")).toHaveTextContent("과거 답변 R-20260902-0001");
   });
 
@@ -109,18 +109,14 @@ describe("useSuggestion", () => {
     expect(screen.getByTestId("evidence")).toBeEmptyDOMElement();
   });
 
-  it("collects warnings in order and clears them on the next start", async () => {
-    mockStream([
-      { type: "warning", reason: "sources_unavailable", sourceTitle: "VIP 원장" },
-      { type: "warning", reason: "similar_unavailable" },
-      { type: "text", text: FULL },
-    ]);
+  it("collects warnings and clears them on the next start", async () => {
+    mockStream([{ type: "warning", reason: "similar_unavailable" }, { type: "text", text: FULL }]);
     render(<Harness />);
     await userEvent.click(screen.getByText("start"));
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("done"));
     const items = screen.getByTestId("warnings").querySelectorAll("li");
-    expect(items[0]).toHaveTextContent("운영 자료를 읽지 못해 자료 없이 작성했습니다. (자료: VIP 원장)");
-    expect(items[1]).toHaveTextContent("유사 문의 검색이 안 돼 같은 유형의 최근 답변만 참고했습니다.");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent("유사 문의 검색이 안 돼 같은 유형의 최근 답변만 참고했습니다.");
 
     mockStream([{ type: "text", text: FULL }]);
     await userEvent.click(screen.getByText("start"));
@@ -200,7 +196,7 @@ describe("useSuggestion", () => {
   });
 
   it("reset returns to idle and clears everything", async () => {
-    mockStream([{ type: "warning", reason: "similar_unavailable" }, { type: "text", text: `${FULL}\n=== 근거 ===\n- VIP 시트 VIP 탭 7행` }]);
+    mockStream([{ type: "warning", reason: "similar_unavailable" }, { type: "text", text: `${FULL}\n=== 근거 ===\n- 운영정책 문서 환불 정책 안내` }]);
     render(<Harness />);
     await userEvent.click(screen.getByText("start"));
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("done"));

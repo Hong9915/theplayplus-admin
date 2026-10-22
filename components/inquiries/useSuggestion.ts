@@ -15,14 +15,8 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 const GENERIC_ERROR = "추천 생성에 실패했습니다.";
 
-// 근거를 못 모은 채 만든 추천은 그만큼만 믿어야 한다.
-function warningMessage(event: Extract<SuggestEvent, { type: "warning" }>): string {
-  if (event.reason === "sources_unavailable") {
-    const suffix = event.sourceTitle ? ` (자료: ${event.sourceTitle})` : "";
-    return `운영 자료를 읽지 못해 자료 없이 작성했습니다.${suffix}`;
-  }
-  return "유사 문의 검색이 안 돼 같은 유형의 최근 답변만 참고했습니다.";
-}
+// 근거를 못 모은 채 만든 추천은 그만큼만 믿어야 한다. 경고는 유사 문의 검색 실패 하나뿐이다.
+const SIMILAR_UNAVAILABLE = "유사 문의 검색이 안 돼 같은 유형의 최근 답변만 참고했습니다.";
 
 function isSuggestEvent(value: unknown): value is SuggestEvent {
   return typeof value === "object" && value !== null && "type" in value;
@@ -77,7 +71,7 @@ export function useSuggestion(inquiryId: string) {
               text += event.text;
               setRaw(text);
             } else if (event.type === "warning") {
-              setWarnings((current) => [...current, warningMessage(event)]);
+              setWarnings((current) => [...current, SIMILAR_UNAVAILABLE]);
             } else {
               failure = event.reason;
             }

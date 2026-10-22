@@ -7,7 +7,6 @@ import * as templatesModule from "@/lib/templates";
 import * as repliesModule from "@/lib/replies";
 import * as suggestModule from "@/lib/suggest";
 import * as sessionModule from "@/lib/require-admin-session";
-import * as sourcesModule from "@/lib/assistant-sources";
 import * as embeddingsModule from "@/lib/embeddings";
 import * as messagesModule from "@/lib/messages";
 import * as notesModule from "@/lib/notes";
@@ -24,25 +23,12 @@ vi.mock("@/lib/replies", async (importOriginal) => {
 });
 vi.mock("@/lib/suggest", () => ({ streamSuggestion: vi.fn() }));
 vi.mock("@/lib/require-admin-session", () => ({ requireAdminSession: vi.fn() }));
-vi.mock("@/lib/assistant-sources", () => ({ listSources: vi.fn(), loadSources: vi.fn(), serializeSources: vi.fn() }));
 vi.mock("@/lib/embeddings", () => ({ ensureInquiryEmbedding: vi.fn() }));
 vi.mock("@/lib/messages", () => ({ listMessages: vi.fn() }));
 vi.mock("@/lib/notes", () => ({ listNotes: vi.fn() }));
 vi.mock("@/lib/policies", () => ({ searchPolicyChunks: vi.fn() }));
 
 const EMBEDDING = [0.1, 0.2, 0.3];
-const sheetSource = { id: "src-1", gameId: "game-1", kind: "sheet" as const, externalId: "sh-1", title: "VIP 원장", createdAt: "" };
-const loadedSheet = { source: sheetSource, kind: "sheet" as const, tabs: [] };
-
-/** loadSources가 던지는 SheetError를 흉내 낸다. 실제 클래스를 import하면 googleapis가 딸려온다. */
-function sourceError(sourceTitle?: string) {
-  const error = new Error("source_forbidden") as Error & { reason: string; sourceTitle?: string };
-  error.name = "SheetError";
-  error.reason = "source_forbidden";
-  if (sourceTitle) error.sourceTitle = sourceTitle;
-  return error;
-}
-
 const inquiry = {
   id: "inq-1",
   inquiryNo: "R-20260902-0001",
@@ -114,9 +100,6 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     vi.mocked(templatesModule.listTemplates).mockReset().mockResolvedValue([]);
     vi.mocked(repliesModule.listRecentRepliesByType).mockReset().mockResolvedValue([]);
     vi.mocked(repliesModule.listSimilarAnsweredReplies).mockReset().mockResolvedValue([]);
-    vi.mocked(sourcesModule.listSources).mockReset().mockResolvedValue([]);
-    vi.mocked(sourcesModule.loadSources).mockReset().mockResolvedValue([]);
-    vi.mocked(sourcesModule.serializeSources).mockReset().mockReturnValue("");
     vi.mocked(embeddingsModule.ensureInquiryEmbedding).mockReset().mockResolvedValue(EMBEDDING);
     vi.mocked(messagesModule.listMessages).mockReset().mockResolvedValue([]);
     vi.mocked(notesModule.listNotes).mockReset().mockResolvedValue([]);
@@ -156,7 +139,7 @@ describe("POST /api/inquiries/[id]/suggest", () => {
 
     expect(response.status).toBe(200);
     await expect(readLines(response)).resolves.toEqual([{ type: "error", reason: "not_configured" }]);
-    expect(sourcesModule.listSources).not.toHaveBeenCalled();
+    expect(policiesModule.searchPolicyChunks).not.toHaveBeenCalled();
     expect(embeddingsModule.ensureInquiryEmbedding).not.toHaveBeenCalled();
     expect(suggestModule.streamSuggestion).not.toHaveBeenCalled();
   });
@@ -172,7 +155,6 @@ describe("POST /api/inquiries/[id]/suggest", () => {
         title: "결제 오류",
         content: "다이아가 안 들어옵니다",
         gameAccount: "player#1234",
-        sourcesText: "",
       })
     );
     expect(response.status).toBe(200);
@@ -297,7 +279,6 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     expect(response.status).toBe(200);
     expect(templatesModule.listTemplates).not.toHaveBeenCalled();
     expect(categoriesModule.listCategoryLabelsForScope).toHaveBeenCalledWith(expect.anything(), { kind: "service" });
-    expect(sourcesModule.listSources).not.toHaveBeenCalled();
     expect(policiesModule.searchPolicyChunks).not.toHaveBeenCalled();
     expect(repliesModule.listSimilarAnsweredReplies).toHaveBeenCalledWith(expect.anything(), { kind: "service" }, EMBEDDING, "inq-1");
     expect(repliesModule.listRecentRepliesByType).toHaveBeenCalledWith(expect.anything(), { kind: "service" }, "publishing");
@@ -308,7 +289,6 @@ describe("POST /api/inquiries/[id]/suggest", () => {
         typeLabel: "퍼블리싱 제휴",
         companyName: "플레이컴퍼니",
         templates: [],
-        sourcesText: "",
       })
     );
   });
@@ -335,53 +315,6 @@ describe("POST /api/inquiries/[id]/suggest", () => {
 
     expect(policiesModule.searchPolicyChunks).not.toHaveBeenCalled();
     expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(expect.objectContaining({ policies: [] }));
-  });
-
-  it("loads the game's sources and passes the serialized text", async () => {
-    vi.mocked(sourcesModule.listSources).mockResolvedValue([sheetSource]);
-    vi.mocked(sourcesModule.loadSources).mockResolvedValue([loadedSheet]);
-    vi.mocked(sourcesModule.serializeSources).mockReturnValue("# 시트: VIP 원장\n\n## VIP\n…");
-
-    const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
-
-    expect(sourcesModule.listSources).toHaveBeenCalledWith(expect.anything(), "game-1");
-    expect(sourcesModule.loadSources).toHaveBeenCalledWith([sheetSource]);
-    expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(
-      expect.objectContaining({ sourcesText: "# 시트: VIP 원장\n\n## VIP\n…" })
-    );
-    await expect(readLines(response)).resolves.toEqual([
-      { type: "text", text: "추천 " },
-      { type: "text", text: "본문" },
-    ]);
-  });
-
-  it("does not read sources at all when none are registered", async () => {
-    await POST(suggestRequest(), { params: { id: "inq-1" } });
-    expect(sourcesModule.loadSources).not.toHaveBeenCalled();
-  });
-
-  it("warns and continues without sources when loading them fails, naming the source", async () => {
-    vi.mocked(sourcesModule.listSources).mockResolvedValue([sheetSource]);
-    vi.mocked(sourcesModule.loadSources).mockRejectedValue(sourceError("VIP 원장"));
-
-    const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
-
-    expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(expect.objectContaining({ sourcesText: "" }));
-    await expect(readLines(response)).resolves.toEqual([
-      { type: "warning", reason: "sources_unavailable", sourceTitle: "VIP 원장" },
-      { type: "text", text: "추천 " },
-      { type: "text", text: "본문" },
-    ]);
-  });
-
-  it("omits sourceTitle from the warning when the failure has none", async () => {
-    vi.mocked(sourcesModule.listSources).mockResolvedValue([sheetSource]);
-    vi.mocked(sourcesModule.loadSources).mockRejectedValue(new Error("boom"));
-
-    const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
-
-    const lines = await readLines(response);
-    expect(lines[0]).toEqual({ type: "warning", reason: "sources_unavailable" });
   });
 
   it("passes similar replies through and skips the recent-reply fallback when there are two or more", async () => {
@@ -432,18 +365,4 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     expect(lines[0]).toEqual({ type: "warning", reason: "similar_unavailable" });
   });
 
-  it("sends the sources warning before the similar-replies warning, both before any text", async () => {
-    vi.mocked(sourcesModule.listSources).mockResolvedValue([sheetSource]);
-    vi.mocked(sourcesModule.loadSources).mockRejectedValue(sourceError());
-    vi.mocked(embeddingsModule.ensureInquiryEmbedding).mockResolvedValue(null);
-
-    const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
-
-    await expect(readLines(response)).resolves.toEqual([
-      { type: "warning", reason: "sources_unavailable" },
-      { type: "warning", reason: "similar_unavailable" },
-      { type: "text", text: "추천 " },
-      { type: "text", text: "본문" },
-    ]);
-  });
 });

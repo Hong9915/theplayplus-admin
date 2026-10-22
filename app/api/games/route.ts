@@ -6,8 +6,6 @@ import { buildGameLogoPath } from "@/lib/storage";
 import { createDefaultCategoriesForGame } from "@/lib/categories";
 import { createDefaultTemplatesForGame } from "@/lib/default-templates";
 import { getAdminSession } from "@/lib/require-admin-session";
-import { createOpsDoc, opsDocEditors, isOpsDocConfigured } from "@/lib/ops-doc";
-import { insertSource } from "@/lib/assistant-sources";
 import { connectLounge } from "@/lib/lounge-connect";
 import { createSitePageForNewGame, hasSiteInput } from "@/lib/game-page-import";
 
@@ -105,22 +103,6 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[api/games] default template seed failed", { gameId: inserted.id, error });
     warning = warning ?? "template_seed_failed";
-  }
-
-  // 운영 현황 구글 문서를 만들어 만든 관리자에게 공유하고 문서 자료로 연결한다.
-  // 토큰이 없거나 실패하면 게임은 그대로 두고 경고만 낸다 — 문서는 운영 자료
-  // 화면에서 직접 만들어 붙일 수 있다.
-  if (!isOpsDocConfigured()) {
-    warning = warning ?? "ops_doc_not_configured";
-  } else {
-    try {
-      const doc = await createOpsDoc({ gameName: input.name, editors: opsDocEditors(session.email) });
-      const source = await insertSource(supabase, { gameId: inserted.id, kind: "doc", externalId: doc.docId, title: doc.title });
-      if (source === null) throw new Error("insertSource failed");
-    } catch (error) {
-      console.error("[api/games] ops doc setup failed", { gameId: inserted.id, error });
-      warning = warning ?? "ops_doc_failed";
-    }
   }
 
   // 네이버 라운지 연결도 부가 작업이다. 주소가 틀렸거나 못 읽으면 게임은 두고 경고만 낸다 —

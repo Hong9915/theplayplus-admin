@@ -284,15 +284,15 @@ describe("ReplyComposer", () => {
     });
 
     it("lists the evidence under the box and drops it when the reply is sent", async () => {
-      mockFetch([{ type: "text", text: `${FULL}\n=== 근거 ===\n- VIP 시트 VIP 탭 7행\n- 과거 답변 R-20260902-0001` }]);
+      mockFetch([{ type: "text", text: `${FULL}\n=== 근거 ===\n- 운영정책 문서 환불 정책 안내\n- 과거 답변 R-20260902-0001` }]);
       renderIt();
       await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
       await waitFor(() => expect(reply()).toHaveValue(FULL));
 
       const list = screen.getByRole("list", { name: "참고한 자료" });
-      expect(list).toHaveTextContent("VIP 시트 VIP 탭 7행");
+      expect(list).toHaveTextContent("운영정책 문서 환불 정책 안내");
       expect(list).toHaveTextContent("과거 답변 R-20260902-0001");
-      expect(list.querySelector('[data-kind="sheet"]')).not.toBeNull();
+      expect(list.querySelector('[data-kind="doc"]')).not.toBeNull();
       expect(list.querySelector('[data-kind="reply"]')).not.toBeNull();
 
       await userEvent.click(screen.getByRole("button", { name: "발송" }));
@@ -301,10 +301,10 @@ describe("ReplyComposer", () => {
     });
 
     it("shows the warnings next to the caption", async () => {
-      mockFetch([{ type: "warning", reason: "sources_unavailable", sourceTitle: "VIP 원장" }, { type: "text", text: FULL }]);
+      mockFetch([{ type: "warning", reason: "similar_unavailable" }, { type: "text", text: FULL }]);
       renderIt();
       await userEvent.click(screen.getByRole("button", { name: "AI 답변 추천" }));
-      expect(await screen.findByText("운영 자료를 읽지 못해 자료 없이 작성했습니다. (자료: VIP 원장)")).toBeInTheDocument();
+      expect(await screen.findByText("유사 문의 검색이 안 돼 같은 유형의 최근 답변만 참고했습니다.")).toBeInTheDocument();
     });
 
     it("puts the previous text back and explains when the suggestion fails outright", async () => {

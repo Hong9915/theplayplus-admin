@@ -32,9 +32,8 @@ describe("splitSuggestion", () => {
 });
 
 describe("evidenceKind", () => {
-  it("tells sheets, documents, and past replies apart by the wording the prompt asks for", () => {
-    expect(evidenceKind("VIP 시트 VIP 탭 7행")).toBe("sheet");
-    expect(evidenceKind("운영 가이드 문서 환불 항목")).toBe("doc");
+  it("tells policy documents and past replies apart by the wording the prompt asks for", () => {
+    expect(evidenceKind("운영정책 문서 환불 정책 안내")).toBe("doc");
     expect(evidenceKind("과거 답변 R-20260902-0001")).toBe("reply");
   });
 
@@ -42,7 +41,7 @@ describe("evidenceKind", () => {
     expect(evidenceKind("유형 템플릿 '환불 안내'")).toBe("other");
   });
 
-  it("prefers the past-reply reading when a reply mentions a sheet", () => {
-    expect(evidenceKind("과거 답변 R-1 (VIP 시트 언급)")).toBe("reply");
+  it("prefers the past-reply reading when a reply mentions a document", () => {
+    expect(evidenceKind("과거 답변 R-1 (운영정책 문서 언급)")).toBe("reply");
   });
 });

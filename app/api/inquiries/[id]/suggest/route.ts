@@ -11,7 +11,6 @@ import {
   mergePastReplies,
   type PastReply,
 } from "@/lib/replies";
-import { listSources, loadSources, serializeSources, type SourceRow } from "@/lib/assistant-sources";
 import { ensureInquiryEmbedding } from "@/lib/embeddings";
 import { searchPolicyChunks, type PolicyChunk } from "@/lib/policies";
 import { listMessages, type MessageRow } from "@/lib/messages";
@@ -47,17 +46,16 @@ export async function POST(request: Request, { params }: { params: { id: string 
     );
   }
 
-  // 서비스 문의(game_id null)는 게임·템플릿·운영 자료가 없다. 라벨과 과거 답변은 서비스 스코프로 찾는다.
+  // 서비스 문의(game_id null)는 게임·템플릿·운영정책이 없다. 라벨과 과거 답변은 서비스 스코프로 찾는다.
   const scope = scopeForGameId(inquiry.gameId);
   // 작성란의 초안은 관리자가 원하는 답변이라 화면에서 그대로 받는다. DB의 draft_reply는
   // 자동 저장이 몇 초 늦어 버튼을 누른 순간의 글과 다를 수 있다.
   const draft = await readDraft(request);
 
-  const [labels, games, templates, sources, embedding, messages, notes] = await Promise.all([
+  const [labels, games, templates, embedding, messages, notes] = await Promise.all([
     listCategoryLabelsForScope(supabase, scope),
     scope.kind === "game" ? listGames(supabase) : Promise.resolve([]),
     scope.kind === "game" ? listTemplates(supabase, scope.gameId) : Promise.resolve([] as TemplateRow[]),
-    scope.kind === "game" ? listSources(supabase, scope.gameId).catch(() => [] as SourceRow[]) : Promise.resolve([] as SourceRow[]),
     // 지금 문의의 임베딩을 여기서 만들어 둔다. 답변이 붙으면 바로 다음 문의의 근거가 된다.
     ensureInquiryEmbedding(supabase, inquiry),
     // 이 문의에 이미 오간 답변·회신·메모. 못 읽어도 추천은 만든다 — 근거가 하나 빠질 뿐이다.
@@ -69,18 +67,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   // 근거를 모으다 실패한 것은 본문보다 먼저 알린다. 화면이 결과를 그만큼만 믿게 하려는 것이다.
   const warnings: SuggestEvent[] = [];
-
-  // 운영 자료는 등록된 게 있을 때만 읽는다. 읽기 실패(공유 안 됨·너무 큼·서비스 계정 없음)는
-  // 자료 없이 진행하고 어느 자료인지 알린다.
-  let sourcesText = "";
-  if (sources.length > 0) {
-    try {
-      sourcesText = serializeSources(await loadSources(sources));
-    } catch (error) {
-      const sourceTitle = sourceTitleOf(error);
-      warnings.push({ type: "warning", reason: "sources_unavailable", ...(sourceTitle ? { sourceTitle } : {}) });
-    }
-  }
 
   // 유사 문의와 운영정책 조각은 임베딩이 있어야 찾는다. 없으면 같은 유형 최근 답변만 쓴다.
   let similar: PastReply[] = [];
@@ -113,7 +99,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
       companyName: inquiry.companyName,
       templates: relevant.map((template) => ({ title: template.title, content: template.content, autoSend: template.autoSend })),
       pastReplies,
-      sourcesText,
       policies: policies.map((policy) => ({ title: policy.title, content: policy.content })),
       conversation: buildConversation(messages, notes),
       draft,
@@ -161,18 +146,6 @@ function buildConversation(messages: MessageRow[], notes: NoteRow[]): Conversati
     ...notes.map((note): ConversationEntry => ({ kind: "note", at: note.createdAt, body: note.content })),
   ];
   return entries.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
-}
-
-/**
- * SheetError의 sourceTitle. 클래스를 import하지 않고 모양만 보는 이유는 라우트
- * 테스트가 assistant-sources를 통째로 모킹해 실제 클래스를 쓸 수 없어서다.
- */
-function sourceTitleOf(error: unknown): string | undefined {
-  if (typeof error === "object" && error !== null && "sourceTitle" in error) {
-    const title = (error as { sourceTitle?: unknown }).sourceTitle;
-    return typeof title === "string" && title !== "" ? title : undefined;
-  }
-  return undefined;
 }
 
 async function* withWarnings(warnings: SuggestEvent[], events: AsyncGenerator<SuggestEvent>): AsyncGenerator<SuggestEvent> {

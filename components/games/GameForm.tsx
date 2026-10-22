@@ -175,20 +175,6 @@ export default function GameForm({
       return;
     }
 
-    if (json.warning === "ops_doc_not_configured") {
-      setMessageTone("warning");
-      setMessage("게임은 추가되었지만 운영 현황 문서 자동 생성이 설정되지 않았습니다(GOOGLE_DOCS_REFRESH_TOKEN). 운영 자료 화면에서 문서를 직접 만들어 연결해주세요.");
-      onCreated(json.game, json.warning);
-      return;
-    }
-
-    if (json.warning === "ops_doc_failed") {
-      setMessageTone("warning");
-      setMessage("게임은 추가되었지만 운영 현황 문서를 만들지 못했습니다. 운영 자료 화면에서 문서를 직접 만들어 연결해주세요.");
-      onCreated(json.game, json.warning);
-      return;
-    }
-
     if (json.warning === "lounge_unreachable") {
       setMessageTone("warning");
       setMessage('게임은 추가되었지만 네이버 라운지를 연결하지 못했습니다. 주소를 확인한 뒤 문의함의 "네이버 라운지 연결"에서 다시 연결해주세요.');

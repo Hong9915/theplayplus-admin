@@ -20,7 +20,6 @@ function makeInput(overrides: Partial<SuggestInput> = {}): SuggestInput {
     companyName: null,
     templates: [],
     pastReplies: [],
-    sourcesText: "",
     policies: [],
     conversation: [],
     draft: "",
@@ -39,25 +38,16 @@ describe("buildSuggestPrompt", () => {
     expect(system).toContain("제목");
   });
 
-  it("tells the model to use facts from the sources and to end with an evidence section", () => {
+  it("tells the model to use facts from the policy and history and to end with an evidence section", () => {
     const { system } = buildSuggestPrompt(makeInput());
-    expect(system).toContain("참고 자료에 있는 사실");
+    expect(system).toContain("운영정책·대화 이력·초안에 있는 사실");
+    // 운영 자료(시트·문서)는 없어졌다.
+    expect(system).not.toContain("# 참고 자료");
+    expect(system).not.toContain("시트");
     expect(system).toContain(EVIDENCE_DELIMITER);
     expect(system).toContain("없음");
     // 과거 답변의 계정·금액·날짜를 옮겨 적으면 안 된다.
     expect(system).toContain("옮겨 적지");
-  });
-
-  it("appends the sources after the rules so the stable prefix caches", () => {
-    const { system } = buildSuggestPrompt(makeInput({ sourcesText: "# 시트: VIP 원장\n\n## VIP\n이메일 | VIP 단계" }));
-    const rulesEnd = system.indexOf("# 참고 자료");
-    expect(rulesEnd).toBeGreaterThan(0);
-    expect(system.slice(rulesEnd)).toContain("VIP 원장");
-    expect(system.indexOf("지어내지")).toBeLessThan(rulesEnd);
-  });
-
-  it("omits the sources section when there are none", () => {
-    expect(buildSuggestPrompt(makeInput()).system).not.toContain("# 참고 자료");
   });
 
   it("includes the game, category, title, and body", () => {

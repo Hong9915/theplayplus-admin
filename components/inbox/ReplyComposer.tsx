@@ -369,13 +369,6 @@ export default function ReplyComposer({
 function EvidenceIcon({ kind }: { kind: EvidenceKind }) {
   const common = { width: 12, height: 12, viewBox: "0 0 12 12", fill: "none", stroke: "currentColor", strokeWidth: 1.25, "aria-hidden": true, className: "text-muted shrink-0" };
   switch (kind) {
-    case "sheet":
-      return (
-        <svg {...common}>
-          <rect x="1.5" y="1.5" width="9" height="9" rx="1" />
-          <path d="M1.5 5h9M1.5 8h9M5 1.5v9" />
-        </svg>
-      );
     case "doc":
       return (
         <svg {...common}>
