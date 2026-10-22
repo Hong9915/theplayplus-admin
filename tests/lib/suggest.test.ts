@@ -21,6 +21,7 @@ function makeInput(overrides: Partial<SuggestInput> = {}): SuggestInput {
     templates: [],
     pastReplies: [],
     sourcesText: "",
+    policies: [],
     conversation: [],
     draft: "",
     ...overrides,
@@ -117,6 +118,21 @@ describe("buildSuggestPrompt", () => {
     expect(userMessage).toContain("1) 같은 유형의 최근 답변:");
     expect(userMessage).toContain("확인 후 지급해드렸습니다.");
     expect(userMessage).not.toContain("문의 요약");
+  });
+
+  it("lists the policy clauses close to the inquiry with their post title", () => {
+    const { system, userMessage } = buildSuggestPrompt(
+      makeInput({ policies: [{ title: "[숲의 소환단] 환불 정책 안내", content: "[2] 자체 환불\n미사용 재화는 회수 후 환불" }] })
+    );
+    expect(userMessage).toContain("운영정책 (이 문의와 가까운 조항):");
+    expect(userMessage).toContain("1) 글: [숲의 소환단] 환불 정책 안내\n[2] 자체 환불\n미사용 재화는 회수 후 환불");
+    // 정책에 없는 예외를 약속하지 않게 하고, 근거 표기는 아이콘이 '문서'로 잡히게 한다.
+    expect(system).toContain("조항에 없는 예외를 약속하지 마세요");
+    expect(system).toContain("'운영정책 문서 환불 정책 안내'");
+  });
+
+  it("omits the policy section when there are none", () => {
+    expect(buildSuggestPrompt(makeInput()).userMessage).not.toContain("운영정책 (");
   });
 
   it("omits the past-reply section entirely when there are none", () => {

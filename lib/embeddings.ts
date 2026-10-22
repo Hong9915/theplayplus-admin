@@ -50,6 +50,33 @@ export async function embedText(text: string): Promise<number[]> {
   }
 }
 
+/** 여러 글을 요청 한 번으로 임베딩한다. 결과는 입력 순서대로다(응답의 index로 맞춘다). */
+export async function embedTexts(texts: string[]): Promise<number[][]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new EmbeddingError("not_configured");
+  if (texts.length === 0) return [];
+
+  try {
+    const client = new OpenAI({ apiKey });
+    const response = await client.embeddings.create({
+      model: EMBEDDING_MODEL,
+      input: texts,
+      dimensions: EMBEDDING_DIMENSIONS,
+    });
+    const vectors: Array<number[] | undefined> = texts.map(() => undefined);
+    for (const entry of response.data) vectors[entry.index] = entry.embedding;
+    return vectors.map((vector) => {
+      if (!vector || vector.length !== EMBEDDING_DIMENSIONS) {
+        throw new Error(`unexpected embedding shape: ${vector?.length ?? "none"}`);
+      }
+      return vector;
+    });
+  } catch (error) {
+    console.warn("[embeddings] OpenAI request failed", error);
+    throw new EmbeddingError("failed");
+  }
+}
+
 /** supabase-js는 vector 열을 "[0.1,0.2,…]" 문자열로 돌려준다. 배열이면 그대로. */
 function parseStoredEmbedding(value: unknown): number[] | null {
   if (Array.isArray(value)) {

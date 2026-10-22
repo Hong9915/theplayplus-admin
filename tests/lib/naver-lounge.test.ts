@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { parseLoungeId, fetchLoungePosts, fetchLoungeComments } from "@/lib/naver-lounge";
+import { parseLoungeId, fetchLoungePosts, fetchLoungeComments, parseLoungePostUrl, fetchBoardPostsOf } from "@/lib/naver-lounge";
 
 function stubFetch(body: unknown, ok = true) {
   const fetchMock = vi.fn().mockResolvedValue({ ok, status: ok ? 200 : 500, json: () => Promise.resolve(body) });
@@ -131,5 +131,45 @@ describe("fetchLoungeComments", () => {
       { commentId: 11, feedId: 8212525, bodyText: "(스티커·이미지)", nickname: "유저", isUser: true, postedAt: "2026-09-20T18:03:29.000Z" },
       { commentId: 12, feedId: 8212525, bodyText: "(비밀 댓글)", nickname: "유저", isUser: true, postedAt: "2026-09-20T18:03:29.000Z" },
     ]);
+  });
+});
+
+describe("parseLoungePostUrl", () => {
+  it("pulls the lounge id and post number out of a pc or mobile post url", () => {
+    expect(parseLoungePostUrl("https://game.naver.com/lounge/Tree_World/board/detail/8347086")).toEqual({ loungeId: "Tree_World", feedId: 8347086 });
+    expect(parseLoungePostUrl(" https://m.game.naver.com/lounge/Abc_1/board/detail/12?x=1 ")).toEqual({ loungeId: "Abc_1", feedId: 12 });
+  });
+  it("rejects lounge homes, other hosts, and non-https urls", () => {
+    expect(parseLoungePostUrl("https://game.naver.com/lounge/Tree_World/home")).toBeNull();
+    expect(parseLoungePostUrl("https://example.com/lounge/A/board/detail/1")).toBeNull();
+    expect(parseLoungePostUrl("http://game.naver.com/lounge/A/board/detail/1")).toBeNull();
+  });
+});
+
+describe("fetchBoardPostsOf", () => {
+  it("looks up the post's board and reads that board's posts with plain-text bodies", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ feedId: 8347086, boardId: 23, boardName: null }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(feedResponse) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const posts = await fetchBoardPostsOf("L1", 8347086);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://comm-api.game.naver.com/nng_main/v1/community/feed/8347086");
+    expect(fetchMock.mock.calls[1][0]).toContain("/lounge/L1/feed?boardId=23&");
+    expect(posts[0]).toEqual({
+      feedId: 8212525,
+      title: "🐰 다른 게임 & 맞죠?",
+      bodyText: "첫 줄입니다\n둘째 줄",
+      postedAt: "2026-09-19T12:53:48.000Z",
+      url: "https://game.naver.com/lounge/L1/board/detail/8212525",
+    });
+    expect(posts[1].bodyText).toBe("");
+  });
+
+  it("throws when the post lookup fails so the sync keeps stored chunks", async () => {
+    stubFetch({}, false);
+    await expect(fetchBoardPostsOf("L1", 1)).rejects.toThrow("naver lounge request failed: 500");
   });
 });

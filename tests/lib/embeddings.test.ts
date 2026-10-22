@@ -4,6 +4,7 @@ import {
   EMBEDDING_MODEL,
   EmbeddingError,
   embedText,
+  embedTexts,
   ensureInquiryEmbedding,
   inquiryEmbeddingText,
 } from "@/lib/embeddings";
@@ -78,6 +79,46 @@ describe("embedText", () => {
     createMock.mockResolvedValue({ data: [{ embedding: [1, 2, 3] }] });
 
     await expect(embedText("본문")).rejects.toMatchObject({ reason: "failed" });
+    warnSpy.mockRestore();
+  });
+});
+
+describe("embedTexts", () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+
+  beforeEach(() => {
+    createMock.mockReset();
+    process.env.OPENAI_API_KEY = "test-key";
+  });
+
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+  });
+
+  it("sends all texts in one request and returns vectors in input order", async () => {
+    const other = VECTOR.map((value) => value + 1);
+    createMock.mockResolvedValue({ data: [{ index: 1, embedding: other }, { index: 0, embedding: VECTOR }] });
+
+    await expect(embedTexts(["가", "나"])).resolves.toEqual([VECTOR, other]);
+    expect(createMock).toHaveBeenCalledWith({ model: EMBEDDING_MODEL, input: ["가", "나"], dimensions: 1536 });
+  });
+
+  it("returns an empty list without calling the SDK when there is nothing to embed", async () => {
+    await expect(embedTexts([])).resolves.toEqual([]);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("throws not_configured when the key is missing", async () => {
+    delete process.env.OPENAI_API_KEY;
+    await expect(embedTexts(["가"])).rejects.toMatchObject({ reason: "not_configured" });
+  });
+
+  it("throws failed when a vector is missing from the response", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    createMock.mockResolvedValue({ data: [{ index: 0, embedding: VECTOR }] });
+
+    await expect(embedTexts(["가", "나"])).rejects.toMatchObject({ reason: "failed" });
     warnSpy.mockRestore();
   });
 });

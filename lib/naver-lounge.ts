@@ -195,3 +195,39 @@ export async function fetchLoungeComments(loungeId: string, feedId: number): Pro
   }
   return comments;
 }
+
+const POST_URL = /^https:\/\/(?:m\.)?game\.naver\.com\/lounge\/([A-Za-z0-9_]+)\/board\/detail\/(\d+)/;
+
+/** 라운지 글 주소(`…/lounge/{라운지ID}/board/detail/{글번호}`) → 라운지 ID·글 번호. 다른 주소면 null. */
+export function parseLoungePostUrl(url: string): { loungeId: string; feedId: number } | null {
+  const match = url.trim().match(POST_URL);
+  return match ? { loungeId: match[1], feedId: Number(match[2]) } : null;
+}
+
+export interface LoungeBoardPost {
+  feedId: number;
+  title: string;
+  bodyText: string;
+  postedAt: string;
+  url: string;
+}
+
+const postSchema = z.object({ boardId: z.number() });
+
+/**
+ * 글 하나가 속한 게시판의 최신 글 30건. 운영정책 글 주소로 그 게시판 전체(이용약관·환불 정책 등)를 읽는다.
+ * 글 하나 API는 본문을 HTML로만 줘서 게시판 번호(최상위 `boardId`)만 얻고, 본문은 목록 API의
+ * SmartEditor JSON에서 읽는다(2026-10-22 실측, Tree_World 운영 정책 게시판 23).
+ */
+export async function fetchBoardPostsOf(loungeId: string, feedId: number): Promise<LoungeBoardPost[]> {
+  const { boardId } = postSchema.parse(await getJson(`https://comm-api.game.naver.com/nng_main/v1/community/feed/${feedId}`));
+  const params = new URLSearchParams({ boardId: String(boardId), buffFilteringYN: "N", limit: String(POST_LIMIT), offset: "0", order: "NEW" });
+  const parsed = feedSchema.parse(await getJson(`${FEED_BASE}/${loungeId}/feed?${params}`));
+  return parsed.content.feeds.map((entry) => ({
+    feedId: entry.feed.feedId,
+    title: decodeEntities(entry.feed.title).trim(),
+    bodyText: extractEditorText(entry.feed.contents),
+    postedAt: parseKstDate(entry.feed.createdDate),
+    url: safePostUrl(entry.feedLink.pc, loungeId),
+  }));
+}

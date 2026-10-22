@@ -13,6 +13,7 @@ import {
 } from "@/lib/replies";
 import { listSources, loadSources, serializeSources, type SourceRow } from "@/lib/assistant-sources";
 import { ensureInquiryEmbedding } from "@/lib/embeddings";
+import { searchPolicyChunks, type PolicyChunk } from "@/lib/policies";
 import { listMessages, type MessageRow } from "@/lib/messages";
 import { listNotes, type NoteRow } from "@/lib/notes";
 import { streamSuggestion, type ConversationEntry, type SuggestEvent } from "@/lib/suggest";
@@ -81,10 +82,14 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
   }
 
-  // 유사 문의는 임베딩이 있어야 찾는다. 없으면 같은 유형 최근 답변만 쓴다.
+  // 유사 문의와 운영정책 조각은 임베딩이 있어야 찾는다. 없으면 같은 유형 최근 답변만 쓴다.
   let similar: PastReply[] = [];
+  let policies: PolicyChunk[] = [];
   if (embedding) {
-    similar = await listSimilarAnsweredReplies(supabase, scope, embedding, inquiry.id);
+    [similar, policies] = await Promise.all([
+      listSimilarAnsweredReplies(supabase, scope, embedding, inquiry.id),
+      scope.kind === "game" ? searchPolicyChunks(supabase, scope.gameId, embedding) : Promise.resolve([] as PolicyChunk[]),
+    ]);
   } else {
     warnings.push({ type: "warning", reason: "similar_unavailable" });
   }
@@ -109,6 +114,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       templates: relevant.map((template) => ({ title: template.title, content: template.content, autoSend: template.autoSend })),
       pastReplies,
       sourcesText,
+      policies: policies.map((policy) => ({ title: policy.title, content: policy.content })),
       conversation: buildConversation(messages, notes),
       draft,
     })

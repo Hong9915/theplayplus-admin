@@ -11,6 +11,7 @@ import * as sourcesModule from "@/lib/assistant-sources";
 import * as embeddingsModule from "@/lib/embeddings";
 import * as messagesModule from "@/lib/messages";
 import * as notesModule from "@/lib/notes";
+import * as policiesModule from "@/lib/policies";
 
 vi.mock("@/lib/supabase", () => ({ getSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/inquiries", () => ({ getInquiryById: vi.fn() }));
@@ -27,6 +28,7 @@ vi.mock("@/lib/assistant-sources", () => ({ listSources: vi.fn(), loadSources: v
 vi.mock("@/lib/embeddings", () => ({ ensureInquiryEmbedding: vi.fn() }));
 vi.mock("@/lib/messages", () => ({ listMessages: vi.fn() }));
 vi.mock("@/lib/notes", () => ({ listNotes: vi.fn() }));
+vi.mock("@/lib/policies", () => ({ searchPolicyChunks: vi.fn() }));
 
 const EMBEDDING = [0.1, 0.2, 0.3];
 const sheetSource = { id: "src-1", gameId: "game-1", kind: "sheet" as const, externalId: "sh-1", title: "VIP 원장", createdAt: "" };
@@ -118,6 +120,7 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     vi.mocked(embeddingsModule.ensureInquiryEmbedding).mockReset().mockResolvedValue(EMBEDDING);
     vi.mocked(messagesModule.listMessages).mockReset().mockResolvedValue([]);
     vi.mocked(notesModule.listNotes).mockReset().mockResolvedValue([]);
+    vi.mocked(policiesModule.searchPolicyChunks).mockReset().mockResolvedValue([]);
     vi.mocked(suggestModule.streamSuggestion)
       .mockReset()
       .mockImplementation(() => events({ type: "text", text: "추천 " }, { type: "text", text: "본문" }));
@@ -295,6 +298,7 @@ describe("POST /api/inquiries/[id]/suggest", () => {
     expect(templatesModule.listTemplates).not.toHaveBeenCalled();
     expect(categoriesModule.listCategoryLabelsForScope).toHaveBeenCalledWith(expect.anything(), { kind: "service" });
     expect(sourcesModule.listSources).not.toHaveBeenCalled();
+    expect(policiesModule.searchPolicyChunks).not.toHaveBeenCalled();
     expect(repliesModule.listSimilarAnsweredReplies).toHaveBeenCalledWith(expect.anything(), { kind: "service" }, EMBEDDING, "inq-1");
     expect(repliesModule.listRecentRepliesByType).toHaveBeenCalledWith(expect.anything(), { kind: "service" }, "publishing");
     expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(
@@ -307,6 +311,30 @@ describe("POST /api/inquiries/[id]/suggest", () => {
         sourcesText: "",
       })
     );
+  });
+
+  it("searches the game's policy chunks with the inquiry embedding and passes title and content", async () => {
+    vi.mocked(policiesModule.searchPolicyChunks).mockResolvedValue([
+      { feedId: 8347098, chunkIndex: 1, title: "환불 정책 안내", content: "[2] 자체 환불", url: "https://game.naver.com/x", similarity: 0.6 },
+    ]);
+
+    const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
+    await readLines(response);
+
+    expect(policiesModule.searchPolicyChunks).toHaveBeenCalledWith(expect.anything(), "game-1", EMBEDDING);
+    expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({ policies: [{ title: "환불 정책 안내", content: "[2] 자체 환불" }] })
+    );
+  });
+
+  it("skips the policy search without an embedding", async () => {
+    vi.mocked(embeddingsModule.ensureInquiryEmbedding).mockResolvedValue(null);
+
+    const response = await POST(suggestRequest(), { params: { id: "inq-1" } });
+    await readLines(response);
+
+    expect(policiesModule.searchPolicyChunks).not.toHaveBeenCalled();
+    expect(suggestModule.streamSuggestion).toHaveBeenCalledWith(expect.objectContaining({ policies: [] }));
   });
 
   it("loads the game's sources and passes the serialized text", async () => {

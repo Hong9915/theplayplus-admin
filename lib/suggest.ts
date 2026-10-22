@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { PastReply } from "@/lib/replies";
+import type { PolicyChunk } from "@/lib/policies";
 import { EVIDENCE_DELIMITER } from "@/lib/suggest-evidence";
 import { DISPLAY_TIME_ZONE } from "@/lib/format";
 
@@ -31,6 +32,8 @@ export interface SuggestInput {
   pastReplies: PastReply[];
   /** serializeSources 결과. 자료가 없거나 서비스 문의면 "". */
   sourcesText: string;
+  /** 문의와 가까운 운영정책 조각, 가까운 순. 정책이 없거나 서비스 문의면 []. */
+  policies: Array<Pick<PolicyChunk, "title" | "content">>;
   /** 이 문의의 보낸 답변·자동 답변·사용자 회신·내부 메모, 시간순. */
   conversation: ConversationEntry[];
   /** 작성란에 지금 적혀 있는 답변 초안. 없으면 "". */
@@ -65,6 +68,9 @@ const SYSTEM_RULES = [
   "  확인이 필요한 사항은 약속하지 말고 '확인 후 안내드리겠습니다'로 남기세요.",
   "- 참고 자료에 있는 사실(이벤트 기간, 지급 기준, 운영 정책 등)로 답할 수 있으면",
   "  그 사실을 답변에 쓰세요. 자료에 없는 사실은 지어내지 말고 '확인 후 안내드리겠습니다'로 남기세요.",
+  "- '운영정책'이 주어지면 그 게임의 공식 정책(이용약관·환불 정책 등)에서 이 문의와 가까운 조항입니다.",
+  "  환불·제재·보상의 가능 여부와 절차는 그 조항에 맞게 쓰고, 조항에 없는 예외를 약속하지 마세요.",
+  "  조항 문장을 길게 그대로 붙이지 말고 이 문의에 해당하는 내용만 풀어 쓰세요.",
   "- 호칭과 첫 인사('OOO님, 안녕하세요. 답변드립니다')는 발송 시스템이 본문 앞에 붙입니다.",
   "  본문은 인사 없이 바로 시작하세요.",
   "- 참고 템플릿이 주어지면 그 말투와 구조를 따르세요. 템플릿의 제목은 참고용",
@@ -101,7 +107,8 @@ const SYSTEM_RULES = [
   "",
   "출력 형식:",
   `- 본문을 다 쓴 뒤 다음 줄에 ${EVIDENCE_DELIMITER}를 쓰고, 그 아래에 참고한 자료를 한 줄에 하나씩 적으세요.`,
-  "  시트는 'VIP 시트 VIP 탭 7행', 문서는 '운영 가이드 문서 환불 항목', 과거 답변은 '과거 답변 R-20260902-0001'처럼 적으세요.",
+  "  시트는 'VIP 시트 VIP 탭 7행', 문서는 '운영 가이드 문서 환불 항목', 운영정책은 '운영정책 문서 환불 정책 안내',",
+  "  과거 답변은 '과거 답변 R-20260902-0001'처럼 적으세요.",
   "- 참고한 것이 없으면 구분선 아래에 '없음'이라고 적으세요.",
 ].join("\n");
 
@@ -133,6 +140,13 @@ export function buildSuggestPrompt(input: SuggestInput): { system: string; userM
     if (dropped > 0) lines.push(`(앞의 ${dropped}건은 생략)`);
     input.conversation.slice(dropped).forEach((entry) => {
       lines.push("", `[${CONVERSATION_LABELS[entry.kind]} · ${formatPromptTime(entry.at)}]`, clip(entry.body, CONVERSATION_ENTRY_MAX_CHARS));
+    });
+  }
+
+  if (input.policies.length > 0) {
+    lines.push("", "---", "운영정책 (이 문의와 가까운 조항):");
+    input.policies.forEach((policy, index) => {
+      lines.push("", `${index + 1}) 글: ${policy.title}`, policy.content);
     });
   }
 
