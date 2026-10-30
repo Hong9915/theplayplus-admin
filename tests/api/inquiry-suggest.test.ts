@@ -54,6 +54,9 @@ const inquiry = {
   store: null,
   occurredAt: null,
   deviceInfo: null,
+  serverName: null,
+  characterId: null,
+  characterName: null,
   createdAt: "2026-09-02T00:00:00.000Z",
 };
 

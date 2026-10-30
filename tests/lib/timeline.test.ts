@@ -29,6 +29,9 @@ const inquiry: InquiryRow = {
   store: null,
   occurredAt: null,
   deviceInfo: null,
+  serverName: null,
+  characterId: null,
+  characterName: null,
   createdAt: "2026-09-03T01:12:00.000Z",
 };
 
@@ -108,6 +111,9 @@ describe("buildAccountTimeline", () => {
       paymentNo: null,
       store: null,
       deviceInfo: null,
+      serverName: null,
+      characterId: null,
+      characterName: null,
       translations: {},
       createdAt: "2026-07-21T00:00:00.000Z",
     },

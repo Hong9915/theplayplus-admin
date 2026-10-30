@@ -133,13 +133,16 @@ export function formatStore(store: string): string {
 }
 
 /**
- * 유형별 추가 항목(발생 일시·스토어·결제번호·기기/사양). 접수 폼이 유형 플래그에 따라
+ * 유형별 추가 항목(서버·캐릭터·발생 일시·스토어·결제번호·기기/사양). 접수 폼이 유형 플래그에 따라
  * 채우는 컬럼이라 유형마다 있는 것만 나온다. 대화 말풍선과 접수 정보가 같이 쓴다.
  */
 export function inquiryDetailRows(
-  inquiry: Pick<InquiryRow, "occurredAt" | "paymentNo" | "store" | "deviceInfo">
+  inquiry: Pick<InquiryRow, "occurredAt" | "paymentNo" | "store" | "deviceInfo" | "serverName" | "characterId" | "characterName">
 ): MetaEntry[] {
   return presentRows([
+    { label: "서버", value: inquiry.serverName },
+    { label: "캐릭터 ID", value: inquiry.characterId },
+    { label: "캐릭터명", value: inquiry.characterName },
     { label: "발생 일시", value: inquiry.occurredAt ? formatOccurredAt(inquiry.occurredAt) : null },
     { label: "스토어", value: inquiry.store ? formatStore(inquiry.store) : null },
     { label: "결제번호", value: inquiry.paymentNo },

@@ -36,6 +36,10 @@ export interface InquiryRow {
   /** datetime-local 문자열 (YYYY-MM-DDTHH:mm). */
   occurredAt: string | null;
   deviceInfo: string | null;
+  /** 서버(구역)·캐릭터 ID·캐릭터명. 유형의 collects_character가 켜진 문의만 채운다(마이그레이션 0034). */
+  serverName: string | null;
+  characterId: string | null;
+  characterName: string | null;
   /** 관리자가 우클릭으로 만든 본문 번역(마이그레이션 0015). 없으면 빈 객체. */
   translations: Translations;
   createdAt: string;
@@ -44,7 +48,7 @@ export interface InquiryRow {
 // 임베딩 벡터(1536 float)를 목록·상세에서 끌어오지 않도록 열을 명시한다.
 // mapInquiryRow가 읽는 열과 정확히 맞춘다(embedding, embedding_model은 제외).
 export const INQUIRY_COLUMNS =
-  "id, inquiry_no, game_id, group_key, type_key, game_account, company_name, reply_email, title, content, status, priority, meta, draft_reply, reply_content, replied_at, gmail_thread_id, locale, payment_no, store, occurred_at, device_info, created_at, unread_reply_at, translations";
+  "id, inquiry_no, game_id, group_key, type_key, game_account, company_name, reply_email, title, content, status, priority, meta, draft_reply, reply_content, replied_at, gmail_thread_id, locale, payment_no, store, occurred_at, device_info, server_name, character_id, character_name, created_at, unread_reply_at, translations";
 
 export interface AttachmentWithUrl {
   id: string;
@@ -76,6 +80,9 @@ function mapInquiryRow(row: {
   store?: string | null;
   occurred_at?: string | null;
   device_info?: string | null;
+  server_name?: string | null;
+  character_id?: string | null;
+  character_name?: string | null;
   translations?: unknown;
   created_at: string;
 }): InquiryRow {
@@ -103,6 +110,9 @@ function mapInquiryRow(row: {
     store: row.store ?? null,
     occurredAt: row.occurred_at ?? null,
     deviceInfo: row.device_info ?? null,
+    serverName: row.server_name ?? null,
+    characterId: row.character_id ?? null,
+    characterName: row.character_name ?? null,
     translations: parseTranslations(row.translations),
     createdAt: row.created_at,
   };

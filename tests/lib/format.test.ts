@@ -124,6 +124,9 @@ describe("inquiryMetaRows", () => {
     store: null,
     occurredAt: null,
     deviceInfo: null,
+    serverName: null,
+    characterId: null,
+    characterName: null,
     createdAt: "2026-07-23T13:55:00.000Z",
   };
 
@@ -148,6 +151,9 @@ describe("inquiryMetaRows", () => {
       store: "google_play",
       occurredAt: "2026-09-03T14:05",
       deviceInfo: "Galaxy S24 / Android 14",
+      serverName: null,
+      characterId: null,
+      characterName: null,
     });
     expect(rows.map((r) => [r.label, r.value])).toEqual([
       ["게임 계정", "player1"],
@@ -169,10 +175,10 @@ describe("inquiryMetaRows", () => {
 
 describe("inquiryDetailRows", () => {
   it("returns only the type-specific fields that are present", () => {
-    expect(inquiryDetailRows({ occurredAt: "2026-09-03T14:05", paymentNo: null, store: null, deviceInfo: " " })).toEqual([
+    expect(inquiryDetailRows({ occurredAt: "2026-09-03T14:05", paymentNo: null, store: null, deviceInfo: " ", serverName: null, characterId: null, characterName: null })).toEqual([
       { key: "발생 일시", label: "발생 일시", value: "2026. 09. 03. 오후 2:05" },
     ]);
-    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, store: null, deviceInfo: null })).toEqual([]);
+    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, store: null, deviceInfo: null, serverName: null, characterId: null, characterName: null })).toEqual([]);
   });
 
   it.each([
@@ -181,13 +187,23 @@ describe("inquiryDetailRows", () => {
     ["onestore", "원스토어"],
     ["other", "기타"],
   ])("labels the store key %s as %s in Korean", (key, label) => {
-    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, store: key, deviceInfo: null })).toEqual([
+    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, store: key, deviceInfo: null, serverName: null, characterId: null, characterName: null })).toEqual([
       { key: "스토어", label: "스토어", value: label },
     ]);
   });
 
+  it("lists server and character fields before the occurrence time", () => {
+    const rows = inquiryDetailRows({ occurredAt: "2026-09-03T14:05", paymentNo: null, store: null, deviceInfo: null, serverName: "1서버", characterId: "123456", characterName: "숲지기" });
+    expect(rows.map((r) => [r.label, r.value])).toEqual([
+      ["서버", "1서버"],
+      ["캐릭터 ID", "123456"],
+      ["캐릭터명", "숲지기"],
+      ["발생 일시", "2026. 09. 03. 오후 2:05"],
+    ]);
+  });
+
   it("shows an unknown store key as-is", () => {
-    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, store: "steam", deviceInfo: null })).toEqual([
+    expect(inquiryDetailRows({ occurredAt: null, paymentNo: null, store: "steam", deviceInfo: null, serverName: null, characterId: null, characterName: null })).toEqual([
       { key: "스토어", label: "스토어", value: "steam" },
     ]);
   });

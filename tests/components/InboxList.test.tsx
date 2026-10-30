@@ -54,6 +54,9 @@ function makeInquiry(overrides: Partial<InquiryRow>): InquiryRow {
     store: null,
     occurredAt: null,
     deviceInfo: null,
+    serverName: null,
+    characterId: null,
+    characterName: null,
     createdAt: new Date().toISOString(),
     ...overrides,
   };

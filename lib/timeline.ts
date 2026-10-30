@@ -19,6 +19,9 @@ export type ThreadInquiry = Pick<
   | "paymentNo"
   | "store"
   | "deviceInfo"
+  | "serverName"
+  | "characterId"
+  | "characterName"
   | "translations"
 >;
 

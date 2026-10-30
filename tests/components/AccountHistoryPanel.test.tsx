@@ -15,6 +15,9 @@ const entry: AccountHistoryEntry = {
   paymentNo: null,
   store: null,
   deviceInfo: null,
+  serverName: null,
+  characterId: null,
+  characterName: null,
   translations: {},
   createdAt: "2025-06-01T00:00:00.000Z",
 };

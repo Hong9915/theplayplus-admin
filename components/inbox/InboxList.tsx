@@ -160,6 +160,31 @@ export default function InboxList({
     router.refresh();
   }
 
+  async function downloadDevReport() {
+    if (checked.size === 0) return;
+    setBulkBusy(true);
+    setBulkMessage(null);
+    setBulkFailed(false);
+    try {
+      const response = await fetch("/api/inquiries/dev-report", {
+        method: "POST",
+        body: JSON.stringify({ ids: Array.from(checked) }),
+      });
+      if (!response.ok) throw new Error("export_failed");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `개발사전달_${new Date().toISOString().slice(0, 10).replaceAll("-", "")}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setBulkMessage(`${checked.size}건을 엑셀로 내려받았습니다.`);
+    } catch {
+      setBulkFailed(true);
+      setBulkMessage("엑셀 만들기에 실패했습니다.");
+    }
+    setBulkBusy(false);
+  }
+
   if (collapsed) {
     return (
       <section className="w-12 shrink-0 h-full bg-well flex flex-col items-center pt-3" aria-label="문의 목록 (접힘)">
@@ -202,7 +227,16 @@ export default function InboxList({
             disabled={bulkBusy}
             className="h-7 px-3 rounded-[7px] bg-accent font-semibold hover:brightness-105 active:brightness-95 disabled:opacity-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
-            {bulkBusy ? "변경 중…" : "상태 변경"}
+            {bulkBusy ? "처리 중…" : "상태 변경"}
+          </button>
+          <button
+            type="button"
+            onClick={downloadDevReport}
+            disabled={bulkBusy}
+            title="시간·서버·캐릭터·문제·스크린샷을 개발사 양식(한·중 머리글)으로 내려받습니다"
+            className="h-7 px-3 rounded-[7px] border border-white/30 font-semibold hover:bg-white/10 disabled:opacity-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          >
+            개발사 전달 엑셀
           </button>
           {/* 어두운 막대 위라 기본 글자색 대신 밝은 톤으로. */}
           <StatusMessage tone={bulkFailed ? "error" : "muted"} className={bulkFailed ? "!text-[#FF9A8A]" : "!text-white/80"}>
