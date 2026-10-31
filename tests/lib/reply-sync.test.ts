@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { listInboundIdsSince, getInboundMessage, getReplyHeaders, openMailbox } = vi.hoisted(() => ({
+const { listInboundIdsSince, getInboundMessage, getReplyHeaders, getAttachment, openMailbox, saveInboundAttachments } = vi.hoisted(() => ({
   listInboundIdsSince: vi.fn(),
   getInboundMessage: vi.fn(),
   getReplyHeaders: vi.fn(),
+  getAttachment: vi.fn(),
   openMailbox: vi.fn(),
+  saveInboundAttachments: vi.fn(),
 }));
 vi.mock("@/lib/gmail", () => ({ openMailbox }));
+vi.mock("@/lib/message-attachments", () => ({ saveInboundAttachments }));
 
 /** 메일함에 있는 메일. list는 id/threadId만, get은 본문까지 준다. */
 function mailboxHas(emails: ReturnType<typeof email>[]) {
@@ -82,9 +85,15 @@ function fakeSupabase(options: FakeOptions = {}) {
               error: null,
             }),
           }),
-          insert: async (row: Record<string, unknown>) => {
+          insert: (row: Record<string, unknown>) => {
             inserts.push(row);
-            return { error: known.has(row.gmail_message_id as string) ? { message: "duplicate" } : null };
+            const duplicate = known.has(row.gmail_message_id as string);
+            return {
+              select: () => ({
+                single: async () =>
+                  duplicate ? { data: null, error: { message: "duplicate" } } : { data: { id: `row-${row.gmail_message_id}` }, error: null },
+              }),
+            };
           },
         };
       }
@@ -94,7 +103,13 @@ function fakeSupabase(options: FakeOptions = {}) {
   return { client: client as never, inserts, updates, upserts };
 }
 
-function email(id: string, threadId: string, body = "회신 본문", sentAt = "2026-09-07T09:50:00.000Z") {
+function email(
+  id: string,
+  threadId: string,
+  body = "회신 본문",
+  sentAt = "2026-09-07T09:50:00.000Z",
+  attachments: Array<{ attachmentId: string; filename: string; mimeType: "image/png"; size: number }> = []
+) {
   return {
     gmailMessageId: id,
     threadId,
@@ -102,6 +117,7 @@ function email(id: string, threadId: string, body = "회신 본문", sentAt = "2
     fromEmail: "user@example.com",
     body,
     sentAt,
+    attachments,
   };
 }
 
@@ -110,16 +126,37 @@ beforeEach(() => {
   listInboundIdsSince.mockReset();
   getInboundMessage.mockReset();
   getReplyHeaders.mockReset().mockResolvedValue([]);
+  getAttachment.mockReset();
+  saveInboundAttachments.mockReset().mockResolvedValue(0);
   openMailbox.mockReset();
   openMailbox.mockImplementation((mailbox: string) => ({
     sender: mailbox === "game" ? "help@theplayplus.com" : "info@theplayplus.com",
     listInboundIdsSince,
     getInboundMessage,
     getReplyHeaders,
+    getAttachment,
   }));
 });
 
 describe("syncMailbox", () => {
+  it("keeps a photo-only reply and saves its photos onto the stored message", async () => {
+    const photo = { attachmentId: "att-1", filename: "화면.png", mimeType: "image/png" as const, size: 10 };
+    mailboxHas([email("m1", "t1", "", "2026-09-07T09:50:00.000Z", [photo])]);
+    const db = fakeSupabase({
+      syncedThrough: "2026-09-07T09:55:00.000Z",
+      inquiries: [{ id: "inq-1", gmail_thread_id: "t1", unread_reply_at: null }],
+    });
+    getAttachment.mockResolvedValue(Buffer.from([1]));
+
+    const result = await syncMailbox(db.client, "game", { now: NOW });
+
+    expect(result.added).toBe(1);
+    const call = saveInboundAttachments.mock.calls[0][1];
+    expect(call).toEqual(expect.objectContaining({ inquiryId: "inq-1", messageId: "row-m1", attachments: [photo] }));
+    await call.download("att-1");
+    expect(getAttachment).toHaveBeenCalledWith("m1", "att-1");
+  });
+
   it("stores replies whose thread belongs to an inquiry and marks it unread", async () => {
     mailboxHas([email("m1", "t1")]);
     const db = fakeSupabase({

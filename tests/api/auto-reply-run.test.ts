@@ -56,6 +56,7 @@ describe("POST /api/auto-reply/run", () => {
     vi.mocked(sendReplyModule.sendInquiryReply).mockResolvedValue({
       sent: { gmailMessageId: "gm-1", gmailThreadId: "t-1", rfcMessageId: "<a>" },
       recorded: true,
+      attachmentsRecorded: true,
     });
   });
 

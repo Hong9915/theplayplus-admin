@@ -6,6 +6,10 @@ import ReplyComposer from "@/components/inbox/ReplyComposer";
 
 const refreshMock = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: refreshMock }) }));
+const uploadToSignedUrl = vi.fn();
+vi.mock("@/lib/supabase-browser", () => ({
+  getSupabaseBrowserClient: () => ({ storage: { from: () => ({ uploadToSignedUrl }) } }),
+}));
 
 type Event =
   | { type: "text"; text: string }
@@ -45,6 +49,99 @@ describe("ReplyComposer", () => {
     mockFetch([{ type: "text", text: FULL }]);
   });
 
+  describe("photos", () => {
+    const png = (name: string, size = 10) => {
+      const file = new File([new Uint8Array(size)], name, { type: "image/png" });
+      return file;
+    };
+
+    /** 업로드 주소 발급과 발송을 흉내 낸다. */
+    function mockUploadFlow(replyResult: unknown = { success: true }) {
+      global.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (String(url).endsWith("/reply/uploads")) {
+          const files = JSON.parse(String(init?.body)).files as Array<{ name: string }>;
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                success: true,
+                uploads: files.map((file, index) => ({ path: `inq-1/messages/u${index}-${file.name}`, token: `t${index}`, fileName: file.name })),
+              }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(replyResult) });
+      }) as never;
+    }
+
+    beforeEach(() => {
+      uploadToSignedUrl.mockReset().mockResolvedValue({ data: {}, error: null });
+    });
+
+    it("uploads the picked photos first and sends their paths with the reply", async () => {
+      mockUploadFlow();
+      renderIt();
+      await userEvent.upload(screen.getByTestId("reply-image-input"), [png("보상.png")]);
+      expect(screen.getByRole("button", { name: "보상.png 빼기" })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "발송" }));
+
+      expect(await screen.findByText("답변이 발송되었습니다.")).toBeInTheDocument();
+      expect(uploadToSignedUrl).toHaveBeenCalledWith("inq-1/messages/u0-보상.png", "t0", expect.any(File), { contentType: "image/png" });
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/inquiries/inq-1/reply",
+        expect.objectContaining({
+          body: JSON.stringify({ replyContent: "", attachments: [{ path: "inq-1/messages/u0-보상.png", fileName: "보상.png" }] }),
+        })
+      );
+      expect(screen.queryByRole("button", { name: "보상.png 빼기" })).not.toBeInTheDocument();
+    });
+
+    it("takes a pasted screenshot as a photo instead of text", async () => {
+      renderIt();
+      const file = png("image.png");
+      await act(async () => {
+        const event = new globalThis.Event("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "clipboardData", { value: { files: [file] } });
+        reply().dispatchEvent(event);
+      });
+      expect(screen.getByRole("button", { name: "image.png 빼기" })).toBeInTheDocument();
+    });
+
+    it("refuses files that are not photos or too big, and removes a photo on ×", async () => {
+      renderIt();
+      const input = screen.getByTestId("reply-image-input");
+      await userEvent.upload(input, [new File(["x"], "log.pdf", { type: "application/pdf" })], { applyAccept: false });
+      expect(screen.getByText("PNG·JPG·GIF·WEBP 사진만 붙일 수 있습니다.")).toBeInTheDocument();
+
+      await userEvent.upload(input, [png("big.png", 5 * 1024 * 1024 + 1)]);
+      expect(screen.getByText("사진 한 장은 5MB까지 붙일 수 있습니다.")).toBeInTheDocument();
+
+      await userEvent.upload(input, [png("a.png")]);
+      await userEvent.click(screen.getByRole("button", { name: "a.png 빼기" }));
+      expect(screen.queryByRole("button", { name: "a.png 빼기" })).not.toBeInTheDocument();
+    });
+
+    it("does not send when the upload fails and keeps the photo for a retry", async () => {
+      mockUploadFlow();
+      uploadToSignedUrl.mockResolvedValue({ data: null, error: { message: "boom" } });
+      renderIt();
+      await userEvent.type(reply(), "안내드립니다");
+      await userEvent.upload(screen.getByTestId("reply-image-input"), [png("a.png")]);
+      await userEvent.click(screen.getByRole("button", { name: "발송" }));
+
+      expect(await screen.findByText("사진을 올리지 못했습니다. 다시 시도해주세요.")).toBeInTheDocument();
+      expect(global.fetch).not.toHaveBeenCalledWith("/api/inquiries/inq-1/reply", expect.anything());
+      expect(reply()).toHaveValue("안내드립니다");
+      expect(screen.getByRole("button", { name: "a.png 빼기" })).toBeInTheDocument();
+    });
+
+    it("hides the photo button in memo mode", async () => {
+      renderIt();
+      await userEvent.click(screen.getByRole("tab", { name: "메모" }));
+      expect(screen.queryByRole("button", { name: "사진" })).not.toBeInTheDocument();
+    });
+  });
+
   describe("reply mode", () => {
     it("starts in reply mode with the recipient, a send button, and nothing else to pick from", () => {
       renderIt();
@@ -69,7 +166,7 @@ describe("ReplyComposer", () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         "/api/inquiries/inq-1/reply",
-        expect.objectContaining({ method: "POST", body: JSON.stringify({ replyContent: "확인 후 조치하겠습니다" }) })
+        expect.objectContaining({ method: "POST", body: JSON.stringify({ replyContent: "확인 후 조치하겠습니다", attachments: [] }) })
       );
       expect(await screen.findByText("답변이 발송되었습니다.")).toBeInTheDocument();
       expect(reply()).toHaveValue("");
@@ -123,7 +220,7 @@ describe("ReplyComposer", () => {
       await waitFor(() =>
         expect(global.fetch).toHaveBeenCalledWith(
           "/api/inquiries/inq-1/reply",
-          expect.objectContaining({ body: JSON.stringify({ replyContent: "첫 줄\n둘째 줄" }) })
+          expect.objectContaining({ body: JSON.stringify({ replyContent: "첫 줄\n둘째 줄", attachments: [] }) })
         )
       );
     });

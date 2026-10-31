@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const list = vi.fn();
 const get = vi.fn();
-const gmailFactory = vi.fn(() => ({ users: { messages: { list, get } } }));
+const attachmentsGet = vi.fn();
+const gmailFactory = vi.fn(() => ({ users: { messages: { list, get, attachments: { get: attachmentsGet } } } }));
 
 vi.mock("googleapis", () => ({
   google: {
@@ -11,7 +12,7 @@ vi.mock("googleapis", () => ({
   },
 }));
 
-import { openMailbox } from "@/lib/gmail";
+import { extractImageAttachments, openMailbox } from "@/lib/gmail";
 
 function encode(text: string) {
   return Buffer.from(text, "utf-8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_");
@@ -149,6 +150,7 @@ describe("openMailbox", () => {
         fromEmail: "user@example.com",
         body: "회신 본문",
         sentAt: "2025-09-06T23:06:40.000Z",
+        attachments: [],
       });
     });
 
@@ -157,5 +159,46 @@ describe("openMailbox", () => {
 
       expect(await openMailbox("game").getInboundMessage("m1")).toBeNull();
     });
+  });
+});
+
+describe("reply photos", () => {
+  it("picks image parts with an attachment id, attached or inline, and drops other files and oversized ones", () => {
+    const payload = {
+      mimeType: "multipart/mixed",
+      parts: [
+        {
+          mimeType: "multipart/related",
+          parts: [
+            { mimeType: "text/html", body: { data: encode("<p>본문</p>") } },
+            { mimeType: "image/png", filename: "image.png", body: { attachmentId: "inline-1", size: 1200 } },
+          ],
+        },
+        { mimeType: "image/jpeg", filename: "화면.jpg", body: { attachmentId: "att-1", size: 5000 } },
+        { mimeType: "application/pdf", filename: "log.pdf", body: { attachmentId: "att-2", size: 100 } },
+        { mimeType: "image/png", filename: "huge.png", body: { attachmentId: "att-3", size: 6 * 1024 * 1024 } },
+        { mimeType: "image/heic", filename: "iphone.heic", body: { attachmentId: "att-4", size: 100 } },
+      ],
+    };
+    expect(extractImageAttachments(payload)).toEqual([
+      { attachmentId: "att-1", filename: "화면.jpg", mimeType: "image/jpeg", size: 5000 },
+      { attachmentId: "inline-1", filename: "image.png", mimeType: "image/png", size: 1200 },
+    ]);
+  });
+
+  it("downloads an attachment's bytes through the reader", async () => {
+    process.env.GMAIL_CLIENT_ID = "cid";
+    process.env.GMAIL_CLIENT_SECRET = "secret";
+    process.env.GMAIL_REFRESH_TOKEN = "token";
+    process.env.GMAIL_SENDER = "help@theplayplus.com";
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff]);
+    attachmentsGet.mockResolvedValue({
+      data: { data: bytes.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") },
+    });
+
+    const data = await openMailbox("game").getAttachment("m1", "att-1");
+
+    expect(attachmentsGet).toHaveBeenCalledWith({ userId: "me", messageId: "m1", id: "att-1" });
+    expect(data.equals(bytes)).toBe(true);
   });
 });

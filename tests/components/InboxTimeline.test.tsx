@@ -18,14 +18,14 @@ const entries: TimelineEntry[] = [
       { key: "결제번호", label: "결제번호", value: "imp_20260902_77" },
     ],
     attachments: [
-      { id: "a1", fileName: "명세서.png", signedUrl: "https://signed.example/a1" },
-      { id: "a2", fileName: "깨짐.png", signedUrl: null },
+      { id: "a1", fileName: "명세서.png", signedUrl: "https://signed.example/a1", messageId: null },
+      { id: "a2", fileName: "깨짐.png", signedUrl: null, messageId: null },
     ],
     translations: {},
   },
   { kind: "note", id: "n-1", at: "2026-09-03T01:40:00.000Z", author: "hong@theplayplus.com", body: "중복 승인 확인" },
-  { kind: "outbound", id: "m-1", inquiryId: "inq-1", at: "2026-09-03T02:05:00.000Z", author: "info@theplayplus.com", body: "환불 처리했습니다", auto: false, translations: {} },
-  { kind: "inbound", id: "m-2", inquiryId: "inq-1", at: "2026-09-03T04:48:00.000Z", author: "luna@example.com", body: "감사합니다", translations: {} },
+  { kind: "outbound", id: "m-1", inquiryId: "inq-1", at: "2026-09-03T02:05:00.000Z", author: "info@theplayplus.com", body: "환불 처리했습니다", auto: false, translations: {}, attachments: [] },
+  { kind: "inbound", id: "m-2", inquiryId: "inq-1", at: "2026-09-03T04:48:00.000Z", author: "luna@example.com", body: "감사합니다", translations: {}, attachments: [] },
 ];
 
 describe("InboxTimeline", () => {
@@ -72,10 +72,46 @@ describe("InboxTimeline", () => {
     expect(screen.queryByTestId("inquiry-details")).not.toBeInTheDocument();
   });
 
+  it("shows reply photos under the message and drops the empty bubble for a photo-only reply", () => {
+    render(
+      <InboxTimeline
+        entries={[
+          {
+            kind: "inbound",
+            id: "m-photo",
+            inquiryId: "inq-1",
+            at: "2026-09-03T04:48:00.000Z",
+            author: "luna@example.com",
+            body: "",
+            translations: {},
+            attachments: [{ id: "p1", fileName: "회신.png", signedUrl: "https://signed.example/p1", messageId: "m-photo" }],
+          },
+          {
+            kind: "outbound",
+            id: "m-out-photo",
+            inquiryId: "inq-1",
+            at: "2026-09-03T05:00:00.000Z",
+            author: "info@theplayplus.com",
+            body: "이 화면에서 받기를 누르세요",
+            auto: false,
+            translations: {},
+            attachments: [{ id: "p2", fileName: "안내.png", signedUrl: "https://signed.example/p2", messageId: "m-out-photo" }],
+          },
+        ]}
+        labels={labels}
+      />
+    );
+    expect(screen.getByAltText("회신.png")).toHaveAttribute("src", "https://signed.example/p1");
+    expect(screen.getByAltText("안내.png")).toHaveAttribute("src", "https://signed.example/p2");
+    expect(screen.getByText("이 화면에서 받기를 누르세요")).toBeInTheDocument();
+    const inbound = document.querySelector('[data-kind="inbound"]')!;
+    expect(inbound.querySelector(".rounded-\\[4px_16px_16px_16px\\]")).toBeNull();
+  });
+
   it("labels an automatic reply so staff do not mistake it for their own", () => {
     render(
       <InboxTimeline
-        entries={[{ kind: "outbound", id: "m-auto", inquiryId: "inq-1", at: "2026-09-03T01:13:00.000Z", author: null, body: "접수되었습니다", auto: true, translations: {} }]}
+        entries={[{ kind: "outbound", id: "m-auto", inquiryId: "inq-1", at: "2026-09-03T01:13:00.000Z", author: null, body: "접수되었습니다", auto: true, translations: {}, attachments: [] }]}
         labels={labels}
       />
     );

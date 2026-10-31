@@ -8,6 +8,7 @@ import { scopeForGameId } from "@/lib/inbox-scope";
 import { COMPANY, renderReplyEmailHtml, renderReplyEmailText } from "@/lib/email-template";
 import { EMAIL_LOGO_CID, EMAIL_LOGO_CONTENT_TYPE, EMAIL_LOGO_FILENAME, getEmailLogo } from "@/lib/email-logo";
 import type { AdminSession } from "@/lib/require-admin-session";
+import { loadReplyAttachments, recordMessageAttachments, type ReplyAttachmentRef } from "@/lib/message-attachments";
 
 /**
  * 답변 발송의 공용 경로. 관리자가 대화 열에서 보내는 수동 답변과 새 문의에
@@ -39,13 +40,22 @@ export interface ReplyableInquiry {
 }
 
 export type SendReplyInput =
-  | { inquiry: ReplyableInquiry; body: string; mode: "manual"; actor: AdminSession }
+  | {
+      inquiry: ReplyableInquiry;
+      body: string;
+      mode: "manual";
+      actor: AdminSession;
+      /** 작성란에서 버킷에 먼저 올린 사진. 메일에 첨부로 붙고 대화에도 보인다. */
+      attachments?: ReplyAttachmentRef[];
+    }
   | { inquiry: ReplyableInquiry; body: string; mode: "auto" };
 
 export interface SendReplyResult {
   sent: SentEmail;
   /** inquiry_messages 기록 성공 여부. 메일은 이미 나갔으므로 실패해도 되돌릴 수 없다. */
   recorded: boolean;
+  /** 사진 행 기록 성공 여부. 사진이 없으면 true. */
+  attachmentsRecorded: boolean;
 }
 
 /** 메일은 나갔는데 inquiries 갱신에 실패했을 때. 호출부가 발송 실패와 구분해 응답한다. */
@@ -69,6 +79,9 @@ async function fetchGameName(supabase: SupabaseClient, gameId: string): Promise<
 /** 발송 실패는 Gmail 오류를 그대로 던진다. 갱신 실패는 ReplySaveError. */
 export async function sendInquiryReply(supabase: SupabaseClient, input: SendReplyInput): Promise<SendReplyResult> {
   const { inquiry, body } = input;
+  const attachmentRefs = input.mode === "manual" ? (input.attachments ?? []) : [];
+  // 사진을 못 읽으면 사진 없이 나가지 않게 발송 전에 멈춘다(ReplyAttachmentError).
+  const attachments = await loadReplyAttachments(supabase, inquiry.id, attachmentRefs);
 
   // 제목은 모든 답변에 같다. 접수번호와 원래 제목은 본문에 들어가고, 후속 답변은
   // threadId와 References 헤더로 묶이므로 제목에 건별 정보를 넣지 않는다.
@@ -111,6 +124,7 @@ export async function sendInquiryReply(supabase: SupabaseClient, input: SendRepl
     inlineImages: [
       { cid: EMAIL_LOGO_CID, contentType: EMAIL_LOGO_CONTENT_TYPE, filename: EMAIL_LOGO_FILENAME, data: getEmailLogo() },
     ],
+    attachments,
     threadId: inquiry.gmail_thread_id ?? null,
     references,
   });
@@ -143,7 +157,7 @@ export async function sendInquiryReply(supabase: SupabaseClient, input: SendRepl
 
   // 메일은 이미 나갔으므로 기록 실패로 발송을 되돌릴 수는 없다. 대신 결과로
   // 알려 호출부가 스레드에 빠진 답변이 있음을 관리자에게 보이게 한다.
-  const recorded = await createOutboundMessage(supabase, {
+  const messageId = await createOutboundMessage(supabase, {
     inquiryId: inquiry.id,
     author: actor,
     body,
@@ -151,7 +165,17 @@ export async function sendInquiryReply(supabase: SupabaseClient, input: SendRepl
     rfcMessageId: sent.rfcMessageId,
     sentAt,
     autoSent: input.mode === "auto",
-  }).catch(() => false);
+  }).catch(() => null);
+  const recorded = messageId !== null;
+
+  // 메시지가 기록돼야 사진을 그 말풍선에 묶을 수 있다.
+  const attachmentsRecorded =
+    attachmentRefs.length === 0
+      ? true
+      : messageId !== null &&
+        (await recordMessageAttachments(supabase, { inquiryId: inquiry.id, messageId, files: attachmentRefs }).catch(
+          () => false
+        ));
 
   // 이력 적재는 부가 작업이다. 실패해도 이미 나간 메일을 되돌릴 수 없다.
   await recordEvent(supabase, {
@@ -166,5 +190,5 @@ export async function sendInquiryReply(supabase: SupabaseClient, input: SendRepl
     await ensureInquiryEmbedding(supabase, { id: inquiry.id, title: inquiry.title, content: inquiry.content }).catch(() => null);
   }
 
-  return { sent, recorded };
+  return { sent, recorded, attachmentsRecorded };
 }

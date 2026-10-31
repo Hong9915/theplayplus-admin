@@ -34,9 +34,11 @@ function mockSelect(data: unknown, error: { message: string } | null = null) {
   const order = vi.fn().mockResolvedValue({ data, error });
   const eq = vi.fn(() => ({ order }));
   const select = vi.fn(() => ({ eq }));
-  const insert = vi.fn().mockResolvedValue({ error: null });
+  // insert(...).select("id").single() — 새 행 id를 돌려받는다.
+  const inserted = vi.fn().mockResolvedValue({ data: { id: "msg-new" }, error: null });
+  const insert = vi.fn(() => ({ select: () => ({ single: inserted }) }));
   const from = vi.fn(() => ({ select, insert }));
-  return { from, select, eq, order, insert };
+  return { from, select, eq, order, insert, inserted };
 }
 
 describe("listMessages", () => {
@@ -92,7 +94,7 @@ describe("createOutboundMessage", () => {
       sentAt: "2026-09-01T00:00:00.000Z",
     });
 
-    expect(ok).toBe(true);
+    expect(ok).toBe("msg-new");
     expect(insert).toHaveBeenCalledWith({
       inquiry_id: "inq-1",
       direction: "outbound",
@@ -117,13 +119,13 @@ describe("createOutboundMessage", () => {
       sentAt: "2026-09-01T00:00:00.000Z",
     });
 
-    expect(ok).toBe(true);
+    expect(ok).toBe("msg-new");
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ author_email: null, auto_sent: true }));
   });
 
-  it("returns false when the insert fails", async () => {
-    const { from, insert } = mockSelect([]);
-    insert.mockResolvedValue({ error: { message: "boom" } });
+  it("returns null when the insert fails", async () => {
+    const { from, inserted } = mockSelect([]);
+    inserted.mockResolvedValue({ data: null, error: { message: "boom" } });
     await expect(
       createOutboundMessage({ from } as never, {
         inquiryId: "inq-1",
@@ -132,14 +134,14 @@ describe("createOutboundMessage", () => {
         gmailMessageId: null,
         rfcMessageId: null,
       })
-    ).resolves.toBe(false);
+    ).resolves.toBeNull();
   });
 });
 
 describe("createInboundMessage", () => {
   it("inserts an inbound row keyed by the Gmail message id", async () => {
     const { from, insert } = mockSelect([]);
-    await createInboundMessage({ from } as never, {
+    const id = await createInboundMessage({ from } as never, {
       inquiryId: "inq-1",
       fromEmail: "user@example.com",
       body: "회신",
@@ -147,6 +149,7 @@ describe("createInboundMessage", () => {
       rfcMessageId: null,
       sentAt: "2026-09-01T01:00:00.000Z",
     });
+    expect(id).toBe("msg-new");
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({ direction: "inbound", author_email: "user@example.com", gmail_message_id: "gm-2" })
     );

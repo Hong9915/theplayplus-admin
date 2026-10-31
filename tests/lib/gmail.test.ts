@@ -275,6 +275,7 @@ describe("fetchInboundReplies", () => {
         fromEmail: "user@example.com",
         body: "해결됐습니다 감사합니다",
         sentAt: new Date(1756774980000).toISOString(),
+        attachments: [],
       },
     ]);
   });
@@ -427,6 +428,34 @@ describe("sendReplyEmail with an HTML body", () => {
     expect(decoded).toContain("Content-Disposition: inline; filename=\"logo.png\"");
     expect(decoded).toContain(png.toString("base64"));
     expect(decoded.indexOf("multipart/alternative")).toBeLessThan(decoded.indexOf("multipart/related"));
+  });
+
+  it("wraps everything in multipart/mixed and sends via the upload path when photos are attached", async () => {
+    const { sendReplyEmail } = await import("@/lib/gmail");
+    const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    await sendReplyEmail({
+      mailbox: "game",
+      to: "user@example.com",
+      subject: "s",
+      body: "평문",
+      html: "<p>HTML</p>",
+      attachments: [
+        { contentType: "image/jpeg", filename: "보상 화면.jpg", data: jpg },
+        { contentType: "image/png", filename: "a.png", data: Buffer.from([1, 2]) },
+      ],
+      threadId: "thread-1",
+    });
+
+    const call = sendMock.mock.calls[0][0];
+    expect(call.requestBody).toEqual({ threadId: "thread-1" });
+    expect(call.media.mimeType).toBe("message/rfc822");
+    const message: string = call.media.body;
+    expect(message).toMatch(/^Content-Type: multipart\/mixed; boundary="[^"]+"/m);
+    expect(message.indexOf("multipart/mixed")).toBeLessThan(message.indexOf("multipart/alternative"));
+    expect(message).toContain(`Content-Type: image/jpeg; name="=?UTF-8?B?${Buffer.from("보상 화면.jpg").toString("base64")}?="`);
+    expect(message).toContain(`Content-Disposition: attachment; filename*=UTF-8''${encodeURIComponent("보상 화면.jpg")}`);
+    expect(message).toContain('Content-Disposition: attachment; filename="a.png"');
+    expect(message).toContain(jpg.toString("base64"));
   });
 
   it("still sends plain text only when no HTML is given", async () => {

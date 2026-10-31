@@ -134,13 +134,14 @@ export async function listRfcMessageIds(supabase: SupabaseClient, inquiryId: str
 
 /**
  * 메모와 마찬가지로 실패를 삼키지 않는다. 메일은 이미 나갔으므로 호출부가
- * 되돌릴 수는 없지만, 기록이 빠졌다는 사실은 알려야 한다.
+ * 되돌릴 수는 없지만, 기록이 빠졌다는 사실은 알려야 한다. 성공하면 새 행의 id
+ * (답변 사진을 이 메시지에 묶는다), 실패하면 null.
  */
 export async function createOutboundMessage(
   supabase: SupabaseClient,
   input: CreateOutboundMessageInput
-): Promise<boolean> {
-  const { error } = await supabase.from("inquiry_messages").insert({
+): Promise<string | null> {
+  const { data, error } = await supabase.from("inquiry_messages").insert({
     inquiry_id: input.inquiryId,
     direction: "outbound",
     author_email: input.author?.email ?? null,
@@ -149,20 +150,20 @@ export async function createOutboundMessage(
     rfc_message_id: input.rfcMessageId,
     ...(input.sentAt ? { sent_at: input.sentAt } : {}),
     auto_sent: input.autoSent === true,
-  });
-  return !error;
+  }).select("id").single();
+  return error || !data ? null : (data as { id: string }).id;
 }
 
 /**
  * 회신 동기화용. gmail_message_id에 부분 유니크 인덱스가 있어 같은 메일을
  * 두 번 넣으면 실패하는데, 그건 "이미 있음"이지 오류가 아니다. 새로 들어간
- * 경우에만 true.
+ * 경우에만 새 행의 id, 아니면 null.
  */
 export async function createInboundMessage(
   supabase: SupabaseClient,
   input: CreateInboundMessageInput
-): Promise<boolean> {
-  const { error } = await supabase.from("inquiry_messages").insert({
+): Promise<string | null> {
+  const { data, error } = await supabase.from("inquiry_messages").insert({
     inquiry_id: input.inquiryId,
     direction: "inbound",
     author_email: input.fromEmail,
@@ -170,6 +171,6 @@ export async function createInboundMessage(
     gmail_message_id: input.gmailMessageId,
     rfc_message_id: input.rfcMessageId,
     sent_at: input.sentAt,
-  });
-  return !error;
+  }).select("id").single();
+  return error || !data ? null : (data as { id: string }).id;
 }

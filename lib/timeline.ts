@@ -56,8 +56,29 @@ export type TimelineEntry =
       /** 우클릭 번역 결과. 언어별로 있으면 말풍선 아래 이어서 그린다. */
       translations: Translations;
     }
-  | { kind: "outbound"; id: string; inquiryId: string; at: string; author: string | null; body: string; auto: boolean; translations: Translations }
-  | { kind: "inbound"; id: string; inquiryId: string; at: string; author: string | null; body: string; translations: Translations }
+  | {
+      kind: "outbound";
+      id: string;
+      inquiryId: string;
+      at: string;
+      author: string | null;
+      body: string;
+      auto: boolean;
+      translations: Translations;
+      /** 답변에 붙여 보낸 사진. */
+      attachments: AttachmentWithUrl[];
+    }
+  | {
+      kind: "inbound";
+      id: string;
+      inquiryId: string;
+      at: string;
+      author: string | null;
+      body: string;
+      translations: Translations;
+      /** 사용자가 회신에 붙인 사진. */
+      attachments: AttachmentWithUrl[];
+    }
   | { kind: "note"; id: string; at: string; author: string; body: string };
 
 /**
@@ -78,7 +99,8 @@ export function buildTimeline(
     author: inquiry.gameAccount,
     body: inquiry.content,
     details: inquiryDetailRows(inquiry),
-    attachments,
+    // 답변·회신 사진은 그 말풍선에 붙는다. 본문 말풍선에는 접수 폼 첨부만.
+    attachments: attachments.filter((attachment) => !attachment.messageId),
     translations: inquiry.translations,
   };
 
@@ -91,6 +113,7 @@ export function buildTimeline(
         author: message.authorEmail,
         body: message.body,
         translations: message.translations,
+        attachments: attachments.filter((attachment) => attachment.messageId === message.id),
       };
       return message.direction === "outbound"
         ? { kind: "outbound", ...base, auto: message.autoSent }

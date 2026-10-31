@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { handleTabListKeyDown, tabProps } from "@/components/ui/tabs";
 import StatusMessage from "@/components/ui/StatusMessage";
 import { useSuggestion } from "@/components/inquiries/useSuggestion";
 import { evidenceKind, type EvidenceKind } from "@/lib/suggest-evidence";
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import {
+  ALLOWED_IMAGE_TYPES,
+  ATTACHMENT_BUCKET,
+  isAllowedImageType,
+  MAX_IMAGE_BYTES,
+  MAX_REPLY_IMAGES,
+  MAX_REPLY_TOTAL_BYTES,
+} from "@/lib/attachment-rules";
 
 type Mode = "reply" | "note";
 const MODES: readonly Mode[] = ["reply", "note"];
@@ -13,6 +22,58 @@ const TAB_PREFIX = "composer";
 const AUTOSAVE_DELAY_MS = 2000;
 /** 입력창이 늘어나는 상한. 그 위로는 안에서 스크롤한다. */
 const MAX_BOX_HEIGHT_PX = 288;
+
+/** 답변에 붙일 사진. 발송 때 버킷에 올리고, 올린 경로는 기억해 다시 보낼 때 또 올리지 않는다. */
+interface PendingImage {
+  key: string;
+  file: File;
+  previewUrl: string;
+  uploaded: { path: string; fileName: string } | null;
+}
+
+let imageKeySeq = 0;
+
+function createPreviewUrl(file: File): string {
+  try {
+    return URL.createObjectURL(file);
+  } catch {
+    return "";
+  }
+}
+
+function revokePreviewUrl(url: string) {
+  if (!url) return;
+  try {
+    URL.revokeObjectURL(url);
+  } catch {
+    // 미리보기 주소 정리는 실패해도 된다.
+  }
+}
+
+/** 버킷에 올리는 경로를 받아 사진을 올린다. 이미 올린 사진은 건너뛴다. */
+async function uploadPendingImages(inquiryId: string, images: PendingImage[]): Promise<PendingImage[]> {
+  const todo = images.filter((image) => !image.uploaded);
+  if (todo.length === 0) return images;
+
+  const response = await fetch(`/api/inquiries/${inquiryId}/reply/uploads`, {
+    method: "POST",
+    body: JSON.stringify({ files: todo.map((image) => ({ name: image.file.name, type: image.file.type, size: image.file.size })) }),
+  });
+  const json = (await response.json()) as { success: boolean; uploads?: Array<{ path: string; token: string; fileName: string }> };
+  if (!json.success || !json.uploads || json.uploads.length !== todo.length) throw new Error("sign_failed");
+
+  const storage = getSupabaseBrowserClient().storage.from(ATTACHMENT_BUCKET);
+  const done = new Map<string, { path: string; fileName: string }>();
+  await Promise.all(
+    todo.map(async (image, index) => {
+      const target = json.uploads![index];
+      const { error } = await storage.uploadToSignedUrl(target.path, target.token, image.file, { contentType: image.file.type });
+      if (error) throw error;
+      done.set(image.key, { path: target.path, fileName: target.fileName });
+    })
+  );
+  return images.map((image) => (done.has(image.key) ? { ...image, uploaded: done.get(image.key)! } : image));
+}
 
 /**
  * 대화 열 바닥의 입력 상자. 상자 하나가 상태를 말한다: 답변이면 흰 종이, 내부 메모면
@@ -41,6 +102,11 @@ export default function ReplyComposer({
   // AI 제안이 덮어쓰기 전의 글. null이면 되돌릴 것이 없다.
   const [previous, setPrevious] = useState<string | null>(null);
   const [draftWasEmpty, setDraftWasEmpty] = useState(true);
+  const [images, setImages] = useState<PendingImage[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imagesRef = useRef<PendingImage[]>([]);
+  imagesRef.current = images;
   const lastSavedRef = useRef(initialDraft ?? "");
   const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -98,6 +164,84 @@ export default function ReplyComposer({
     return () => clearTimeout(timer);
   }, [replyText, inquiryId, submitting, writing, autosaveDelayMs]);
 
+  // 화면을 떠나면 미리보기 주소를 놓아준다.
+  useEffect(() => () => imagesRef.current.forEach((image) => revokePreviewUrl(image.previewUrl)), []);
+
+  /** 고른·붙여넣은·끌어다 놓은 파일을 규칙에 맞는 것만 더한다. 걸러낸 이유는 한 줄로 알린다. */
+  function addFiles(files: File[]) {
+    if (files.length === 0) return;
+    const accepted: PendingImage[] = [];
+    let reason: string | null = null;
+    let count = images.length;
+    let total = images.reduce((sum, image) => sum + image.file.size, 0);
+    for (const file of files) {
+      if (!isAllowedImageType(file.type)) {
+        reason = "PNG·JPG·GIF·WEBP 사진만 붙일 수 있습니다.";
+        continue;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        reason = "사진 한 장은 5MB까지 붙일 수 있습니다.";
+        continue;
+      }
+      if (count >= MAX_REPLY_IMAGES) {
+        reason = `사진은 한 번에 ${MAX_REPLY_IMAGES}장까지 붙일 수 있습니다.`;
+        continue;
+      }
+      if (total + file.size > MAX_REPLY_TOTAL_BYTES) {
+        reason = "사진은 합쳐서 15MB까지 붙일 수 있습니다.";
+        continue;
+      }
+      count += 1;
+      total += file.size;
+      accepted.push({ key: `img-${++imageKeySeq}`, file, previewUrl: createPreviewUrl(file), uploaded: null });
+    }
+    if (accepted.length > 0) setImages((current) => [...current, ...accepted]);
+    if (reason) {
+      setMessageTone("error");
+      setMessage(reason);
+    } else {
+      setMessage(null);
+    }
+  }
+
+  function removeImage(key: string) {
+    setImages((current) => {
+      const target = current.find((image) => image.key === key);
+      if (target) revokePreviewUrl(target.previewUrl);
+      return current.filter((image) => image.key !== key);
+    });
+  }
+
+  function clearImages() {
+    images.forEach((image) => revokePreviewUrl(image.previewUrl));
+    setImages([]);
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    if (!isReply || writing) return;
+    const files = Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith("image/"));
+    if (files.length === 0) return;
+    // 사진을 붙여넣으면 글자 대신 첨부로 받는다.
+    event.preventDefault();
+    addFiles(files);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLFormElement>) {
+    if (!isReply || writing) return;
+    if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) return;
+    event.preventDefault();
+    setDragging(true);
+  }
+
+  function handleDrop(event: DragEvent<HTMLFormElement>) {
+    setDragging(false);
+    if (!isReply || writing) return;
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
+    event.preventDefault();
+    addFiles(files);
+  }
+
   function handleChange(next: string) {
     if (isReply) {
       setReplyText(next);
@@ -143,15 +287,31 @@ export default function ReplyComposer({
   }
 
   async function sendReply() {
-    if (replyText.trim() === "") return;
+    if (replyText.trim() === "" && images.length === 0) return;
     setSubmitting(true);
     setMessage(null);
 
-    let json: { success: boolean; warning?: string };
+    let ready = images;
+    if (images.length > 0) {
+      try {
+        ready = await uploadPendingImages(inquiryId, images);
+        setImages(ready);
+      } catch {
+        setSubmitting(false);
+        setMessageTone("error");
+        setMessage("사진을 올리지 못했습니다. 다시 시도해주세요.");
+        return;
+      }
+    }
+
+    let json: { success: boolean; warning?: string; error?: string };
     try {
       const response = await fetch(`/api/inquiries/${inquiryId}/reply`, {
         method: "POST",
-        body: JSON.stringify({ replyContent: replyText }),
+        body: JSON.stringify({
+          replyContent: replyText,
+          attachments: ready.map((image) => image.uploaded!),
+        }),
       });
       json = await response.json();
     } catch {
@@ -161,10 +321,17 @@ export default function ReplyComposer({
 
     if (!json.success) {
       setMessageTone("error");
-      setMessage("발송 실패, 다시 시도해주세요.");
+      if (json.error === "attachment_failed") {
+        // 올린 파일을 서버가 못 읽었다. 다음 시도에서 새로 올리게 기억을 지운다.
+        setImages((current) => current.map((image) => ({ ...image, uploaded: null })));
+        setMessage("사진을 붙이지 못해 발송하지 않았습니다. 다시 시도해주세요.");
+      } else {
+        setMessage("발송 실패, 다시 시도해주세요.");
+      }
       return;
     }
 
+    clearImages();
     setReplyText("");
     setPrevious(null);
     suggestion.reset();
@@ -176,6 +343,11 @@ export default function ReplyComposer({
     if (json.warning === "message_save_failed") {
       setMessageTone("warning");
       setMessage("답변은 발송되었지만 대화 기록 저장에는 실패했습니다. 아래 대화 목록에 표시되지 않을 수 있습니다.");
+      return;
+    }
+    if (json.warning === "attachment_save_failed") {
+      setMessageTone("warning");
+      setMessage("답변과 사진은 발송되었지만 사진 기록 저장에는 실패했습니다. 대화에 사진이 보이지 않을 수 있습니다.");
       return;
     }
     setMessageTone("success");
@@ -227,6 +399,8 @@ export default function ReplyComposer({
   // 메모 모드는 입력창 전체가 호박색이 되어 고객에게 보낼 글과 헷갈리지 않는다. 보라는 AI가 쓰는 중에만.
   const box = writing
     ? "border-dashed border-ai bg-panel"
+    : dragging && isReply
+      ? "border-dashed border-accent bg-accent-wash"
     : isReply
       ? "border-line bg-panel focus-within:border-ink-2/50"
       : "border-memo-line bg-memo focus-within:border-memo-ink/40";
@@ -245,6 +419,9 @@ export default function ReplyComposer({
       <form
         ref={formRef}
         onSubmit={handleSubmit}
+        onDragOver={handleDragOver}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
         data-testid="composer"
         data-mode={mode}
         data-writing={writing || undefined}
@@ -256,6 +433,7 @@ export default function ReplyComposer({
           value={value}
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           readOnly={writing}
           rows={3}
           aria-label={isReply ? "답변 내용" : "내부 메모"}
@@ -263,6 +441,36 @@ export default function ReplyComposer({
           placeholder={isReply ? "답변을 입력하세요. ⌘ Enter로 발송합니다." : "처리 과정, 확인한 내용을 적습니다. 사용자에게 보이지 않습니다."}
           className="w-full bg-transparent px-3.5 pt-3 pb-1 text-[14.5px] leading-[1.65] resize-none focus:outline-none placeholder:text-muted/80"
         />
+        {isReply && images.length > 0 && (
+          <ul aria-label="붙인 사진" className="flex flex-wrap gap-2 px-3.5 pt-1 pb-2">
+            {images.map((image) => (
+              <li key={image.key} className="relative">
+                {image.previewUrl ? (
+                  <img
+                    src={image.previewUrl}
+                    alt={image.file.name}
+                    width={64}
+                    height={64}
+                    className="w-16 h-16 rounded-lg object-cover ring-1 ring-line bg-well"
+                  />
+                ) : (
+                  <span className="w-16 h-16 rounded-lg ring-1 ring-line bg-well flex items-center justify-center text-[11px] text-muted px-1 text-center break-all">
+                    {image.file.name}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeImage(image.key)}
+                  disabled={submitting}
+                  aria-label={`${image.file.name} 빼기`}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-ink text-white text-[12px] leading-none flex items-center justify-center hover:bg-ink-2 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="flex items-center gap-1.5 px-2 pb-2 min-w-0">
           <div
             role="tablist"
@@ -278,6 +486,37 @@ export default function ReplyComposer({
             </button>
           </div>
 
+          {isReply && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ALLOWED_IMAGE_TYPES.join(",")}
+                multiple
+                hidden
+                data-testid="reply-image-input"
+                onChange={(event) => {
+                  addFiles(Array.from(event.target.files ?? []));
+                  // 같은 파일을 다시 고를 수 있게 비운다.
+                  event.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={submitting || writing}
+                title="사진 붙이기 (붙여넣기·끌어다 놓기도 됩니다)"
+                className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg text-[13.5px] font-semibold text-muted hover:text-ink hover:bg-well disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 shrink-0"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2.5" />
+                  <circle cx="9" cy="10" r="1.75" />
+                  <path d="m21 16-5-5-9 9" />
+                </svg>
+                사진
+              </button>
+            </>
+          )}
           {isReply && <span className="w-px h-4 bg-line mx-1 shrink-0" aria-hidden="true" />}
           {isReply && !writing && (
             <button

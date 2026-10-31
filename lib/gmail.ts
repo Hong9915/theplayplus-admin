@@ -1,10 +1,18 @@
 import { randomUUID } from "node:crypto";
 import type { InboxScope } from "@/lib/inbox-scope";
 import { google, type gmail_v1 } from "googleapis";
+import { isAllowedImageType, MAX_IMAGE_BYTES, type AllowedImageType } from "@/lib/attachment-rules";
 
 export interface InlineImage {
   /** HTML에서 `cid:<cid>`로 참조한다. */
   cid: string;
+  contentType: string;
+  filename: string;
+  data: Buffer;
+}
+
+/** 메일 아래쪽에 붙는 일반 첨부(답변에 붙인 사진). */
+export interface MailAttachment {
   contentType: string;
   filename: string;
   data: Buffer;
@@ -20,6 +28,8 @@ export interface SendReplyEmailInput {
   html?: string;
   /** HTML이 참조하는 인라인 이미지(로고 등). html이 있을 때만 쓰인다. */
   inlineImages?: InlineImage[];
+  /** 메일 첨부. 있으면 본문 전체를 multipart/mixed로 감싼다. */
+  attachments?: MailAttachment[];
   /** 이전에 오간 메일이 있으면 같은 Gmail 스레드에 묶는다. */
   threadId?: string | null;
   /** 지금까지 오간 메일의 RFC 2822 Message-ID. 오래된 순. */
@@ -32,12 +42,22 @@ export interface SentEmail {
   rfcMessageId: string;
 }
 
+/** 회신에 붙은 사진. 내용은 아직 안 받았고 attachmentId로 따로 내려받는다. */
+export interface InboundAttachmentRef {
+  attachmentId: string;
+  filename: string;
+  mimeType: AllowedImageType;
+  size: number;
+}
+
 export interface InboundEmail {
   gmailMessageId: string;
   rfcMessageId: string | null;
   fromEmail: string | null;
   body: string;
   sentAt: string;
+  /** 버킷이 받는 이미지만. 다른 종류의 첨부는 버린다. */
+  attachments: InboundAttachmentRef[];
 }
 
 /** 메일함 전체에서 찾은 회신. 어느 문의인지 스레드 id로 맞춘다. */
@@ -180,16 +200,66 @@ export function buildBodyParts(input: { body: string; html?: string; inlineImage
   ];
 }
 
-export function encodeRfc2822Message(input: {
+/** 비ASCII 파일 이름을 헤더에 싣는다. 옛 메일 앱은 name의 encoded-word를, 요즘 것은 RFC 2231을 읽는다. */
+function attachmentNameParams(filename: string): { name: string; filename: string } {
+  const quoted = filename.replace(/["\\\r\n]/g, "_");
+  if (/^[\x20-\x7e]*$/.test(quoted)) {
+    return { name: `name="${quoted}"`, filename: `filename="${quoted}"` };
+  }
+  const encodedWord = `=?UTF-8?B?${Buffer.from(quoted, "utf-8").toString("base64")}?=`;
+  return { name: `name="${encodedWord}"`, filename: `filename*=UTF-8''${encodeURIComponent(quoted)}` };
+}
+
+/** 본문 파트에 일반 첨부를 붙인다. 첨부가 없으면 본문 파트를 그대로 돌려준다. */
+export function buildMessageParts(input: {
+  body: string;
+  html?: string;
+  inlineImages?: InlineImage[];
+  attachments?: MailAttachment[];
+}): string[] {
+  const bodyParts = buildBodyParts(input);
+  const attachments = input.attachments ?? [];
+  if (attachments.length === 0) return bodyParts;
+
+  const mixed = buildBoundary("mixed");
+  const attachmentParts = attachments.map((attachment) => {
+    const params = attachmentNameParams(attachment.filename);
+    return [
+      `Content-Type: ${attachment.contentType}; ${params.name}`,
+      "Content-Transfer-Encoding: base64",
+      `Content-Disposition: attachment; ${params.filename}`,
+      "",
+      base64Lines(attachment.data),
+    ].join("\r\n");
+  });
+  return [
+    `Content-Type: multipart/mixed; boundary="${mixed}"`,
+    "",
+    `--${mixed}`,
+    bodyParts.join("\r\n"),
+    ...attachmentParts.flatMap((part) => [`--${mixed}`, part]),
+    `--${mixed}--`,
+  ];
+}
+
+interface Rfc2822Input {
   sender: string;
   to: string;
   subject: string;
   body: string;
   html?: string;
   inlineImages?: InlineImage[];
+  attachments?: MailAttachment[];
   messageId: string;
   references?: string[];
-}): string {
+}
+
+export function encodeRfc2822Message(input: Rfc2822Input): string {
+  return toBase64Url(buildRfc2822Message(input));
+}
+
+/** 인코딩 전의 RFC 2822 메일 원문. 첨부가 있으면 업로드 경로로 이 원문을 그대로 보낸다. */
+export function buildRfc2822Message(input: Rfc2822Input): string {
   const encodedSubject = `=?UTF-8?B?${Buffer.from(input.subject, "utf-8").toString("base64")}?=`;
   const headers = [
     `From: ${input.sender}`,
@@ -210,29 +280,39 @@ export function encodeRfc2822Message(input: {
 
   // 파트의 첫 줄은 Content-Type 헤더라 그대로 헤더 블록에 이어 붙고,
   // 빈 줄이 헤더와 본문을 가른다.
-  const [firstLine, ...rest] = buildBodyParts(input);
-  return toBase64Url([...headers, firstLine, ...(rest.length > 0 ? rest : [""])].join("\r\n"));
+  const [firstLine, ...rest] = buildMessageParts(input);
+  return [...headers, firstLine, ...(rest.length > 0 ? rest : [""])].join("\r\n");
 }
 
 export async function sendReplyEmail(input: SendReplyEmailInput): Promise<SentEmail> {
   const { gmail, sender } = getGmailClient(input.mailbox);
   const rfcMessageId = buildRfcMessageId(sender);
-  const raw = encodeRfc2822Message({
+  const message = buildRfc2822Message({
     sender,
     to: input.to,
     subject: input.subject,
     body: input.body,
     html: input.html,
     inlineImages: input.inlineImages,
+    attachments: input.attachments,
     messageId: rfcMessageId,
     references: input.references,
   });
+  const hasAttachments = (input.attachments ?? []).length > 0;
+  const raw = hasAttachments ? null : toBase64Url(message);
 
+  // 사진이 붙으면 메일이 커서 JSON 본문 대신 업로드 경로(message/rfc822, 35MB까지)로 보낸다.
   const send = (threadId: string | null | undefined) =>
-    gmail.users.messages.send({
-      userId: "me",
-      requestBody: { raw, ...(threadId ? { threadId } : {}) },
-    });
+    raw !== null
+      ? gmail.users.messages.send({
+          userId: "me",
+          requestBody: { raw, ...(threadId ? { threadId } : {}) },
+        })
+      : gmail.users.messages.send({
+          userId: "me",
+          requestBody: threadId ? { threadId } : {},
+          media: { mimeType: "message/rfc822", body: message },
+        });
 
   let response;
   try {
@@ -429,7 +509,41 @@ function parseInboundMessage(message: gmail_v1.Schema$Message, senderAddress: st
     fromEmail,
     body,
     sentAt,
+    attachments: extractImageAttachments(message.payload),
   };
+}
+
+/**
+ * 메일에 붙은 사진을 찾는다. 첨부로 붙였든 본문에 끼워 넣었든(inline) attachmentId가
+ * 있는 이미지 파트를 모두 고른다. 버킷이 받지 않는 종류와 5MB를 넘는 것은 뺀다.
+ */
+export function extractImageAttachments(payload: gmail_v1.Schema$MessagePart | undefined): InboundAttachmentRef[] {
+  if (!payload) return [];
+  const found: InboundAttachmentRef[] = [];
+  const stack: gmail_v1.Schema$MessagePart[] = [payload];
+  while (stack.length > 0) {
+    const part = stack.shift()!;
+    if (part.parts) stack.push(...part.parts);
+    const attachmentId = part.body?.attachmentId;
+    const mimeType = part.mimeType?.toLowerCase() ?? "";
+    if (!attachmentId || !isAllowedImageType(mimeType)) continue;
+    const size = part.body?.size ?? 0;
+    if (size > MAX_IMAGE_BYTES) continue;
+    found.push({ attachmentId, filename: part.filename ?? "", mimeType, size });
+  }
+  return found;
+}
+
+async function fetchAttachmentData(gmail: gmail_v1.Gmail, messageId: string, attachmentId: string): Promise<Buffer> {
+  const response = await gmail.users.messages.attachments.get({ userId: "me", messageId, id: attachmentId });
+  const data = response.data.data;
+  if (!data) throw new Error("empty attachment");
+  return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+}
+
+/** 회신 사진 하나를 내려받는다. "회신 확인" 버튼 경로가 쓴다. gmail.readonly 스코프가 필요하다. */
+export async function downloadInboundAttachment(mailbox: Mailbox, messageId: string, attachmentId: string): Promise<Buffer> {
+  return fetchAttachmentData(getGmailClient(mailbox).gmail, messageId, attachmentId);
 }
 
 /** 한 번의 동기화에서 훑는 메일 상한. 넘치면 다음 실행이 이어서 본다. */
@@ -463,6 +577,8 @@ export interface MailboxReader {
   getReplyHeaders(id: string): Promise<string[]>;
   /** 메일 하나를 본문까지 읽는다. 우리 발신 주소에서 나간 메일이면 null. */
   getInboundMessage(id: string): Promise<InboundEmailWithThread | null>;
+  /** 회신에 붙은 사진 하나의 내용. */
+  getAttachment(messageId: string, attachmentId: string): Promise<Buffer>;
 }
 
 /** In-Reply-To·References 헤더에서 `<…>` 꼴 Message-ID를 순서대로, 중복 없이 뽑는다. */
@@ -515,6 +631,9 @@ export function openMailbox(mailbox: Mailbox): MailboxReader {
       const parsed = parseInboundMessage(response.data, senderAddress);
       if (!parsed || !response.data.threadId) return null;
       return { ...parsed, threadId: response.data.threadId };
+    },
+    getAttachment(messageId, attachmentId) {
+      return fetchAttachmentData(gmail, messageId, attachmentId);
     },
   };
 }

@@ -162,16 +162,16 @@ describe("loadInboxPage", () => {
       { id: "inq-0", inquiryNo: null, title: "예전", content: "…", status: "resolved", groupKey: "game_usage", typeKey: "bug_report", occurredAt: null, paymentNo: null, store: null, deviceInfo: null, serverName: null, characterId: null, characterName: null, translations: {}, createdAt: "2026-08-01T00:00:00.000Z" },
     ]);
     vi.mocked(inquiriesModule.listAttachmentSignedUrlsByInquiryIds).mockResolvedValue({
-      "inq-1": [{ id: "att-1", fileName: "now.png", signedUrl: "https://signed.example/now" }],
-      "inq-0": [{ id: "att-0", fileName: "then.png", signedUrl: "https://signed.example/then" }],
+      "inq-1": [{ id: "att-1", fileName: "now.png", signedUrl: "https://signed.example/now", messageId: null }],
+      "inq-0": [{ id: "att-0", fileName: "then.png", signedUrl: "https://signed.example/then", messageId: null }],
     });
 
     const data = await loadInboxPage({} as never, gameScope("g1"), "inq-1", {});
 
     expect(inquiriesModule.listAttachmentSignedUrlsByInquiryIds).toHaveBeenCalledTimes(1);
     expect(inquiriesModule.listAttachmentSignedUrlsByInquiryIds).toHaveBeenCalledWith({}, ["inq-1", "inq-0"]);
-    expect(data?.selected?.attachments).toEqual([{ id: "att-1", fileName: "now.png", signedUrl: "https://signed.example/now" }]);
-    expect(data?.selected?.pastThreads[0].attachments).toEqual([{ id: "att-0", fileName: "then.png", signedUrl: "https://signed.example/then" }]);
+    expect(data?.selected?.attachments).toEqual([{ id: "att-1", fileName: "now.png", signedUrl: "https://signed.example/now", messageId: null }]);
+    expect(data?.selected?.pastThreads[0].attachments).toEqual([{ id: "att-0", fileName: "then.png", signedUrl: "https://signed.example/then", messageId: null }]);
   });
 
   it("starts the per-inquiry lookups without waiting for the inquiry row", async () => {

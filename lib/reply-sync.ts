@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { openMailbox, type InboundMessageRef, type Mailbox, type MailboxReader } from "@/lib/gmail";
 import { createInboundMessage } from "@/lib/messages";
+import { saveInboundAttachments } from "@/lib/message-attachments";
 
 /**
  * 사용자 회신 자동 동기화. pg_cron이 5분마다 /api/replies/sync를 부르면
@@ -210,10 +211,10 @@ export async function syncMailbox(
       continue;
     }
     if (!email) continue;
-    // 첨부만 있거나 인용문뿐이면 보여줄 게 없다. 버튼 동기화와 같은 기준.
-    if (!email.body.trim()) continue;
+    // 인용문뿐이고 사진도 없으면 보여줄 게 없다. 버튼 동기화와 같은 기준.
+    if (!email.body.trim() && email.attachments.length === 0) continue;
 
-    const inserted = await createInboundMessage(supabase, {
+    const messageId = await createInboundMessage(supabase, {
       inquiryId: inquiry.id,
       fromEmail: email.fromEmail,
       body: email.body,
@@ -221,8 +222,17 @@ export async function syncMailbox(
       rfcMessageId: email.rfcMessageId,
       sentAt: email.sentAt,
     });
-    if (!inserted) continue;
+    if (!messageId) continue;
     added += 1;
+
+    if (email.attachments.length > 0) {
+      await saveInboundAttachments(supabase, {
+        inquiryId: inquiry.id,
+        messageId,
+        attachments: email.attachments,
+        download: (attachmentId) => reader.getAttachment(email.gmailMessageId, attachmentId),
+      });
+    }
 
     const unreadAt = earlierUnread(inquiry.unread_reply_at, email.sentAt);
     if (unreadAt) {

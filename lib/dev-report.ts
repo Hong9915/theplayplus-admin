@@ -168,15 +168,7 @@ export async function loadDevReportInquiries(supabase: SupabaseClient, ids: stri
     created_at: string;
   }>;
 
-  const { data: attachments } = rows.length
-    ? await supabase
-        .from("inquiry_attachments")
-        .select("inquiry_id, file_path, file_name")
-        .in("inquiry_id", rows.map((r) => r.id))
-        .order("created_at", { ascending: true })
-    : { data: [] };
-
-  const files = (attachments ?? []) as Array<{ inquiry_id: string; file_path: string; file_name: string }>;
+  const files = rows.length ? await listReportFiles(supabase, rows.map((r) => r.id)) : [];
   const downloaded = await Promise.all(
     files.map(async (file) => {
       const { data: blob } = await supabase.storage.from("inquiry-attachments").download(file.file_path);
@@ -195,4 +187,27 @@ export async function loadDevReportInquiries(supabase: SupabaseClient, ids: stri
     translations: parseTranslations(row.translations),
     screenshots: downloaded.filter((f) => f.inquiry_id === row.id).map((f) => ({ fileName: f.file_name, data: f.data })),
   }));
+}
+
+type ReportFile = { inquiry_id: string; file_path: string; file_name: string; message_id?: string | null };
+
+/**
+ * 엑셀에 넣을 스크린샷. 접수 폼 첨부와 사용자가 회신에 붙인 사진은 넣고, 우리가 답변에
+ * 붙여 보낸 사진은 뺀다(개발사에 전달할 문제 화면이 아니다). 0035 실행 전이면 열 없이 읽는다.
+ */
+async function listReportFiles(supabase: SupabaseClient, inquiryIds: string[]): Promise<ReportFile[]> {
+  const query = (columns: string) =>
+    supabase.from("inquiry_attachments").select(columns).in("inquiry_id", inquiryIds).order("created_at", { ascending: true });
+  let { data, error } = await query("inquiry_id, file_path, file_name, message_id");
+  if (error) ({ data, error } = await query("inquiry_id, file_path, file_name"));
+  const files = ((error ? null : data) ?? []) as unknown as ReportFile[];
+
+  const messageIds = Array.from(new Set(files.map((f) => f.message_id).filter((id): id is string => !!id)));
+  if (messageIds.length === 0) return files;
+  const { data: messages } = await supabase.from("inquiry_messages").select("id, direction").in("id", messageIds);
+  // 방향을 못 읽은 메시지의 사진은 우리 답변일 수도 있으니 뺀다.
+  const inbound = new Set(
+    ((messages ?? []) as Array<{ id: string; direction: string }>).filter((m) => m.direction === "inbound").map((m) => m.id)
+  );
+  return files.filter((f) => !f.message_id || inbound.has(f.message_id));
 }

@@ -4,6 +4,7 @@ import * as gmailModule from "@/lib/gmail";
 import * as eventsModule from "@/lib/events";
 import * as messagesModule from "@/lib/messages";
 import * as embeddingsModule from "@/lib/embeddings";
+import * as attachmentsModule from "@/lib/message-attachments";
 
 vi.mock("@/lib/gmail", () => ({
   sendReplyEmail: vi.fn(),
@@ -15,6 +16,10 @@ vi.mock("@/lib/events", async () => {
 });
 vi.mock("@/lib/messages", () => ({ createOutboundMessage: vi.fn(), listRfcMessageIds: vi.fn() }));
 vi.mock("@/lib/embeddings", () => ({ ensureInquiryEmbedding: vi.fn() }));
+vi.mock("@/lib/message-attachments", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/message-attachments")>("@/lib/message-attachments");
+  return { ...actual, loadReplyAttachments: vi.fn(), recordMessageAttachments: vi.fn() };
+});
 
 const SENT = { gmailMessageId: "gm-1", gmailThreadId: "thread-1", rfcMessageId: "<abc@theplayplus.com>" };
 const ADMIN = { id: "user-1", email: "hong@theplayplus.com" };
@@ -60,7 +65,9 @@ describe("sendInquiryReply", () => {
   beforeEach(() => {
     vi.mocked(gmailModule.sendReplyEmail).mockReset().mockResolvedValue(SENT);
     vi.mocked(eventsModule.recordEvent).mockReset().mockResolvedValue(undefined);
-    vi.mocked(messagesModule.createOutboundMessage).mockReset().mockResolvedValue(true);
+    vi.mocked(messagesModule.createOutboundMessage).mockReset().mockResolvedValue("msg-1");
+    vi.mocked(attachmentsModule.loadReplyAttachments).mockReset().mockResolvedValue([]);
+    vi.mocked(attachmentsModule.recordMessageAttachments).mockReset().mockResolvedValue(true);
     vi.mocked(messagesModule.listRfcMessageIds).mockReset().mockResolvedValue([]);
     vi.mocked(embeddingsModule.ensureInquiryEmbedding).mockReset().mockResolvedValue([0.1]);
   });
@@ -88,7 +95,8 @@ describe("sendInquiryReply", () => {
       expect.objectContaining({ inquiryId: "inq-1", author: ADMIN, autoSent: false, gmailMessageId: "gm-1" })
     );
     expect(eventsModule.recordEvent).toHaveBeenCalledWith(expect.anything(), { inquiryId: "inq-1", actor: ADMIN, kind: "reply_sent" });
-    expect(result).toEqual({ sent: SENT, recorded: true });
+    expect(result).toEqual({ sent: SENT, recorded: true, attachmentsRecorded: true });
+    expect(attachmentsModule.recordMessageAttachments).not.toHaveBeenCalled();
   });
 
   it("auto: leaves status and last reply alone, stores only the thread id, and marks the message auto", async () => {
@@ -150,12 +158,53 @@ describe("sendInquiryReply", () => {
 
   it("reports recorded=false instead of failing when the message cannot be saved", async () => {
     const { supabase } = mockSupabase();
-    vi.mocked(messagesModule.createOutboundMessage).mockResolvedValue(false);
+    vi.mocked(messagesModule.createOutboundMessage).mockResolvedValue(null);
     vi.mocked(eventsModule.recordEvent).mockRejectedValue(new Error("boom"));
 
     const result = await sendInquiryReply(supabase, { inquiry, body: "x", mode: "auto" });
 
     expect(result.recorded).toBe(false);
+  });
+
+  it("manual: attaches the uploaded photos to the email and ties them to the recorded message", async () => {
+    const { supabase } = mockSupabase();
+    const photo = { contentType: "image/png", filename: "보상.png", data: Buffer.from([1]) };
+    vi.mocked(attachmentsModule.loadReplyAttachments).mockResolvedValue([photo]);
+    const refs = [{ path: "inq-1/messages/u-보상.png", fileName: "보상.png" }];
+
+    const result = await sendInquiryReply(supabase, { inquiry, body: "지급했습니다", mode: "manual", actor: ADMIN, attachments: refs });
+
+    expect(attachmentsModule.loadReplyAttachments).toHaveBeenCalledWith(supabase, "inq-1", refs);
+    expect(vi.mocked(gmailModule.sendReplyEmail).mock.calls[0][0].attachments).toEqual([photo]);
+    expect(attachmentsModule.recordMessageAttachments).toHaveBeenCalledWith(supabase, { inquiryId: "inq-1", messageId: "msg-1", files: refs });
+    expect(result.attachmentsRecorded).toBe(true);
+  });
+
+  it("manual: does not send at all when a photo cannot be loaded", async () => {
+    const { supabase, update } = mockSupabase();
+    vi.mocked(attachmentsModule.loadReplyAttachments).mockRejectedValue(new attachmentsModule.ReplyAttachmentError("download_failed"));
+
+    await expect(
+      sendInquiryReply(supabase, { inquiry, body: "x", mode: "manual", actor: ADMIN, attachments: [{ path: "inq-1/messages/a.png", fileName: "a.png" }] })
+    ).rejects.toBeInstanceOf(attachmentsModule.ReplyAttachmentError);
+    expect(gmailModule.sendReplyEmail).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("manual: reports attachmentsRecorded=false when the message itself was not recorded", async () => {
+    const { supabase } = mockSupabase();
+    vi.mocked(messagesModule.createOutboundMessage).mockResolvedValue(null);
+
+    const result = await sendInquiryReply(supabase, {
+      inquiry,
+      body: "x",
+      mode: "manual",
+      actor: ADMIN,
+      attachments: [{ path: "inq-1/messages/a.png", fileName: "a.png" }],
+    });
+
+    expect(result).toEqual(expect.objectContaining({ recorded: false, attachmentsRecorded: false }));
+    expect(attachmentsModule.recordMessageAttachments).not.toHaveBeenCalled();
   });
 
   it("manual: makes sure the inquiry has an embedding after the reply is recorded", async () => {
@@ -193,7 +242,9 @@ describe("sendInquiryReply (unread reply mark)", () => {
   beforeEach(() => {
     vi.mocked(gmailModule.sendReplyEmail).mockReset().mockResolvedValue(SENT);
     vi.mocked(eventsModule.recordEvent).mockReset().mockResolvedValue(undefined);
-    vi.mocked(messagesModule.createOutboundMessage).mockReset().mockResolvedValue(true);
+    vi.mocked(messagesModule.createOutboundMessage).mockReset().mockResolvedValue("msg-1");
+    vi.mocked(attachmentsModule.loadReplyAttachments).mockReset().mockResolvedValue([]);
+    vi.mocked(attachmentsModule.recordMessageAttachments).mockReset().mockResolvedValue(true);
     vi.mocked(messagesModule.listRfcMessageIds).mockReset().mockResolvedValue([]);
     vi.mocked(embeddingsModule.ensureInquiryEmbedding).mockReset().mockResolvedValue([0.1]);
   });

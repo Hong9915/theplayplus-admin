@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { requireAdminSession } from "@/lib/require-admin-session";
-import { fetchInboundReplies, fetchUnthreadedReplies, type InboundEmail } from "@/lib/gmail";
+import { downloadInboundAttachment, fetchInboundReplies, fetchUnthreadedReplies, type InboundEmail } from "@/lib/gmail";
+import { saveInboundAttachments } from "@/lib/message-attachments";
 import { createInboundMessage, listMessages } from "@/lib/messages";
 import { scopeForGameId } from "@/lib/inbox-scope";
 
@@ -56,9 +57,9 @@ export async function POST(_request: Request, { params }: { params: { id: string
   for (const email of inbound) {
     if (known.has(email.gmailMessageId)) continue;
     known.add(email.gmailMessageId);
-    // 본문이 비면(첨부만 있거나 인용문뿐) 표시할 게 없으니 건너뛴다.
-    if (!email.body.trim()) continue;
-    const inserted = await createInboundMessage(supabase, {
+    // 인용문뿐이고 사진도 없으면 표시할 게 없으니 건너뛴다.
+    if (!email.body.trim() && email.attachments.length === 0) continue;
+    const messageId = await createInboundMessage(supabase, {
       inquiryId: params.id,
       fromEmail: email.fromEmail,
       body: email.body,
@@ -66,7 +67,16 @@ export async function POST(_request: Request, { params }: { params: { id: string
       rfcMessageId: email.rfcMessageId,
       sentAt: email.sentAt,
     });
-    if (inserted) added += 1;
+    if (!messageId) continue;
+    added += 1;
+    if (email.attachments.length > 0) {
+      await saveInboundAttachments(supabase, {
+        inquiryId: params.id,
+        messageId,
+        attachments: email.attachments,
+        download: (attachmentId) => downloadInboundAttachment(mailbox, email.gmailMessageId, attachmentId),
+      });
+    }
   }
 
   return NextResponse.json({ success: true, added });

@@ -37,7 +37,7 @@ describe("POST /api/inquiries/[id]/reply", () => {
     vi.mocked(supabaseModule.getSupabaseServerClient).mockReset();
     vi.mocked(gmailModule.sendReplyEmail).mockReset();
     vi.mocked(eventsModule.recordEvent).mockReset().mockResolvedValue(undefined);
-    vi.mocked(messagesModule.createOutboundMessage).mockReset().mockResolvedValue(true);
+    vi.mocked(messagesModule.createOutboundMessage).mockReset().mockResolvedValue("msg-1");
     vi.mocked(messagesModule.listRfcMessageIds).mockReset().mockResolvedValue([]);
     vi.mocked(requireAdminSessionModule.getAdminSession)
       .mockReset()
@@ -281,12 +281,31 @@ describe("POST /api/inquiries/[id]/reply", () => {
   it("warns instead of failing when the message record cannot be saved", async () => {
     mockFetchInquiry({ id: "inq-1", reply_email: "user@example.com", title: "제목", inquiry_no: "R-1" });
     vi.mocked(gmailModule.sendReplyEmail).mockResolvedValue(SENT);
-    vi.mocked(messagesModule.createOutboundMessage).mockResolvedValue(false);
+    vi.mocked(messagesModule.createOutboundMessage).mockResolvedValue(null);
 
     const response = await POST(jsonRequest({ replyContent: "답변" }), { params: { id: "inq-1" } });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ success: true, warning: "message_save_failed" });
+  });
+
+  it("refuses to send a photo that is not under this inquiry's folder", async () => {
+    mockFetchInquiry({ id: "inq-1", reply_email: "user@example.com", title: "제목", inquiry_no: "R-1" });
+
+    const response = await POST(
+      jsonRequest({ replyContent: "답변", attachments: [{ path: "other-inquiry/messages/x.png", fileName: "x.png" }] }),
+      { params: { id: "inq-1" } }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ success: false, error: "attachment_failed" });
+    expect(gmailModule.sendReplyEmail).not.toHaveBeenCalled();
+  });
+
+  it("rejects a reply with neither text nor photos", async () => {
+    const response = await POST(jsonRequest({ replyContent: "   ", attachments: [] }), { params: { id: "inq-1" } });
+    expect(response.status).toBe(400);
+    expect(gmailModule.sendReplyEmail).not.toHaveBeenCalled();
   });
 
   it("still returns success when recording the event fails", async () => {

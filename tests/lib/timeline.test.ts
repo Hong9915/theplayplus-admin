@@ -46,7 +46,7 @@ const notes: NoteRow[] = [
 
 describe("buildTimeline", () => {
   it("puts the inquiry body first and the rest in time order", () => {
-    const attachments = [{ id: "a1", fileName: "명세서.png", signedUrl: "https://x/1" }];
+    const attachments = [{ id: "a1", fileName: "명세서.png", signedUrl: "https://x/1", messageId: null }];
     const entries = buildTimeline(inquiry, attachments, messages, notes);
 
     expect(entries.map((e) => e.kind)).toEqual(["inquiry", "note", "outbound", "inbound"]);
@@ -64,6 +64,18 @@ describe("buildTimeline", () => {
     // 메시지 항목은 번역 API가 필요로 하는 문의 id와 저장된 번역을 함께 싣는다.
     expect(entries[2]).toMatchObject({ kind: "outbound", id: "m-out", inquiryId: "inq-1", author: "info@theplayplus.com", translations: {} });
     expect(entries[3]).toMatchObject({ kind: "inbound", id: "m-in", inquiryId: "inq-1", author: "luna@example.com", translations: {} });
+  });
+
+  it("puts reply photos on their message and keeps only form attachments on the inquiry body", () => {
+    const form = { id: "a1", fileName: "명세서.png", signedUrl: "https://x/1", messageId: null };
+    const fromUser = { id: "a2", fileName: "회신.png", signedUrl: "https://x/2", messageId: "m-in" };
+    const fromUs = { id: "a3", fileName: "안내.png", signedUrl: "https://x/3", messageId: "m-out" };
+    const entries = buildTimeline(inquiry, [form, fromUser, fromUs], messages, []);
+
+    const byId = Object.fromEntries(entries.map((e) => [e.id, e]));
+    expect(byId["inq-1"]).toMatchObject({ attachments: [form] });
+    expect(byId["m-in"]).toMatchObject({ attachments: [fromUser] });
+    expect(byId["m-out"]).toMatchObject({ attachments: [fromUs] });
   });
 
   it("carries the type-specific detail rows on the inquiry entry", () => {

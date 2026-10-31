@@ -53,10 +53,10 @@ function Avatar({ entry }: { entry: MessageEntry }) {
   return <div className="w-[22px] h-[22px] rounded-full bg-line-soft text-ink-2 flex items-center justify-center text-[11px] font-bold shrink-0">{initial}</div>;
 }
 
-function Attachments({ attachments }: { attachments: AttachmentWithUrl[] }) {
+function Attachments({ attachments, alignEnd = false }: { attachments: AttachmentWithUrl[]; alignEnd?: boolean }) {
   if (attachments.length === 0) return null;
   return (
-    <ul className="flex flex-wrap gap-2 text-xs">
+    <ul className={`flex flex-wrap gap-2 text-xs ${alignEnd ? "justify-end" : ""}`} aria-label="첨부 사진">
       {attachments.map((attachment) => (
         <li key={attachment.id} className="flex flex-col gap-1 max-w-[240px]">
           {attachment.signedUrl ? (
@@ -117,6 +117,9 @@ export default function InboxTimeline({ entries, labels }: { entries: TimelineEn
         const outbound = entry.kind === "outbound";
         const auto = outbound && entry.auto;
         const note = entry.kind === "note";
+        // 사진만 보낸 답변·회신은 빈 말풍선 없이 사진만 그린다.
+        const photoOnly =
+          (entry.kind === "outbound" || entry.kind === "inbound") && entry.body.trim() === "" && entry.attachments.length > 0;
         // 고객은 왼쪽 흰 말풍선, 우리가 보낸 것은 오른쪽 주황 말풍선, 자동 발송은 점선, 메모는 폭 전체를 쓰는 호박색.
         const bubble = note
           ? "rounded-xl bg-memo ring-1 ring-memo-line text-memo-ink"
@@ -135,30 +138,32 @@ export default function InboxTimeline({ entries, labels }: { entries: TimelineEn
                 {note && <span className="text-memo-ink/80">· 고객에게 보이지 않음</span>}
                 <span className={`tabular-nums ${note ? "text-memo-ink/80" : "text-muted"}`}>{formatReceivedAt(entry.at)}</span>
               </div>
-              <div className={`px-4 py-3.5 text-[14.5px] leading-[1.7] ${bubble}`}>
-                {/* 메모는 관리자가 한국어로 쓰니 번역 메뉴가 필요 없다. 나머지는 우클릭으로 번역. */}
-                {note ? (
-                  <p className="whitespace-pre-wrap break-words">{entry.body}</p>
-                ) : (
-                  <TranslatableBody
-                    inquiryId={entry.kind === "inquiry" ? entry.id : entry.inquiryId}
-                    target={entry.kind === "inquiry" ? { kind: "inquiry" } : { kind: "message", messageId: entry.id }}
-                    body={entry.body}
-                    translations={entry.translations}
-                  />
-                )}
-                {entry.kind === "inquiry" && entry.details.length > 0 && (
-                  <dl className="mt-3 px-3.5 py-3 rounded-[10px] bg-well grid grid-cols-[auto_1fr] gap-x-3.5 gap-y-1.5 text-[13px]" data-testid="inquiry-details">
-                    {entry.details.map((row) => (
-                      <div key={row.key} className="contents">
-                        <dt className="text-muted">{row.label}</dt>
-                        <dd className="break-all font-medium">{row.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-              </div>
-              {entry.kind === "inquiry" && <Attachments attachments={entry.attachments} />}
+              {!photoOnly && (
+                <div className={`px-4 py-3.5 text-[14.5px] leading-[1.7] ${bubble}`}>
+                  {/* 메모는 관리자가 한국어로 쓰니 번역 메뉴가 필요 없다. 나머지는 우클릭으로 번역. */}
+                  {note ? (
+                    <p className="whitespace-pre-wrap break-words">{entry.body}</p>
+                  ) : (
+                    <TranslatableBody
+                      inquiryId={entry.kind === "inquiry" ? entry.id : entry.inquiryId}
+                      target={entry.kind === "inquiry" ? { kind: "inquiry" } : { kind: "message", messageId: entry.id }}
+                      body={entry.body}
+                      translations={entry.translations}
+                    />
+                  )}
+                  {entry.kind === "inquiry" && entry.details.length > 0 && (
+                    <dl className="mt-3 px-3.5 py-3 rounded-[10px] bg-well grid grid-cols-[auto_1fr] gap-x-3.5 gap-y-1.5 text-[13px]" data-testid="inquiry-details">
+                      {entry.details.map((row) => (
+                        <div key={row.key} className="contents">
+                          <dt className="text-muted">{row.label}</dt>
+                          <dd className="break-all font-medium">{row.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                </div>
+              )}
+              {entry.kind !== "note" && <Attachments attachments={entry.attachments} alignEnd={outbound} />}
             </div>
           </li>
         );

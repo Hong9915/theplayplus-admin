@@ -54,6 +54,8 @@ export interface AttachmentWithUrl {
   id: string;
   fileName: string;
   signedUrl: string | null;
+  /** 답변·회신에 딸린 사진이면 그 메시지 id, 접수 폼 첨부면 null(마이그레이션 0035). */
+  messageId: string | null;
 }
 
 function mapInquiryRow(row: {
@@ -291,16 +293,19 @@ export async function listAttachmentSignedUrlsByInquiryIds(
     return {};
   }
 
-  const { data, error } = await supabase
-    .from("inquiry_attachments")
-    .select("id, inquiry_id, file_path, file_name")
-    .in("inquiry_id", inquiryIds);
+  type Row = { id: string; inquiry_id: string; file_path: string; file_name: string; message_id?: string | null };
+  const query = (columns: string) => supabase.from("inquiry_attachments").select(columns).in("inquiry_id", inquiryIds);
+  let { data, error } = await query("id, inquiry_id, file_path, file_name, message_id");
+  if (error) {
+    // 0035(message_id 열) 실행 전이면 열 없이 다시 읽어 문의 첨부만이라도 보여준다.
+    ({ data, error } = await query("id, inquiry_id, file_path, file_name"));
+  }
 
   if (error || !data || data.length === 0) {
     return {};
   }
 
-  const rows = data as Array<{ id: string; inquiry_id: string; file_path: string; file_name: string }>;
+  const rows = data as unknown as Row[];
   const { data: signed } = await supabase.storage
     .from("inquiry-attachments")
     .createSignedUrls(
@@ -318,6 +323,7 @@ export async function listAttachmentSignedUrlsByInquiryIds(
       id: row.id,
       fileName: row.file_name,
       signedUrl: urlByPath.get(row.file_path) ?? null,
+      messageId: row.message_id ?? null,
     });
   }
   return grouped;

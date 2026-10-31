@@ -4,10 +4,12 @@ import * as supabaseModule from "@/lib/supabase";
 import * as sessionModule from "@/lib/require-admin-session";
 import * as gmailModule from "@/lib/gmail";
 import * as messagesModule from "@/lib/messages";
+import * as attachmentsModule from "@/lib/message-attachments";
 
 vi.mock("@/lib/supabase", () => ({ getSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/require-admin-session", () => ({ requireAdminSession: vi.fn() }));
-vi.mock("@/lib/gmail", () => ({ fetchInboundReplies: vi.fn(), fetchUnthreadedReplies: vi.fn() }));
+vi.mock("@/lib/gmail", () => ({ fetchInboundReplies: vi.fn(), fetchUnthreadedReplies: vi.fn(), downloadInboundAttachment: vi.fn() }));
+vi.mock("@/lib/message-attachments", () => ({ saveInboundAttachments: vi.fn() }));
 vi.mock("@/lib/messages", () => ({ createInboundMessage: vi.fn(), listMessages: vi.fn() }));
 
 type StoredMessage = Awaited<ReturnType<typeof messagesModule.listMessages>>[number];
@@ -43,7 +45,8 @@ describe("POST /api/inquiries/[id]/sync-replies", () => {
     vi.mocked(sessionModule.requireAdminSession).mockReset().mockResolvedValue(true);
     vi.mocked(gmailModule.fetchInboundReplies).mockReset();
     vi.mocked(gmailModule.fetchUnthreadedReplies).mockReset().mockResolvedValue([]);
-    vi.mocked(messagesModule.createInboundMessage).mockReset().mockResolvedValue(true);
+    vi.mocked(messagesModule.createInboundMessage).mockReset().mockResolvedValue("msg-new");
+    vi.mocked(attachmentsModule.saveInboundAttachments).mockReset().mockResolvedValue(0);
     vi.mocked(messagesModule.listMessages).mockReset().mockResolvedValue([]);
     mockInquiry({ id: "inq-1", game_id: "game-1", gmail_thread_id: "thread-1", reply_email: "u@x.com" });
   });
@@ -71,9 +74,9 @@ describe("POST /api/inquiries/[id]/sync-replies", () => {
   it("stores new inbound replies and skips ones already saved or empty", async () => {
     vi.mocked(messagesModule.listMessages).mockResolvedValue([stored({ direction: "inbound", gmailMessageId: "gm-old" })]);
     vi.mocked(gmailModule.fetchInboundReplies).mockResolvedValue([
-      { gmailMessageId: "gm-old", rfcMessageId: null, fromEmail: "u@x.com", body: "이미 있음", sentAt: "2026-09-01T00:00:00.000Z" },
-      { gmailMessageId: "gm-new", rfcMessageId: "<n@x.com>", fromEmail: "u@x.com", body: "새 회신", sentAt: "2026-09-01T01:00:00.000Z" },
-      { gmailMessageId: "gm-empty", rfcMessageId: null, fromEmail: "u@x.com", body: "   ", sentAt: "2026-09-01T02:00:00.000Z" },
+      { gmailMessageId: "gm-old", rfcMessageId: null, fromEmail: "u@x.com", body: "이미 있음", sentAt: "2026-09-01T00:00:00.000Z", attachments: [] },
+      { gmailMessageId: "gm-new", rfcMessageId: "<n@x.com>", fromEmail: "u@x.com", body: "새 회신", sentAt: "2026-09-01T01:00:00.000Z", attachments: [] },
+      { gmailMessageId: "gm-empty", rfcMessageId: null, fromEmail: "u@x.com", body: "   ", sentAt: "2026-09-01T02:00:00.000Z", attachments: [] },
     ]);
 
     const response = await POST(request(), { params: { id: "inq-1" } });
@@ -93,7 +96,7 @@ describe("POST /api/inquiries/[id]/sync-replies", () => {
     ]);
     vi.mocked(gmailModule.fetchInboundReplies).mockResolvedValue([]);
     vi.mocked(gmailModule.fetchUnthreadedReplies).mockResolvedValue([
-      { gmailMessageId: "gm-stray", rfcMessageId: "<s@x.com>", fromEmail: "u@x.com", body: "제목 바꾼 회신", sentAt: "2026-09-16T06:06:18.000Z" },
+      { gmailMessageId: "gm-stray", rfcMessageId: "<s@x.com>", fromEmail: "u@x.com", body: "제목 바꾼 회신", sentAt: "2026-09-16T06:06:18.000Z", attachments: [] },
     ]);
 
     const response = await POST(request(), { params: { id: "inq-1" } });
@@ -111,7 +114,7 @@ describe("POST /api/inquiries/[id]/sync-replies", () => {
   });
 
   it("does not store the same reply twice when both lookups return it", async () => {
-    const reply = { gmailMessageId: "gm-dup", rfcMessageId: null, fromEmail: "u@x.com", body: "회신", sentAt: "2026-09-16T06:06:18.000Z" };
+    const reply = { gmailMessageId: "gm-dup", rfcMessageId: null, fromEmail: "u@x.com", body: "회신", sentAt: "2026-09-16T06:06:18.000Z", attachments: [] };
     vi.mocked(messagesModule.listMessages).mockResolvedValue([
       stored({ direction: "outbound", rfcMessageId: "<ours@mail.gmail.com>", sentAt: "2026-09-16T06:02:03.000Z" }),
     ]);
@@ -121,6 +124,23 @@ describe("POST /api/inquiries/[id]/sync-replies", () => {
     const response = await POST(request(), { params: { id: "inq-1" } });
 
     expect(messagesModule.createInboundMessage).toHaveBeenCalledTimes(1);
+    await expect(response.json()).resolves.toEqual({ success: true, added: 1 });
+  });
+
+  it("keeps a photo-only reply and saves its photos onto the new message", async () => {
+    const photo = { attachmentId: "att-1", filename: "화면.png", mimeType: "image/png" as const, size: 10 };
+    vi.mocked(gmailModule.fetchInboundReplies).mockResolvedValue([
+      { gmailMessageId: "gm-photo", rfcMessageId: null, fromEmail: "u@x.com", body: "", sentAt: "2026-09-01T01:00:00.000Z", attachments: [photo] },
+    ]);
+    vi.mocked(gmailModule.downloadInboundAttachment).mockResolvedValue(Buffer.from([1]));
+
+    const response = await POST(request(), { params: { id: "inq-1" } });
+
+    expect(messagesModule.createInboundMessage).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ gmailMessageId: "gm-photo", body: "" }));
+    const call = vi.mocked(attachmentsModule.saveInboundAttachments).mock.calls[0][1];
+    expect(call).toEqual(expect.objectContaining({ inquiryId: "inq-1", messageId: "msg-new", attachments: [photo] }));
+    await call.download("att-1");
+    expect(gmailModule.downloadInboundAttachment).toHaveBeenCalledWith("game", "gm-photo", "att-1");
     await expect(response.json()).resolves.toEqual({ success: true, added: 1 });
   });
 
