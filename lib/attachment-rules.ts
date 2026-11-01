@@ -1,15 +1,22 @@
 /**
  * 답변·회신 사진의 규칙. 화면(작성란)과 서버(업로드 주소 발급·발송·회신 동기화)가 같이 쓴다.
  * 첨부 버킷 `inquiry-attachments`는 이미지 네 종류와 파일당 5MB만 받는다(버킷 설정,
- * 2026-10-31 확인). 그 밖의 파일은 버킷에 올라가지 않으므로 여기서 먼저 거른다.
+ * 2026-10-31 확인). 다른 종류는 여기서 먼저 거르고, 5MB를 넘는 사진은 JPEG로 줄여 올린다
+ * (작성란은 lib/shrink-image.ts, 회신 동기화는 lib/shrink-image-server.ts).
  */
 export const ATTACHMENT_BUCKET = "inquiry-attachments";
 
 export const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
 export type AllowedImageType = (typeof ALLOWED_IMAGE_TYPES)[number];
 
-/** 버킷의 file_size_limit과 같다. */
+/** 버킷의 file_size_limit과 같다. 이보다 큰 사진은 JPEG로 줄여서 저장한다. */
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * 회신 사진을 줄이려고 내려받는 원본의 상한. Gmail이 메일 하나를 25MB까지만 받으므로
+ * 사실상 모든 첨부 사진이 들어온다. 이보다 크면(드라이브 링크 등) 내려받지 않는다.
+ */
+export const MAX_INBOUND_SOURCE_BYTES = 25 * 1024 * 1024;
 
 /** 답변 한 번에 붙일 수 있는 사진 수. */
 export const MAX_REPLY_IMAGES = 5;

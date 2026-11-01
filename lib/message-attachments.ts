@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InboundAttachmentRef, MailAttachment } from "@/lib/gmail";
+import { shrinkImageBuffer } from "@/lib/shrink-image-server";
 import {
   ATTACHMENT_BUCKET,
   isAllowedImageType,
   isMessageAttachmentPathOf,
+  MAX_IMAGE_BYTES,
   MAX_REPLY_IMAGES,
   MAX_REPLY_TOTAL_BYTES,
   messageAttachmentPath,
   safeFileName,
+  type AllowedImageType,
 } from "@/lib/attachment-rules";
 
 /**
@@ -91,14 +94,24 @@ export async function saveInboundAttachments(
   const saved: ReplyAttachmentRef[] = [];
   for (const attachment of input.attachments) {
     try {
-      const data = await input.download(attachment.attachmentId);
-      const fileName = safeFileName(attachment.filename, attachment.mimeType);
+      let data = await input.download(attachment.attachmentId);
+      let contentType: AllowedImageType = attachment.mimeType;
+      let displayName = attachment.filename;
+      if (data.length > MAX_IMAGE_BYTES) {
+        // 버킷은 5MB까지만 받으므로 큰 사진은 JPEG로 줄여 저장한다.
+        const shrunk = await shrinkImageBuffer(data, MAX_IMAGE_BYTES);
+        if (!shrunk) throw new Error("too_large_to_shrink");
+        data = shrunk.data;
+        contentType = shrunk.contentType;
+        displayName = toJpgName(attachment.filename);
+      }
+      const fileName = safeFileName(displayName, contentType);
       const path = messageAttachmentPath(input.inquiryId, fileName, randomUUID());
       const { error } = await supabase.storage
         .from(ATTACHMENT_BUCKET)
-        .upload(path, data, { contentType: attachment.mimeType, upsert: false });
+        .upload(path, data, { contentType, upsert: false });
       if (error) throw error;
-      saved.push({ path, fileName: attachment.filename || fileName });
+      saved.push({ path, fileName: displayName || fileName });
     } catch (error) {
       console.warn("[attachments] 회신 사진 저장 실패", input.messageId, attachment.filename, error);
     }
@@ -115,4 +128,10 @@ export async function saveInboundAttachments(
     return 0;
   }
   return saved.length;
+}
+
+/** 줄여서 JPEG가 된 사진의 이름. 확장자만 .jpg로 바꾸고, 이름이 없으면 비워 둔다. */
+function toJpgName(name: string): string {
+  if (!name) return "";
+  return name.replace(/\.[^./\\]+$/, "") + ".jpg";
 }

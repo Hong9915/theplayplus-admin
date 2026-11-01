@@ -7,6 +7,7 @@ import StatusMessage from "@/components/ui/StatusMessage";
 import { useSuggestion } from "@/components/inquiries/useSuggestion";
 import { evidenceKind, type EvidenceKind } from "@/lib/suggest-evidence";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { shrinkImage } from "@/lib/shrink-image";
 import {
   ALLOWED_IMAGE_TYPES,
   ATTACHMENT_BUCKET,
@@ -167,22 +168,37 @@ export default function ReplyComposer({
   // 화면을 떠나면 미리보기 주소를 놓아준다.
   useEffect(() => () => imagesRef.current.forEach((image) => revokePreviewUrl(image.previewUrl)), []);
 
-  /** 고른·붙여넣은·끌어다 놓은 파일을 규칙에 맞는 것만 더한다. 걸러낸 이유는 한 줄로 알린다. */
-  function addFiles(files: File[]) {
+  /**
+   * 고른·붙여넣은·끌어다 놓은 파일을 규칙에 맞는 것만 더한다. 5MB(버킷 상한)를 넘는 사진은
+   * JPEG로 줄여서 붙인다. 걸러낸 이유는 한 줄로 알린다.
+   */
+  async function addFiles(files: File[]) {
     if (files.length === 0) return;
-    const accepted: PendingImage[] = [];
     let reason: string | null = null;
-    let count = images.length;
-    let total = images.reduce((sum, image) => sum + image.file.size, 0);
+    const prepared: File[] = [];
     for (const file of files) {
       if (!isAllowedImageType(file.type)) {
         reason = "PNG·JPG·GIF·WEBP 사진만 붙일 수 있습니다.";
         continue;
       }
       if (file.size > MAX_IMAGE_BYTES) {
-        reason = "사진 한 장은 5MB까지 붙일 수 있습니다.";
+        const shrunk = await shrinkImage(file, MAX_IMAGE_BYTES);
+        if (!shrunk) {
+          reason = "사진을 5MB 아래로 줄이지 못했습니다.";
+          continue;
+        }
+        prepared.push(shrunk);
         continue;
       }
+      prepared.push(file);
+    }
+
+    // 줄이는 사이 다른 사진이 더해졌을 수 있어 지금 상태로 센다.
+    const existing = imagesRef.current;
+    const accepted: PendingImage[] = [];
+    let count = existing.length;
+    let total = existing.reduce((sum, image) => sum + image.file.size, 0);
+    for (const file of prepared) {
       if (count >= MAX_REPLY_IMAGES) {
         reason = `사진은 한 번에 ${MAX_REPLY_IMAGES}장까지 붙일 수 있습니다.`;
         continue;
@@ -223,7 +239,7 @@ export default function ReplyComposer({
     if (files.length === 0) return;
     // 사진을 붙여넣으면 글자 대신 첨부로 받는다.
     event.preventDefault();
-    addFiles(files);
+    void addFiles(files);
   }
 
   function handleDragOver(event: DragEvent<HTMLFormElement>) {
@@ -239,7 +255,7 @@ export default function ReplyComposer({
     const files = Array.from(event.dataTransfer?.files ?? []);
     if (files.length === 0) return;
     event.preventDefault();
-    addFiles(files);
+    void addFiles(files);
   }
 
   function handleChange(next: string) {
@@ -496,7 +512,7 @@ export default function ReplyComposer({
                 hidden
                 data-testid="reply-image-input"
                 onChange={(event) => {
-                  addFiles(Array.from(event.target.files ?? []));
+                  void addFiles(Array.from(event.target.files ?? []));
                   // 같은 파일을 다시 고를 수 있게 비운다.
                   event.target.value = "";
                 }}

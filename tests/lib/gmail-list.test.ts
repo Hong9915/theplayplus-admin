@@ -163,7 +163,7 @@ describe("openMailbox", () => {
 });
 
 describe("reply photos", () => {
-  it("picks image parts with an attachment id, attached or inline, and drops other files and oversized ones", () => {
+  it("picks image parts with an attachment id, attached or inline, and keeps photos over 5MB (shrunk on save) but drops other files and ones over 25MB", () => {
     const payload = {
       mimeType: "multipart/mixed",
       parts: [
@@ -176,12 +176,14 @@ describe("reply photos", () => {
         },
         { mimeType: "image/jpeg", filename: "화면.jpg", body: { attachmentId: "att-1", size: 5000 } },
         { mimeType: "application/pdf", filename: "log.pdf", body: { attachmentId: "att-2", size: 100 } },
-        { mimeType: "image/png", filename: "huge.png", body: { attachmentId: "att-3", size: 6 * 1024 * 1024 } },
+        { mimeType: "image/png", filename: "big.png", body: { attachmentId: "att-3", size: 6 * 1024 * 1024 } },
+        { mimeType: "image/png", filename: "huge.png", body: { attachmentId: "att-5", size: 26 * 1024 * 1024 } },
         { mimeType: "image/heic", filename: "iphone.heic", body: { attachmentId: "att-4", size: 100 } },
       ],
     };
     expect(extractImageAttachments(payload)).toEqual([
       { attachmentId: "att-1", filename: "화면.jpg", mimeType: "image/jpeg", size: 5000 },
+      { attachmentId: "att-3", filename: "big.png", mimeType: "image/png", size: 6 * 1024 * 1024 },
       { attachmentId: "inline-1", filename: "image.png", mimeType: "image/png", size: 1200 },
     ]);
   });

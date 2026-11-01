@@ -7,6 +7,8 @@ import ReplyComposer from "@/components/inbox/ReplyComposer";
 const refreshMock = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: refreshMock }) }));
 const uploadToSignedUrl = vi.fn();
+const shrinkImage = vi.fn();
+vi.mock("@/lib/shrink-image", () => ({ shrinkImage: (...args: unknown[]) => shrinkImage(...args) }));
 vi.mock("@/lib/supabase-browser", () => ({
   getSupabaseBrowserClient: () => ({ storage: { from: () => ({ uploadToSignedUrl }) } }),
 }));
@@ -74,6 +76,7 @@ describe("ReplyComposer", () => {
     }
 
     beforeEach(() => {
+      shrinkImage.mockReset();
       uploadToSignedUrl.mockReset().mockResolvedValue({ data: {}, error: null });
     });
 
@@ -113,12 +116,24 @@ describe("ReplyComposer", () => {
       await userEvent.upload(input, [new File(["x"], "log.pdf", { type: "application/pdf" })], { applyAccept: false });
       expect(screen.getByText("PNG·JPG·GIF·WEBP 사진만 붙일 수 있습니다.")).toBeInTheDocument();
 
-      await userEvent.upload(input, [png("big.png", 5 * 1024 * 1024 + 1)]);
-      expect(screen.getByText("사진 한 장은 5MB까지 붙일 수 있습니다.")).toBeInTheDocument();
+      shrinkImage.mockResolvedValueOnce(null);
+      await userEvent.upload(input, [png("huge.png", 5 * 1024 * 1024 + 1)]);
+      expect(await screen.findByText("사진을 5MB 아래로 줄이지 못했습니다.")).toBeInTheDocument();
 
       await userEvent.upload(input, [png("a.png")]);
       await userEvent.click(screen.getByRole("button", { name: "a.png 빼기" }));
       expect(screen.queryByRole("button", { name: "a.png 빼기" })).not.toBeInTheDocument();
+    });
+
+    it("shrinks a photo over 5MB to JPEG before attaching it", async () => {
+      const shrunk = new File([new Uint8Array(100)], "big.jpg", { type: "image/jpeg" });
+      shrinkImage.mockResolvedValueOnce(shrunk);
+      renderIt();
+      const big = png("big.png", 5 * 1024 * 1024 + 1);
+      await userEvent.upload(screen.getByTestId("reply-image-input"), [big]);
+      expect(await screen.findByRole("button", { name: "big.jpg 빼기" })).toBeInTheDocument();
+      expect(shrinkImage).toHaveBeenCalledWith(big, 5 * 1024 * 1024);
+      expect(screen.queryByText(/5MB/)).not.toBeInTheDocument();
     });
 
     it("does not send when the upload fails and keeps the photo for a retry", async () => {

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { InboxScope } from "@/lib/inbox-scope";
 import { google, type gmail_v1 } from "googleapis";
-import { isAllowedImageType, MAX_IMAGE_BYTES, type AllowedImageType } from "@/lib/attachment-rules";
+import { isAllowedImageType, MAX_INBOUND_SOURCE_BYTES, type AllowedImageType } from "@/lib/attachment-rules";
 
 export interface InlineImage {
   /** HTML에서 `cid:<cid>`로 참조한다. */
@@ -515,7 +515,8 @@ function parseInboundMessage(message: gmail_v1.Schema$Message, senderAddress: st
 
 /**
  * 메일에 붙은 사진을 찾는다. 첨부로 붙였든 본문에 끼워 넣었든(inline) attachmentId가
- * 있는 이미지 파트를 모두 고른다. 버킷이 받지 않는 종류와 5MB를 넘는 것은 뺀다.
+ * 있는 이미지 파트를 모두 고른다. 버킷이 받지 않는 종류는 빼고, 5MB를 넘는 사진은 저장할 때
+ * 줄이므로 남기되 25MB(Gmail 메일 상한)를 넘는 것만 뺀다.
  */
 export function extractImageAttachments(payload: gmail_v1.Schema$MessagePart | undefined): InboundAttachmentRef[] {
   if (!payload) return [];
@@ -528,7 +529,7 @@ export function extractImageAttachments(payload: gmail_v1.Schema$MessagePart | u
     const mimeType = part.mimeType?.toLowerCase() ?? "";
     if (!attachmentId || !isAllowedImageType(mimeType)) continue;
     const size = part.body?.size ?? 0;
-    if (size > MAX_IMAGE_BYTES) continue;
+    if (size > MAX_INBOUND_SOURCE_BYTES) continue;
     found.push({ attachmentId, filename: part.filename ?? "", mimeType, size });
   }
   return found;
