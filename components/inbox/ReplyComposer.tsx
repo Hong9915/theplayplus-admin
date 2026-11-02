@@ -539,7 +539,7 @@ export default function ReplyComposer({
               type="button"
               onClick={handleSuggest}
               disabled={submitting}
-              className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg text-[13.5px] font-semibold text-ai ring-1 ring-inset ring-ai/35 hover:bg-ai-wash active:bg-ai/15 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ai/50"
+              className="h-8 px-3 shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 rounded-lg text-[13.5px] font-semibold text-ai ring-1 ring-inset ring-ai/35 hover:bg-ai-wash active:bg-ai/15 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ai/50"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />

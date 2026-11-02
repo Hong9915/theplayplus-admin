@@ -10,6 +10,11 @@
     font-feature-settings: "tnum" 1;
   }
 
+  /* 버튼 글자는 폭이 모자라도 두 줄로 접지 않는다("AI 답변 / 추천"). 접어야 하면 whitespace-normal로 덮는다. */
+  button {
+    white-space: nowrap;
+  }
+
   /* iPhone Safari는 16px보다 작은 입력칸에 초점이 가면 화면을 확대한다. 휴대폰 폭에서만 키운다. */
   @media (max-width: 767px) {
     input,

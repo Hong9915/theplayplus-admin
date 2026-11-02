@@ -45,7 +45,7 @@ export default function InboxConversation({
         <div className="md:hidden flex items-center justify-between -mx-2">
           <Link
             href={listHref}
-            className="flex items-center gap-0.5 h-9 pl-1 pr-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink-2 hover:bg-line-soft active:bg-line transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            className="flex items-center gap-0.5 whitespace-nowrap h-9 pl-1 pr-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink-2 hover:bg-line-soft active:bg-line transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="m15 6-6 6 6 6" />

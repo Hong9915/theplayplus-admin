@@ -45,7 +45,7 @@ function viewCount(key: ViewKey, counts: InquiryFacetCounts): number {
   }
 }
 
-const CHIP = "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] text-[13.5px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50";
+const CHIP = "inline-flex items-center gap-1.5 whitespace-nowrap h-8 px-2.5 rounded-[9px] text-[13.5px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50";
 
 const SELECT =
   "appearance-none h-[30px] pl-2.5 pr-7 rounded-lg bg-panel ring-1 ring-inset ring-line text-[13px] text-ink-2 select-chevron focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";

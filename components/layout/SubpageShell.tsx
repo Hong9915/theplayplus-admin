@@ -28,7 +28,7 @@ export default function SubpageShell({
         <RailMenuButton />
         <Link
           href={`/games/${gameId}/inquiries`}
-          className="flex items-center gap-0.5 h-[34px] pl-1.5 pr-2.5 rounded-[9px] text-[13.5px] font-medium text-ink-2 hover:bg-line-soft hover:text-ink active:bg-line transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          className="flex items-center gap-0.5 whitespace-nowrap h-[34px] pl-1.5 pr-2.5 rounded-[9px] text-[13.5px] font-medium text-ink-2 hover:bg-line-soft hover:text-ink active:bg-line transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m15 6-6 6 6 6" />
