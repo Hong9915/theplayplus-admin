@@ -14,7 +14,8 @@ import { buildInquiryDiscordMessage, sendDiscordMessage } from "@/lib/discord";
  * 문의 저장은 이미 끝난 뒤 호출되므로 여기서 실패해도 접수 데이터에는 영향이 없다.
  * 관리자 세션이 아니라 공유 비밀값(x-webhook-secret 헤더)으로 호출자를 검증한다.
  *
- * 알림 대상은 긴급(urgent) 게임 문의와 모든 서비스 문의뿐이다. 우선순위는
+ * Slack은 긴급(urgent) 게임 문의와 모든 서비스 문의만 받고, Discord는 우선순위와 상관없이
+ * 모든 새 문의를 받는다. 우선순위는
  * before insert 트리거(마이그레이션 0009)가 유형의 default_priority로 정해 두므로
  * 웹훅 payload의 record.priority가 이미 최종값이다. 서비스 문의(game_id null)는
  * 그 규칙이 없어 항상 'normal'로 들어오기 때문에 우선순위를 보지 않고 전부 보낸다.
@@ -57,14 +58,12 @@ export async function POST(request: Request) {
 
   const { record } = parsed.data;
   const scope = scopeForGameId(record.game_id ?? null);
-  if (scope.kind === "game" && record.priority !== "urgent") {
-    return NextResponse.json({ success: true, notified: false, skipped: "not_urgent" });
-  }
+  const slackWants = scope.kind === "service" || record.priority === "urgent";
 
-  const slackUrl = process.env.SLACK_WEBHOOK_URL;
+  const slackUrl = slackWants ? process.env.SLACK_WEBHOOK_URL : undefined;
   const discordUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!slackUrl && !discordUrl) {
-    return NextResponse.json({ success: true, notified: false });
+    return NextResponse.json(slackWants ? { success: true, notified: false } : { success: true, notified: false, skipped: "not_urgent" });
   }
 
   const supabase = getSupabaseServerClient();

@@ -187,9 +187,23 @@ describe("POST /api/notify/inquiry", () => {
       await expect(response.json()).resolves.toEqual({ success: false, error: "notify_failed", failed: ["slack", "discord"] });
     });
 
-    it("does not send non-urgent game inquiries to Discord either", async () => {
-      await POST(makeRequest({ type: "INSERT", table: "inquiries", record: { ...record, priority: "normal" } }));
-      expect(discordModule.sendDiscordMessage).not.toHaveBeenCalled();
+    it("sends non-urgent game inquiries to Discord only, not Slack", async () => {
+      const response = await POST(makeRequest({ type: "INSERT", table: "inquiries", record: { ...record, priority: "low" } }));
+
+      await expect(response.json()).resolves.toEqual({ success: true, notified: true });
+      expect(slackModule.sendSlackMessage).not.toHaveBeenCalled();
+      const [, message] = vi.mocked(discordModule.sendDiscordMessage).mock.calls[0];
+      expect(message.content).toBe("**[여신의 검] 새 문의**");
+      expect(message.embeds[0].color).toBe(0x8d9298);
+    });
+
+    it("reports a Discord-only failure as 502 for a non-urgent game inquiry", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.mocked(discordModule.sendDiscordMessage).mockRejectedValue(new Error("Discord down"));
+      const response = await POST(makeRequest({ type: "INSERT", table: "inquiries", record: { ...record, priority: "normal" } }));
+
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toEqual({ success: false, error: "notify_failed", failed: ["discord"] });
     });
   });
 
