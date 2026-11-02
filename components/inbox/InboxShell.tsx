@@ -69,9 +69,9 @@ export default function InboxShell({
   const selectedId = selected?.inquiry.id ?? null;
 
   return (
-    <div className="flex flex-col h-screen min-w-[1180px] flex-1">
+    <div className="flex flex-col h-dvh md:min-w-[1180px] flex-1 min-w-0">
       <InboxTopBar scope={scope} title={title} game={game} query={query} counts={counts} selectedId={selectedId} loungeUnread={loungeUnread} />
-      <div className="flex flex-1 min-h-0 mx-2.5 mb-2.5 rounded-2xl overflow-hidden ring-1 ring-line-soft">
+      <div className="flex flex-1 min-h-0 md:mx-2.5 md:mb-2.5 md:rounded-2xl overflow-hidden ring-1 ring-line-soft">
         <InboxList scope={scope} page={listPage} query={query} labels={labels} counts={counts} selectedId={selectedId} viewLabel={describeView(query)} now={Date.now()} />
         {selected ? (
           <>
@@ -79,6 +79,7 @@ export default function InboxShell({
               scope={scope}
               inquiry={selected.inquiry}
               labels={labels}
+              listHref={inquiryListHref(scope, query)}
               query={query}
               siblingIds={selected.siblingIds}
               entries={buildAccountTimeline(

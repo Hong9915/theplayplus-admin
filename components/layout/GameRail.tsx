@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -10,6 +10,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import GameForm from "@/components/games/GameForm";
 import Dialog from "@/components/ui/Dialog";
 import { SERVICE_RAIL_KEY, SERVICE_SCOPE_TITLE } from "@/lib/inbox-scope";
+import { OPEN_RAIL_EVENT } from "@/components/layout/RailMenuButton";
 
 // 주황 레일 위의 타일. 현재 위치는 테두리 대신 왼쪽 끝의 흰 막대와 밝아진 바닥으로 알린다.
 const TILE =
@@ -80,7 +81,30 @@ export default function GameRail({
   const [formDirty, setFormDirty] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
 
+  // 모바일에서는 레일이 숨어 있다가 ☰ 버튼(RailMenuButton)으로 왼쪽 서랍처럼 열린다.
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   const handleDirtyChange = useCallback((dirty: boolean) => setFormDirty(dirty), []);
+
+  useEffect(() => {
+    const open = () => setMobileOpen(true);
+    window.addEventListener(OPEN_RAIL_EVENT, open);
+    return () => window.removeEventListener(OPEN_RAIL_EVENT, open);
+  }, []);
+
+  // 게임을 고르면(화면이 바뀌면) 서랍을 닫는다.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileOpen]);
 
   function closeAddModal() {
     setShowAddModal(false);
@@ -105,7 +129,12 @@ export default function GameRail({
 
   return (
     <>
-      <aside className="w-[72px] shrink-0 h-screen sticky top-0 bg-rail flex flex-col items-center pt-4 pb-3 gap-1.5">
+      {mobileOpen && <div className="md:hidden fixed inset-0 z-40 bg-black/40" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
+      <aside
+        className={`${
+          mobileOpen ? "fixed inset-y-0 left-0 z-50 flex shadow-2xl" : "hidden"
+        } md:sticky md:top-0 md:z-auto md:flex md:shadow-none w-[72px] shrink-0 h-dvh bg-rail flex-col items-center pt-[max(1rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] gap-1.5`}
+      >
         <div className="mb-2 text-[14px] font-extrabold tracking-[-.04em] text-white select-none" title="THE PLAY+ Admin">
           theplay<span className="text-ink">+</span>
         </div>

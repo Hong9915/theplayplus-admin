@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import InboxConversation from "@/components/inbox/InboxConversation";
 import type { InquiryRow } from "@/lib/inquiries";
 import type { TimelineEntry } from "@/lib/timeline";
@@ -46,7 +46,7 @@ const entries: TimelineEntry[] = [{ kind: "inquiry", id: "inq-1", at: inquiry.cr
 
 function renderIt(overrides: Partial<InquiryRow> = {}) {
   return render(
-    <InboxConversation scope={gameScope("g1")} inquiry={{ ...inquiry, ...overrides }} labels={labels} query={DEFAULT_QUERY} siblingIds={["x", "inq-1", "y"]} entries={entries} />
+    <InboxConversation scope={gameScope("g1")} inquiry={{ ...inquiry, ...overrides }} labels={labels} listHref="/games/g1/inquiries" query={DEFAULT_QUERY} siblingIds={["x", "inq-1", "y"]} entries={entries} />
   );
 }
 
@@ -93,5 +93,14 @@ describe("InboxConversation", () => {
     expect(screen.queryByRole("button", { name: /회신 확인/ })).not.toBeInTheDocument();
     renderIt({ gmailThreadId: "t1" });
     expect(screen.getByRole("button", { name: /회신 확인/ })).toBeInTheDocument();
+  });
+  it("offers a way back to the list and a 정보 button that opens the detail overlay on phones", () => {
+    const listener = vi.fn();
+    window.addEventListener("inbox:open-detail", listener);
+    renderIt();
+    expect(screen.getByRole("link", { name: "목록" })).toHaveAttribute("href", "/games/g1/inquiries");
+    fireEvent.click(screen.getByRole("button", { name: "정보" }));
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener("inbox:open-detail", listener);
   });
 });

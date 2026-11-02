@@ -3,10 +3,16 @@ import "./globals.css";
 
 export const metadata = {
   title: "THE PLAY+ Admin",
+  // iPhone "홈 화면에 추가"로 열면 주소창 없이 앱처럼 뜬다. 안드로이드는 app/manifest.ts를 쓴다.
+  appleWebApp: { capable: true, title: "PLAY+ 관리자", statusBarStyle: "default" as const },
 };
 
 export const viewport = {
   themeColor: "#E9ECF1",
+  width: "device-width",
+  initialScale: 1,
+  // 노치·홈 막대 영역까지 그리고, 안쪽 여백은 env(safe-area-inset-*)로 준다.
+  viewportFit: "cover" as const,
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

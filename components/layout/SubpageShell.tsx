@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import RailMenuButton from "@/components/layout/RailMenuButton";
 
 /**
  * 문의함에서 들어가는 게임 하위 화면(라운지·답변 템플릿·웹사이트 게임 페이지)의 틀.
@@ -22,8 +23,9 @@ export default function SubpageShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col h-screen flex-1 min-w-0">
-      <header className="flex items-center gap-3 h-14 shrink-0 pl-3 pr-4">
+    <div className="flex flex-col h-dvh flex-1 min-w-0">
+      <header className="flex items-center gap-2 md:gap-3 h-14 shrink-0 pl-3 pr-3 md:pr-4">
+        <RailMenuButton />
         <Link
           href={`/games/${gameId}/inquiries`}
           className="flex items-center gap-0.5 h-[34px] pl-1.5 pr-2.5 rounded-[9px] text-[13.5px] font-medium text-ink-2 hover:bg-line-soft hover:text-ink active:bg-line transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
@@ -33,19 +35,19 @@ export default function SubpageShell({
           </svg>
           문의함
         </Link>
-        <span className="w-px h-5 bg-line" aria-hidden="true" />
+        <span className="hidden md:block w-px h-5 bg-line" aria-hidden="true" />
         <div className="flex items-center gap-2 min-w-0 text-[17px] tracking-[-.02em]">
-          <span className="font-semibold text-muted truncate">{gameName}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted shrink-0" aria-hidden="true">
+          <span className="hidden md:inline font-semibold text-muted truncate">{gameName}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="hidden md:block text-muted shrink-0" aria-hidden="true">
             <path d="m9 6 6 6-6 6" />
           </svg>
-          <h1 className="font-bold whitespace-nowrap">{title}</h1>
+          <h1 className="font-bold truncate md:whitespace-nowrap">{title}</h1>
           {badge}
         </div>
         {actions && <div className="ml-auto flex items-center gap-1.5 shrink-0">{actions}</div>}
       </header>
       {/* relative: 파일 선택 input 같은 sr-only(absolute) 요소가 main을 기준으로 잡히면, 포커스될 때 main이 통째로 스크롤돼 화면이 비어 버린다. */}
-      <div className="relative flex-1 min-h-0 mx-2.5 mb-2.5 rounded-2xl bg-well ring-1 ring-line-soft overflow-y-auto">{children}</div>
+      <div className="relative flex-1 min-h-0 md:mx-2.5 md:mb-2.5 md:rounded-2xl bg-well ring-1 ring-line-soft overflow-y-auto">{children}</div>
     </div>
   );
 }

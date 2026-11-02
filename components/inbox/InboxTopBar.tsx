@@ -6,6 +6,7 @@ import type { InquiryListQuery } from "@/lib/inquiry-filters";
 import type { InboxScope } from "@/lib/inbox-scope";
 import InboxSearch from "@/components/inbox/InboxSearch";
 import GameSettingsDrawer from "@/components/games/GameSettingsDrawer";
+import RailMenuButton from "@/components/layout/RailMenuButton";
 
 const TLINK =
   "flex items-center gap-1.5 h-[34px] px-2.5 rounded-[9px] text-[13.5px] font-medium text-ink-2 whitespace-nowrap hover:bg-line-soft hover:text-ink active:bg-line transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50";
@@ -41,8 +42,9 @@ export default function InboxTopBar({
   loungeUnread?: number | null;
 }) {
   return (
-    <header className="flex items-center gap-3.5 h-14 shrink-0 pl-5 pr-4" aria-label="문의함">
-      <div className="flex items-center gap-2.5 min-w-0">
+    <header className="flex flex-wrap md:flex-nowrap items-center gap-x-2 md:gap-x-3.5 gap-y-2 md:h-14 shrink-0 pl-3 md:pl-5 pr-3 md:pr-4 py-2 md:py-0" aria-label="문의함">
+      <RailMenuButton />
+      <div className="flex items-center gap-2.5 min-w-0 flex-1 md:flex-none">
         <h1 className="text-[17px] font-bold tracking-[-.02em] truncate">{title}</h1>
         {game && (
           <span
@@ -54,10 +56,10 @@ export default function InboxTopBar({
             {game.status === "active" ? "서비스중" : "종료"}
           </span>
         )}
-        <span className="text-[13px] text-muted whitespace-nowrap tabular-nums">{counts ? `문의함 · 전체 ${counts.total}건` : "문의함"}</span>
+        <span className="hidden md:inline text-[13px] text-muted whitespace-nowrap tabular-nums">{counts ? `문의함 · 전체 ${counts.total}건` : "문의함"}</span>
       </div>
 
-      <div className="ml-auto w-[320px] shrink">
+      <div className="order-last w-full md:order-none md:ml-auto md:w-[320px] md:shrink">
         <InboxSearch scope={scope} query={query} selectedId={selectedId} />
       </div>
 
@@ -68,7 +70,7 @@ export default function InboxTopBar({
               <Icon>
                 <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
               </Icon>
-              라운지 새 글
+              <span className="max-md:sr-only">라운지 새 글</span>
               {loungeUnread !== null && (
                 <span
                   className={`min-w-[20px] h-[18px] px-1.5 rounded-full text-[11.5px] font-bold leading-[18px] text-center tabular-nums ${

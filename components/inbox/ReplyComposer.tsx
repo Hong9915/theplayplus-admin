@@ -431,7 +431,7 @@ export default function ReplyComposer({
     : "bg-memo-ink text-white hover:bg-memo-ink/90 active:bg-memo-ink/80 focus-visible:ring-memo-line";
 
   return (
-    <div className="px-[18px] pt-3 pb-3.5 border-t border-line-soft bg-panel">
+    <div className="px-2.5 md:px-[18px] pt-2.5 md:pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-3.5 border-t border-line-soft bg-panel">
       <form
         ref={formRef}
         onSubmit={handleSubmit}
@@ -544,7 +544,10 @@ export default function ReplyComposer({
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
               </svg>
-              AI 답변 추천
+              {/* 휴대폰 폭에서는 "AI 추천"으로 줄여 보이고, 이름은 그대로 "AI 답변 추천"이다. */}
+              <span>
+                AI<span className="max-md:sr-only"> 답변</span> 추천
+              </span>
             </button>
           )}
           {writing && (
@@ -561,12 +564,12 @@ export default function ReplyComposer({
             </span>
           )}
 
-          {isReply && <span className="ml-auto text-[12.5px] text-muted truncate min-w-0">받는 사람 {replyEmail}</span>}
+          {isReply && <span className="ml-auto text-[12.5px] text-muted truncate min-w-0 max-md:sr-only">받는 사람 {replyEmail}</span>}
           <button
             type="submit"
             disabled={submitting || writing}
             title="⌘/Ctrl+Enter"
-            className={`${isReply ? "" : "ml-auto"} shrink-0 h-8 px-4 rounded-lg text-[13.5px] font-semibold disabled:opacity-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-panel ${sendClass}`}
+            className={`${isReply ? "max-md:ml-auto" : "ml-auto"} shrink-0 h-8 px-4 rounded-lg text-[13.5px] font-semibold disabled:opacity-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-panel ${sendClass}`}
           >
             {isReply ? (submitting ? "발송 중…" : "발송") : submitting ? "저장 중…" : "메모 남기기"}
           </button>

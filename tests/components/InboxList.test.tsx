@@ -202,10 +202,11 @@ describe("InboxList", () => {
   });
 
   describe("collapse", () => {
-    it("hides the list and shows an expand button when collapsed", async () => {
+    // 접기는 데스크톱 전용이라 목록은 남기고 md 이상에서만 숨긴다(모바일은 목록이 한 화면 전체).
+    it("hides the list on desktop and shows an expand button when collapsed", async () => {
       renderList(makePage([makeInquiry({})], 37));
       await userEvent.click(screen.getByRole("button", { name: "목록 접기" }));
-      expect(screen.queryByText("37건")).not.toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "문의 목록" })).toHaveClass("md:hidden");
       expect(screen.getByRole("button", { name: "목록 펼치기" })).toBeInTheDocument();
     });
 
@@ -219,7 +220,19 @@ describe("InboxList", () => {
     it("remembers the collapsed state across remounts", () => {
       window.localStorage.setItem("inbox-list-collapsed", "true");
       renderList(makePage([makeInquiry({})], 37));
-      expect(screen.queryByText("37건")).not.toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "문의 목록" })).toHaveClass("md:hidden");
+      expect(screen.getByRole("button", { name: "목록 펼치기" })).toBeInTheDocument();
+    });
+  });
+
+  describe("mobile", () => {
+    it("shows the list on phones only while no inquiry is open", () => {
+      const { unmount } = renderList(makePage([makeInquiry({})]));
+      expect(screen.getByRole("region", { name: "문의 목록" })).toHaveClass("flex");
+      expect(screen.getByRole("region", { name: "문의 목록" })).not.toHaveClass("hidden");
+      unmount();
+      renderList(makePage([makeInquiry({})]), DEFAULT_QUERY, "some-id");
+      expect(screen.getByRole("region", { name: "문의 목록" })).toHaveClass("hidden", "md:flex");
     });
   });
 

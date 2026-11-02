@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import type { InquiryRow } from "@/lib/inquiries";
 import type { EventRow } from "@/lib/events";
@@ -13,6 +13,7 @@ import StatusSelect from "@/components/inquiries/StatusSelect";
 import PrioritySelect from "@/components/inquiries/PrioritySelect";
 import AccountHistoryPanel from "@/components/inquiries/AccountHistoryPanel";
 import DeleteInquiryButton from "@/components/inquiries/DeleteInquiryButton";
+import { OPEN_DETAIL_EVENT } from "@/components/inbox/MobileDetailButton";
 
 type Tab = "detail" | "history";
 const TABS: readonly Tab[] = ["detail", "history"];
@@ -63,8 +64,21 @@ export default function InboxDetailPanel({
   const searchParams = useSearchParams();
   const [collapsed, setCollapsed] = usePersistedBoolean(COLLAPSE_KEY, false);
   const [tab, setTab] = useState<Tab>(history !== null && searchParams?.get(TAB_PARAM) === "history" ? "history" : "detail");
+  // 모바일에서는 상세가 숨어 있다가 대화 헤더의 "정보" 버튼으로 화면을 덮으며 열린다.
+  const [mobileOpen, setMobileOpen] = useState(false);
   const rows = inquiryMetaRows(inquiry);
   const showHistory = history !== null && tab === "history";
+
+  useEffect(() => {
+    const open = () => setMobileOpen(true);
+    window.addEventListener(OPEN_DETAIL_EVENT, open);
+    return () => window.removeEventListener(OPEN_DETAIL_EVENT, open);
+  }, []);
+
+  // 다른 문의로 옮기면 덮개를 닫는다.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [inquiry.id]);
 
   function changeTab(next: Tab) {
     setTab(next);
@@ -133,61 +147,72 @@ export default function InboxDetailPanel({
     </>
   );
 
-  if (collapsed) {
-    return (
-      <aside className="w-12 shrink-0 h-full bg-well flex flex-col items-center pt-3" aria-label="문의 상세 (접힘)">
-        <button type="button" onClick={() => setCollapsed(false)} aria-label="상세 펼치기" title="상세 펼치기" className={ICON_BTN}>
-          <PanelIcon />
-        </button>
-      </aside>
-    );
-  }
+  // 모바일은 열렸을 때만 화면 전체를 덮고, 접기는 데스크톱 전용이다.
+  const mobileClass = mobileOpen ? "fixed inset-0 z-40 flex pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" : "hidden";
+  const desktopClass = collapsed ? "md:hidden" : "md:static md:z-auto md:flex md:p-0";
 
   return (
-    <aside className="w-[304px] shrink-0 h-full bg-well flex flex-col overflow-hidden" aria-label="문의 상세">
-      <div className="flex items-end gap-0.5 h-[52px] px-3 border-b border-line-soft shrink-0">
-        {history !== null && (
-          <div
-            className="flex items-center gap-1 flex-1 min-w-0"
-            role="tablist"
-            aria-label="상세 보기"
-            onKeyDown={(event) => handleTabListKeyDown(event, TABS, tab, TAB_PREFIX, changeTab)}
+    <>
+      {collapsed && (
+        <aside className="hidden md:flex w-12 shrink-0 h-full bg-well flex-col items-center pt-3" aria-label="문의 상세 (접힘)">
+          <button type="button" onClick={() => setCollapsed(false)} aria-label="상세 펼치기" title="상세 펼치기" className={ICON_BTN}>
+            <PanelIcon />
+          </button>
+        </aside>
+      )}
+      <aside className={`${mobileClass} ${desktopClass} w-full md:w-[304px] shrink-0 h-full bg-well flex-col overflow-hidden`} aria-label="문의 상세">
+        <div className="flex items-end gap-0.5 h-[52px] px-3 border-b border-line-soft shrink-0">
+          {history !== null && (
+            <div
+              className="flex items-center gap-1 flex-1 min-w-0"
+              role="tablist"
+              aria-label="상세 보기"
+              onKeyDown={(event) => handleTabListKeyDown(event, TABS, tab, TAB_PREFIX, changeTab)}
+            >
+              <button {...tabProps(TAB_PREFIX, "detail", tab === "detail")} onClick={() => changeTab("detail")} className={tabClass(tab === "detail")}>
+                상세
+              </button>
+              <button {...tabProps(TAB_PREFIX, "history", tab === "history")} onClick={() => changeTab("history")} className={tabClass(tab === "history")}>
+                계정 이력
+                <span className="text-muted text-[12.5px] font-semibold tabular-nums">
+                  {history.length}
+                </span>
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            aria-label="상세 접기"
+            title="상세 접기"
+            className={`ml-auto mb-[11px] ${ICON_BTN} max-md:hidden`}
           >
-            <button {...tabProps(TAB_PREFIX, "detail", tab === "detail")} onClick={() => changeTab("detail")} className={tabClass(tab === "detail")}>
-              상세
-            </button>
-            <button {...tabProps(TAB_PREFIX, "history", tab === "history")} onClick={() => changeTab("history")} className={tabClass(tab === "history")}>
-              계정 이력
-              <span className="text-muted text-[12.5px] font-semibold tabular-nums">
-                {history.length}
-              </span>
-            </button>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => setCollapsed(true)}
-          aria-label="상세 접기"
-          title="상세 접기"
-          className={`ml-auto mb-[11px] ${ICON_BTN}`}
-        >
-          <PanelIcon />
-        </button>
-      </div>
+            <PanelIcon />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="상세 닫기"
+            className="md:hidden ml-auto mb-[7px] h-9 px-3 rounded-[9px] text-[13.5px] font-semibold text-ink-2 hover:bg-line-soft active:bg-line focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          >
+            닫기
+          </button>
+        </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {history === null ? (
-          detail
-        ) : !showHistory ? (
-          <div {...tabPanelProps(TAB_PREFIX, "detail")}>{detail}</div>
-        ) : (
-          <div {...tabPanelProps(TAB_PREFIX, "history")} className="px-4 py-3.5">
-            {inquiry.gameId !== null && (
-              <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} currentTypeKey={inquiry.typeKey} gameId={inquiry.gameId} frameless />
-            )}
-          </div>
-        )}
-      </div>
-    </aside>
+        <div className="flex-1 overflow-y-auto">
+          {history === null ? (
+            detail
+          ) : !showHistory ? (
+            <div {...tabPanelProps(TAB_PREFIX, "detail")}>{detail}</div>
+          ) : (
+            <div {...tabPanelProps(TAB_PREFIX, "history")} className="px-4 py-3.5">
+              {inquiry.gameId !== null && (
+                <AccountHistoryPanel history={history} gameAccount={inquiry.gameAccount} currentTypeKey={inquiry.typeKey} gameId={inquiry.gameId} frameless />
+              )}
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }

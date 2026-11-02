@@ -3,12 +3,17 @@ import { POST } from "@/app/api/notify/inquiry/route";
 import * as supabaseModule from "@/lib/supabase";
 import * as categoriesModule from "@/lib/categories";
 import * as slackModule from "@/lib/slack";
+import * as discordModule from "@/lib/discord";
 
 vi.mock("@/lib/supabase", () => ({ getSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/categories", () => ({ listCategoryLabelsForScope: vi.fn() }));
 vi.mock("@/lib/slack", async () => {
   const actual = await vi.importActual<typeof import("@/lib/slack")>("@/lib/slack");
   return { ...actual, sendSlackMessage: vi.fn() };
+});
+vi.mock("@/lib/discord", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/discord")>("@/lib/discord");
+  return { ...actual, sendDiscordMessage: vi.fn() };
 });
 
 const record = {
@@ -63,6 +68,7 @@ describe("POST /api/notify/inquiry", () => {
       typeOrder: ["payment_error"],
     });
     vi.mocked(slackModule.sendSlackMessage).mockResolvedValue();
+    vi.mocked(discordModule.sendDiscordMessage).mockResolvedValue();
   });
 
   afterEach(() => {
@@ -133,7 +139,58 @@ describe("POST /api/notify/inquiry", () => {
     const response = await POST(makeRequest(insertPayload));
 
     expect(response.status).toBe(502);
-    await expect(response.json()).resolves.toEqual({ success: false, error: "slack_failed" });
+    await expect(response.json()).resolves.toEqual({ success: false, error: "notify_failed", failed: ["slack"] });
+  });
+
+  describe("with a Discord webhook", () => {
+    beforeEach(() => {
+      vi.stubEnv("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/x");
+    });
+
+    it("sends the same inquiry to Slack and Discord", async () => {
+      const response = await POST(makeRequest(insertPayload));
+
+      await expect(response.json()).resolves.toEqual({ success: true, notified: true });
+      expect(slackModule.sendSlackMessage).toHaveBeenCalledTimes(1);
+      const [url, message] = vi.mocked(discordModule.sendDiscordMessage).mock.calls[0];
+      expect(url).toBe("https://discord.com/api/webhooks/1/x");
+      expect(message.content).toBe("🚨 **[여신의 검] 긴급 문의**");
+      expect(message.embeds[0].url).toBe("https://admin.theplayplus.com/games/game-1/inquiries/inq-1");
+    });
+
+    it("sends to Discord alone when Slack is not configured", async () => {
+      vi.stubEnv("SLACK_WEBHOOK_URL", "");
+      const response = await POST(makeRequest(insertPayload));
+
+      await expect(response.json()).resolves.toEqual({ success: true, notified: true });
+      expect(slackModule.sendSlackMessage).not.toHaveBeenCalled();
+      expect(discordModule.sendDiscordMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("still reports success when only one channel fails, naming the failed one", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.mocked(slackModule.sendSlackMessage).mockRejectedValue(new Error("Slack down"));
+      const response = await POST(makeRequest(insertPayload));
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ success: true, notified: true, failed: ["slack"] });
+      expect(discordModule.sendDiscordMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns 502 when both channels fail", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.mocked(slackModule.sendSlackMessage).mockRejectedValue(new Error("Slack down"));
+      vi.mocked(discordModule.sendDiscordMessage).mockRejectedValue(new Error("Discord down"));
+      const response = await POST(makeRequest(insertPayload));
+
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toEqual({ success: false, error: "notify_failed", failed: ["slack", "discord"] });
+    });
+
+    it("does not send non-urgent game inquiries to Discord either", async () => {
+      await POST(makeRequest({ type: "INSERT", table: "inquiries", record: { ...record, priority: "normal" } }));
+      expect(discordModule.sendDiscordMessage).not.toHaveBeenCalled();
+    });
   });
 
   it("notifies service inquiries (game_id null) with a service label and a /service link", async () => {

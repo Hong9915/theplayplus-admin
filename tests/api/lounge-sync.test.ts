@@ -3,10 +3,12 @@ import { POST, maxDuration } from "@/app/api/lounge/sync/route";
 import * as supabaseModule from "@/lib/supabase";
 import * as syncModule from "@/lib/lounge-sync";
 import * as slackModule from "@/lib/slack";
+import * as discordModule from "@/lib/discord";
 
 vi.mock("@/lib/supabase", () => ({ getSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/lounge-sync", () => ({ syncAllLounges: vi.fn() }));
 vi.mock("@/lib/slack", () => ({ buildLoungeSlackMessage: vi.fn(() => ({ text: "t", attachments: [] })), sendSlackMessage: vi.fn() }));
+vi.mock("@/lib/discord", () => ({ buildLoungeDiscordMessage: vi.fn(() => ({ content: "t", embeds: [], allowed_mentions: { parse: [] } })), sendDiscordMessage: vi.fn() }));
 
 const item = { id: "i1", gameId: "g1", kind: "post", naverId: 100, feedId: 100, title: "글", body: "", boardName: null, nickname: null, isUser: true, url: "u", postedAt: "2026-09-21T09:57:00.000Z", readAt: null };
 
@@ -35,6 +37,8 @@ describe("POST /api/lounge/sync", () => {
     vi.mocked(syncModule.syncAllLounges).mockReset();
     vi.mocked(slackModule.sendSlackMessage).mockReset().mockResolvedValue();
     vi.mocked(slackModule.buildLoungeSlackMessage).mockClear();
+    vi.mocked(discordModule.sendDiscordMessage).mockReset().mockResolvedValue();
+    vi.mocked(discordModule.buildLoungeDiscordMessage).mockClear();
   });
   afterEach(() => vi.unstubAllEnvs());
 
@@ -108,6 +112,32 @@ describe("POST /api/lounge/sync", () => {
     expect(response.status).toBe(200);
     expect((await response.json()).notified).toBe(0);
     vi.restoreAllMocks();
+  });
+
+  it("sends each game's new items to Discord too when its webhook is set", async () => {
+    vi.stubEnv("DISCORD_WEBHOOK_URL", "https://discord.example/x");
+    mockSync([{ gameId: "g1", gameName: "갓생 토크", fetched: 8, added: [item as never] }]);
+    const json = await (await POST(makeRequest())).json();
+    expect(json.notified).toBe(1);
+    expect(discordModule.buildLoungeDiscordMessage).toHaveBeenCalledWith({ gameName: "갓생 토크", items: [item], listUrl: "https://admin.example/games/g1/lounge" });
+    expect(discordModule.sendDiscordMessage).toHaveBeenCalledWith("https://discord.example/x", expect.anything());
+    expect(slackModule.sendSlackMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts a game as notified when Discord succeeds even though Slack failed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubEnv("DISCORD_WEBHOOK_URL", "https://discord.example/x");
+    vi.mocked(slackModule.sendSlackMessage).mockRejectedValueOnce(new Error("slack down"));
+    mockSync([{ gameId: "g1", gameName: "갓생 토크", fetched: 8, added: [item as never] }]);
+    const json = await (await POST(makeRequest())).json();
+    expect(json.notified).toBe(1);
+    vi.restoreAllMocks();
+  });
+
+  it("does not call Discord when its webhook url is missing", async () => {
+    mockSync([{ gameId: "g1", gameName: "갓생 토크", fetched: 8, added: [item as never] }]);
+    await POST(makeRequest());
+    expect(discordModule.sendDiscordMessage).not.toHaveBeenCalled();
   });
 
   it("returns 502 when every lounge failed", async () => {

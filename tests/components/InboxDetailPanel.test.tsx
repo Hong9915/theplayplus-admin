@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import InboxDetailPanel from "@/components/inbox/InboxDetailPanel";
 import type { InquiryRow } from "@/lib/inquiries";
@@ -107,10 +107,11 @@ describe("InboxDetailPanel", () => {
   });
 
   describe("collapse", () => {
-    it("hides the panel content and shows an expand button when collapsed", async () => {
+    // 접기는 데스크톱 전용이라 내용은 남기고 md 이상에서만 숨긴다(모바일 덮개는 접힘과 무관).
+    it("hides the panel content on desktop and shows an expand button when collapsed", async () => {
       render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
       await userEvent.click(screen.getByRole("button", { name: "상세 접기" }));
-      expect(screen.queryByText("접수 정보")).not.toBeInTheDocument();
+      expect(screen.getByRole("complementary", { name: "문의 상세" })).toHaveClass("md:hidden");
       expect(screen.getByRole("button", { name: "상세 펼치기" })).toBeInTheDocument();
     });
 
@@ -124,7 +125,23 @@ describe("InboxDetailPanel", () => {
     it("remembers the collapsed state across remounts", () => {
       window.localStorage.setItem("inbox-detail-collapsed", "true");
       render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
-      expect(screen.queryByText("접수 정보")).not.toBeInTheDocument();
+      expect(screen.getByRole("complementary", { name: "문의 상세" })).toHaveClass("md:hidden");
+      expect(screen.getByRole("button", { name: "상세 펼치기" })).toBeInTheDocument();
+    });
+  });
+
+  describe("mobile overlay", () => {
+    it("stays hidden on phones until the 정보 button opens it, and 닫기 hides it again", async () => {
+      render(<InboxDetailPanel inquiry={inquiry} events={events} history={history} afterDeleteHref="/games/game-1/inquiries" />);
+      const panel = screen.getByRole("complementary", { name: "문의 상세" });
+      expect(panel).toHaveClass("hidden");
+      act(() => {
+        window.dispatchEvent(new Event("inbox:open-detail"));
+      });
+      expect(panel).toHaveClass("fixed");
+      expect(panel).not.toHaveClass("hidden");
+      await userEvent.click(screen.getByRole("button", { name: "상세 닫기" }));
+      expect(panel).toHaveClass("hidden");
     });
   });
 

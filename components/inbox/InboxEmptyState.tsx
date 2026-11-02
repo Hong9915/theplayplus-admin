@@ -1,7 +1,7 @@
 /** 문의를 고르지 않았을 때 대화·상세 자리에 그리는 빈 상태. */
 export default function InboxEmptyState() {
   return (
-    <section className="flex-1 min-w-0 h-full bg-panel shadow-paper flex items-center justify-center" aria-label="대화">
+    <section className="hidden md:flex flex-1 min-w-0 h-full bg-panel shadow-paper items-center justify-center" aria-label="대화">
       <div className="text-center">
         <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-well flex items-center justify-center text-muted">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

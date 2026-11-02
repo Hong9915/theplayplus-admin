@@ -9,6 +9,15 @@
     word-break: keep-all;
     font-feature-settings: "tnum" 1;
   }
+
+  /* iPhone Safari는 16px보다 작은 입력칸에 초점이 가면 화면을 확대한다. 휴대폰 폭에서만 키운다. */
+  @media (max-width: 767px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
 }
 
 @layer components {
