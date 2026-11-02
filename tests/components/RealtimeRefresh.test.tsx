@@ -63,6 +63,7 @@ describe("RealtimeRefresh", () => {
   });
 
   it("defers the refresh while the tab is hidden and runs it when it becomes visible", () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     render(<RealtimeRefresh />);
     setVisibility("hidden");
     fireChange();
@@ -72,6 +73,27 @@ describe("RealtimeRefresh", () => {
     setVisibility("visible");
     document.dispatchEvent(new Event("visibilitychange"));
     expect(refreshMock).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches only the notification count while hidden and announces it for the tab title", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, count: 7 })));
+    vi.stubGlobal("fetch", fetchMock);
+    const listener = vi.fn();
+    window.addEventListener("admin:notification-count", listener);
+    try {
+      render(<RealtimeRefresh />);
+      setVisibility("hidden");
+      fireChange();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(fetchMock).toHaveBeenCalledWith("/api/notifications/count", { cache: "no-store" });
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect((listener.mock.calls[0][0] as CustomEvent<number>).detail).toBe(7);
+      expect(refreshMock).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("admin:notification-count", listener);
+      vi.unstubAllGlobals();
+    }
   });
 
   it("does nothing on visibilitychange when no change arrived while hidden", () => {
