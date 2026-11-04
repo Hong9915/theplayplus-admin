@@ -28,6 +28,27 @@ describe("GameSettingsDrawer", () => {
     expect(screen.getByRole("button", { name: "네이버 라운지 변경" })).toBeInTheDocument();
   });
 
+  it("links to the inquiry type settings", async () => {
+    render(<GameSettingsDrawer game={game} inquiryCount={0} />);
+    await userEvent.click(screen.getByRole("button", { name: "게임 설정" }));
+    expect(screen.getByRole("link", { name: /문의 유형/ })).toHaveAttribute("href", "/games/g1/categories");
+  });
+
+  it("saves the subtitle, and an empty one clears it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ success: true, subtitle: null }) });
+    global.fetch = fetchMock as never;
+    render(<GameSettingsDrawer game={{ ...game, subtitle: "방치형 RPG" }} inquiryCount={0} />);
+    await userEvent.click(screen.getByRole("button", { name: "게임 설정" }));
+    await userEvent.click(screen.getByRole("button", { name: "부제" }));
+    const dialog = screen.getByRole("dialog", { name: "부제" });
+    const input = within(dialog).getByRole("textbox", { name: /^부제/ });
+    expect(input).toHaveValue("방치형 RPG");
+    await userEvent.clear(input);
+    await userEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/games/g1", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ subtitle: "" }) }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "부제" })).not.toBeInTheDocument());
+  });
+
   it("asks before deleting, and Escape closes only the confirmation", async () => {
     render(<GameSettingsDrawer game={game} inquiryCount={3} />);
     await userEvent.click(screen.getByRole("button", { name: "게임 설정" }));

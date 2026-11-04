@@ -7,6 +7,7 @@ import Dialog from "@/components/ui/Dialog";
 import SettingsIcon from "@/components/ui/SettingsIcon";
 import LoungeConnectDialog from "@/components/inbox/LoungeConnectDialog";
 import DeleteGameButton from "@/components/games/DeleteGameButton";
+import GameSubtitleDialog from "@/components/games/GameSubtitleDialog";
 
 type Phase = "closed" | "open" | "closing";
 
@@ -25,7 +26,7 @@ function SettingsLink({ href, title, hint, icon }: { href: string; title: string
 }
 
 /**
- * 매일 쓰지는 않는 게임 설정(템플릿·웹사이트 페이지·라운지 연결)과 되돌릴 수 없는 삭제를
+ * 매일 쓰지는 않는 게임 설정(부제·템플릿·문의 유형·웹사이트 페이지·라운지 연결)과 되돌릴 수 없는 삭제를
  * 문의함 화면에서 한 단계 안으로 넣는다. 오른쪽에서 들어와 같은 길로 나간다.
  */
 export default function GameSettingsDrawer({ game, inquiryCount }: { game: GameRow; inquiryCount: number }) {
@@ -81,11 +82,18 @@ export default function GameSettingsDrawer({ game, inquiryCount }: { game: GameR
           </header>
 
           <div className="flex-1 flex flex-col gap-1 px-3.5 py-3">
+            <GameSubtitleDialog gameId={game.id} subtitle={game.subtitle ?? null} />
             <SettingsLink
               href={`/games/${game.id}/templates`}
               title="답변 템플릿"
               hint="접수 안내 자동 발송과 답변 본보기"
               icon={<path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" />}
+            />
+            <SettingsLink
+              href={`/games/${game.id}/categories`}
+              title="문의 유형"
+              hint="접수 폼의 종류·유형과 유형별로 받는 항목"
+              icon={<path d="M4 6h16M4 12h10M4 18h7M17 15l2 2 3-4" />}
             />
             <SettingsLink
               href={`/games/${game.id}/site`}

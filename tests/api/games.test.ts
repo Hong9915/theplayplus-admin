@@ -135,11 +135,24 @@ describe("POST /api/games", () => {
         status: "active",
         logoPath: null,
         ownerName: "홍길동",
+        subtitle: null,
         createdAt: "2026-01-01T00:00:00.000Z",
         naverLoungeId: null,
       },
     });
     expect(categoriesModule.createDefaultCategoriesForGame).toHaveBeenCalledWith(expect.anything(), "game-1");
+  });
+
+  it("saves a trimmed subtitle, and an empty one as null", async () => {
+    const client = mockSupabaseSuccess();
+    const response = await POST(new Request("http://localhost/api/games", { method: "POST", body: buildFormData({ subtitle: "  방치형 판타지 수집 RPG " }) }));
+    expect((await response.json()).game.subtitle).toBe("방치형 판타지 수집 RPG");
+    const insert = vi.mocked(client.from).mock.results[0].value.insert;
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ subtitle: "방치형 판타지 수집 RPG" }));
+
+    const empty = mockSupabaseSuccess();
+    await POST(new Request("http://localhost/api/games", { method: "POST", body: buildFormData({ subtitle: "   " }) }));
+    expect(vi.mocked(empty.from).mock.results[0].value.insert).toHaveBeenCalledWith(expect.objectContaining({ subtitle: null }));
   });
 
   it("connects the lounge after creating the game when loungeUrl is given", async () => {

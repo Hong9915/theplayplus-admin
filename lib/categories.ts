@@ -10,6 +10,8 @@ export interface GameRow {
   createdAt: string;
   /** 연결된 네이버 게임 라운지 ID. 없으면 라운지 알림을 쓰지 않는 게임. */
   naverLoungeId?: string | null;
+  /** 고객센터 게임 선택 타일의 부제(마이그레이션 0037). 없으면 접수 폼이 이름의 콜론(:) 뒤를 쓴다. */
+  subtitle?: string | null;
 }
 
 export type InquiryTypePriority = "urgent" | "high" | "normal" | "low";
@@ -171,6 +173,7 @@ function mapGameRow(row: {
   owner_name: string | null;
   created_at: string;
   naver_lounge_id?: string | null;
+  subtitle?: string | null;
 }): GameRow {
   return {
     id: row.id,
@@ -180,6 +183,8 @@ function mapGameRow(row: {
     ownerName: row.owner_name,
     createdAt: row.created_at,
     naverLoungeId: row.naver_lounge_id ?? null,
+    // listGames는 "*"로 읽으므로 0037 실행 전에는 열이 없어 undefined다.
+    subtitle: typeof row.subtitle === "string" && row.subtitle.trim() !== "" ? row.subtitle : null,
   };
 }
 

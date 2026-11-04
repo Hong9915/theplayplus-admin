@@ -23,6 +23,7 @@ export async function POST(request: Request) {
     name: formData.get("name"),
     status: formData.get("status") || undefined,
     ownerName: formData.get("ownerName") ?? "",
+    subtitle: formData.get("subtitle") ?? "",
     loungeUrl: formData.get("loungeUrl") ?? "",
   });
 
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
       name: input.name,
       status: input.status,
       owner_name: input.ownerName || null,
+      subtitle: input.subtitle || null,
     })
     .select("id, created_at")
     .single();
@@ -133,6 +135,7 @@ export async function POST(request: Request) {
         status: input.status,
         logoPath,
         ownerName: input.ownerName || null,
+        subtitle: input.subtitle || null,
         createdAt: inserted.created_at,
         naverLoungeId,
       },

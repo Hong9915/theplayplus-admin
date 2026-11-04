@@ -20,6 +20,8 @@ export function formatBytes(bytes: number): string {
   return megabyteFormat.format(bytes / (1024 * 1024));
 }
 
+export const SUBTITLE_HELP = "고객센터 게임 선택 타일에서 이름 아래 작게 나옵니다. 비우면 이름의 콜론(:) 뒤를 부제로 씁니다.";
+
 const INPUT =
   "bg-panel border border-line rounded px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent transition-colors";
 
@@ -34,6 +36,7 @@ export default function GameForm({
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"active" | "ended">("active");
   const [ownerName, setOwnerName] = useState("");
+  const [subtitle, setSubtitle] = useState("");
   const [loungeUrl, setLoungeUrl] = useState("");
   // 웹사이트 게임 페이지(선택). 원스토어 주소가 있으면 나머지 글·이미지는 서버가 원스토어에서 채운다.
   const [onestoreUrl, setOnestoreUrl] = useState("");
@@ -53,7 +56,7 @@ export default function GameForm({
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const dirty =
-    name !== "" || ownerName !== "" || loungeUrl !== "" || logo !== null || onestoreUrl !== "" || googlePlayUrl !== "" || appStoreUrl !== "" || slug !== "" || published;
+    name !== "" || subtitle !== "" || ownerName !== "" || loungeUrl !== "" || logo !== null || onestoreUrl !== "" || googlePlayUrl !== "" || appStoreUrl !== "" || slug !== "" || published;
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -114,6 +117,7 @@ export default function GameForm({
     formData.set("name", name);
     formData.set("status", status);
     formData.set("ownerName", ownerName);
+    formData.set("subtitle", subtitle);
     formData.set("loungeUrl", loungeUrl);
     formData.set("onestoreUrl", onestoreUrl);
     // 주소가 없으면 자동 반영은 의미가 없어 보내지 않는다.
@@ -151,6 +155,7 @@ export default function GameForm({
 
     setName("");
     setOwnerName("");
+    setSubtitle("");
     setLoungeUrl("");
     setOnestoreUrl("");
     setOnestoreSync(true);
@@ -205,6 +210,23 @@ export default function GameForm({
       <label className="flex flex-col gap-1">
         <span>게임명</span>
         <input name="name" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} required data-autofocus className={INPUT} />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span>
+          부제 <span className="text-xs text-muted">(선택)</span>
+        </span>
+        <input
+          name="subtitle"
+          autoComplete="off"
+          maxLength={100}
+          value={subtitle}
+          onChange={(e) => setSubtitle(e.target.value)}
+          aria-describedby="game-subtitle-help"
+          className={INPUT}
+        />
+        <span id="game-subtitle-help" className="text-xs text-muted">
+          {SUBTITLE_HELP}
+        </span>
       </label>
       <label className="flex flex-col gap-1">
         <span>상태</span>

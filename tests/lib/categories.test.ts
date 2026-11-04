@@ -171,8 +171,17 @@ describe("listGames", () => {
         ownerName: "홍길동",
         createdAt: "2026-01-01T00:00:00.000Z",
         naverLoungeId: null,
+        // 0037 실행 전이라 열이 없는 행도 부제 없음으로 읽는다.
+        subtitle: null,
       },
     ]);
+  });
+
+  it("reads the subtitle and treats a blank one as none", async () => {
+    const row = { id: "g", name: "숲의 소환단: 방치형 RPG", status: "active", logo_path: null, owner_name: null, created_at: "2026-01-01T00:00:00.000Z" };
+    const order = vi.fn(() => Promise.resolve({ data: [{ ...row, subtitle: "방치형 판타지 수집 RPG" }, { ...row, id: "h", subtitle: "  " }], error: null }));
+    const games = await listGames({ from: vi.fn(() => ({ select: vi.fn(() => ({ order })) })) } as never);
+    expect(games.map((game) => game.subtitle)).toEqual(["방치형 판타지 수집 RPG", null]);
   });
 
   it("throws on a query error", async () => {

@@ -1,6 +1,37 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase";
 import { requireAdminSession } from "@/lib/require-admin-session";
+import { gameSubtitleSchema } from "@/lib/game-schema";
+
+/** 게임 설정 서랍의 "부제" 저장. 고객센터 게임 선택 타일에서 이름 아래에 나온다. */
+export async function PATCH(request: Request, { params }: { params: { gameId: string } }) {
+  if (!(await requireAdminSession())) {
+    return NextResponse.json({ success: false, error: "unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const parsed = gameSubtitleSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, error: "invalid_input" }, { status: 400 });
+  }
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("games")
+    .update({ subtitle: parsed.data.subtitle })
+    .eq("id", params.gameId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return NextResponse.json({ success: false, error: "save_failed" }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ success: false, error: "not_found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ success: true, subtitle: parsed.data.subtitle });
+}
 
 export async function DELETE(_request: Request, { params }: { params: { gameId: string } }) {
   if (!(await requireAdminSession())) {

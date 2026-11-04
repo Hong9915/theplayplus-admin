@@ -38,6 +38,18 @@ describe("GameForm", () => {
     expect(onCreated).toHaveBeenCalledWith(createdGame);
   });
 
+  it("sends the subtitle and explains where it shows", async () => {
+    render(<GameForm onCreated={vi.fn()} />);
+    expect(screen.getByLabelText(/부제/)).toHaveAccessibleDescription("고객센터 게임 선택 타일에서 이름 아래 작게 나옵니다. 비우면 이름의 콜론(:) 뒤를 부제로 씁니다.");
+
+    await userEvent.type(screen.getByLabelText("게임명"), "여신키우기");
+    await userEvent.type(screen.getByLabelText(/부제/), "방치형 판타지 수집 RPG");
+    await userEvent.click(screen.getByRole("button", { name: "게임 추가" }));
+
+    const body = vi.mocked(global.fetch).mock.calls[0][1]!.body as FormData;
+    expect(body.get("subtitle")).toBe("방치형 판타지 수집 RPG");
+  });
+
   it("keeps the created game and warns when only the logo upload failed", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       json: () => Promise.resolve({ success: true, game: createdGame, warning: "logo_upload_failed" }),
