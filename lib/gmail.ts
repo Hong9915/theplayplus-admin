@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { InboxScope } from "@/lib/inbox-scope";
 import { google, type gmail_v1 } from "googleapis";
 import { isAllowedImageType, MAX_INBOUND_SOURCE_BYTES, type AllowedImageType } from "@/lib/attachment-rules";
+import { EMAIL_LOGO_CID, EMAIL_LOGO_FILENAME, getEmailLogo } from "@/lib/email-logo";
 
 export interface InlineImage {
   /** HTML에서 `cid:<cid>`로 참조한다. */
@@ -517,6 +518,9 @@ function parseInboundMessage(message: gmail_v1.Schema$Message, senderAddress: st
  * 메일에 붙은 사진을 찾는다. 첨부로 붙였든 본문에 끼워 넣었든(inline) attachmentId가
  * 있는 이미지 파트를 모두 고른다. 버킷이 받지 않는 종류는 빼고, 5MB를 넘는 사진은 저장할 때
  * 줄이므로 남기되 25MB(Gmail 메일 상한)를 넘는 것만 뺀다.
+ *
+ * 사용자가 답장하면 메일 앱이 인용한 우리 답변의 헤더 로고(cid 인라인 PNG)를 회신에 다시
+ * 붙여 보내므로, 우리 로고로 보이는 파트(이름·Content-ID·같은 크기의 PNG)는 뺀다.
  */
 export function extractImageAttachments(payload: gmail_v1.Schema$MessagePart | undefined): InboundAttachmentRef[] {
   if (!payload) return [];
@@ -530,9 +534,21 @@ export function extractImageAttachments(payload: gmail_v1.Schema$MessagePart | u
     if (!attachmentId || !isAllowedImageType(mimeType)) continue;
     const size = part.body?.size ?? 0;
     if (size > MAX_INBOUND_SOURCE_BYTES) continue;
+    if (isOurEmailLogo(part, mimeType, size)) continue;
     found.push({ attachmentId, filename: part.filename ?? "", mimeType, size });
   }
   return found;
+}
+
+let emailLogoSize: number | undefined;
+
+function isOurEmailLogo(part: gmail_v1.Schema$MessagePart, mimeType: string, size: number): boolean {
+  if (part.filename === EMAIL_LOGO_FILENAME) return true;
+  const contentId = part.headers?.find((h) => h.name?.toLowerCase() === "content-id")?.value ?? "";
+  if (contentId.includes(EMAIL_LOGO_CID)) return true;
+  // 이름과 Content-ID를 바꿔 다시 붙이는 메일 앱도 있어, 바이트 수가 정확히 같은 PNG도 로고로 본다.
+  emailLogoSize ??= getEmailLogo().length;
+  return mimeType === "image/png" && size === emailLogoSize;
 }
 
 async function fetchAttachmentData(gmail: gmail_v1.Gmail, messageId: string, attachmentId: string): Promise<Buffer> {

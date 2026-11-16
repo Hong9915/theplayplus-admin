@@ -188,6 +188,27 @@ describe("reply photos", () => {
     ]);
   });
 
+  it("skips our own email logo that mail apps re-attach when quoting the reply", async () => {
+    const { getEmailLogo } = await import("@/lib/email-logo");
+    const payload = {
+      mimeType: "multipart/related",
+      parts: [
+        { mimeType: "image/png", filename: "theplayplus-logo.png", body: { attachmentId: "logo-1", size: 9999 } },
+        {
+          mimeType: "image/png",
+          filename: "image001.png",
+          headers: [{ name: "Content-ID", value: "<theplayplus-logo>" }],
+          body: { attachmentId: "logo-2", size: 8888 },
+        },
+        { mimeType: "image/png", filename: "renamed.png", body: { attachmentId: "logo-3", size: getEmailLogo().length } },
+        { mimeType: "image/jpeg", filename: "user.jpg", body: { attachmentId: "photo", size: 4000 } },
+      ],
+    };
+    expect(extractImageAttachments(payload)).toEqual([
+      { attachmentId: "photo", filename: "user.jpg", mimeType: "image/jpeg", size: 4000 },
+    ]);
+  });
+
   it("downloads an attachment's bytes through the reader", async () => {
     process.env.GMAIL_CLIENT_ID = "cid";
     process.env.GMAIL_CLIENT_SECRET = "secret";
