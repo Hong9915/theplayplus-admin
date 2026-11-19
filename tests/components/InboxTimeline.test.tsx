@@ -108,6 +108,33 @@ describe("InboxTimeline", () => {
     expect(inbound.querySelector(".rounded-\\[4px_16px_16px_16px\\]")).toBeNull();
   });
 
+  it("shows a sent PDF or Excel file as a download link instead of a picture", () => {
+    render(
+      <InboxTimeline
+        entries={[
+          {
+            kind: "outbound",
+            id: "m-out-doc",
+            inquiryId: "inq-1",
+            at: "2026-09-03T05:00:00.000Z",
+            author: "info@theplayplus.com",
+            body: "정산 내역을 보내드립니다",
+            auto: false,
+            translations: {},
+            attachments: [
+              { id: "d1", fileName: "정산.xlsx", signedUrl: "https://signed.example/d1", messageId: "m-out-doc" },
+              { id: "d2", fileName: "명세서.pdf", signedUrl: null, messageId: "m-out-doc" },
+            ],
+          },
+        ]}
+        labels={labels}
+      />
+    );
+    expect(screen.queryByRole("img", { name: "정산.xlsx" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /정산\.xlsx/ })).toHaveAttribute("href", "https://signed.example/d1");
+    expect(screen.getByText("명세서.pdf (링크 생성 실패)")).toBeInTheDocument();
+  });
+
   it("labels an automatic reply so staff do not mistake it for their own", () => {
     render(
       <InboxTimeline

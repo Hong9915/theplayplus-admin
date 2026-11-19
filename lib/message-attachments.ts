@@ -4,7 +4,7 @@ import type { InboundAttachmentRef, MailAttachment } from "@/lib/gmail";
 import { shrinkImageBuffer } from "@/lib/shrink-image-server";
 import {
   ATTACHMENT_BUCKET,
-  isAllowedImageType,
+  isAllowedReplyType,
   isMessageAttachmentPathOf,
   MAX_IMAGE_BYTES,
   MAX_REPLY_IMAGES,
@@ -15,7 +15,7 @@ import {
 } from "@/lib/attachment-rules";
 
 /**
- * 답변·회신 사진. 둘 다 문의 첨부와 같은 inquiry_attachments 표·inquiry-attachments
+ * 답변 첨부(사진·PDF·엑셀)와 회신 사진. 둘 다 문의 첨부와 같은 inquiry_attachments 표·inquiry-attachments
  * 버킷에 두고 message_id로 어느 메시지에 딸린 것인지 표시한다(마이그레이션 0035).
  *
  * - 답변: 작성란이 서명 업로드 주소로 버킷에 먼저 올린다(Vercel 함수 본문 4.5MB 제한을
@@ -37,7 +37,7 @@ export class ReplyAttachmentError extends Error {
   }
 }
 
-/** 버킷에 올라간 답변 사진을 메일 첨부로 읽는다. 하나라도 못 읽으면 ReplyAttachmentError. */
+/** 버킷에 올라간 답변 첨부(사진·PDF·엑셀)를 메일 첨부로 읽는다. 하나라도 못 읽으면 ReplyAttachmentError. */
 export async function loadReplyAttachments(
   supabase: SupabaseClient,
   inquiryId: string,
@@ -51,7 +51,7 @@ export async function loadReplyAttachments(
       if (!isMessageAttachmentPathOf(inquiryId, ref.path)) throw new ReplyAttachmentError("bad_path");
       const { data: blob, error } = await supabase.storage.from(ATTACHMENT_BUCKET).download(ref.path);
       if (error || !blob) throw new ReplyAttachmentError("download_failed");
-      if (!isAllowedImageType(blob.type)) throw new ReplyAttachmentError("bad_type");
+      if (!isAllowedReplyType(blob.type)) throw new ReplyAttachmentError("bad_type");
       return { contentType: blob.type, filename: ref.fileName, data: Buffer.from(await blob.arrayBuffer()) };
     })
   );

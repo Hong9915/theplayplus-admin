@@ -113,8 +113,8 @@ describe("ReplyComposer", () => {
     it("refuses files that are not photos or too big, and removes a photo on ×", async () => {
       renderIt();
       const input = screen.getByTestId("reply-image-input");
-      await userEvent.upload(input, [new File(["x"], "log.pdf", { type: "application/pdf" })], { applyAccept: false });
-      expect(screen.getByText("PNG·JPG·GIF·WEBP 사진만 붙일 수 있습니다.")).toBeInTheDocument();
+      await userEvent.upload(input, [new File(["x"], "log.zip", { type: "application/zip" })], { applyAccept: false });
+      expect(screen.getByText("사진(PNG·JPG·GIF·WEBP)과 PDF·엑셀 파일만 붙일 수 있습니다.")).toBeInTheDocument();
 
       shrinkImage.mockResolvedValueOnce(null);
       await userEvent.upload(input, [png("huge.png", 5 * 1024 * 1024 + 1)]);
@@ -144,16 +144,49 @@ describe("ReplyComposer", () => {
       await userEvent.upload(screen.getByTestId("reply-image-input"), [png("a.png")]);
       await userEvent.click(screen.getByRole("button", { name: "발송" }));
 
-      expect(await screen.findByText("사진을 올리지 못했습니다. 다시 시도해주세요.")).toBeInTheDocument();
+      expect(await screen.findByText("첨부 파일을 올리지 못했습니다. 다시 시도해주세요.")).toBeInTheDocument();
       expect(global.fetch).not.toHaveBeenCalledWith("/api/inquiries/inq-1/reply", expect.anything());
       expect(reply()).toHaveValue("안내드립니다");
       expect(screen.getByRole("button", { name: "a.png 빼기" })).toBeInTheDocument();
     });
 
-    it("hides the photo button in memo mode", async () => {
+    it("attaches PDF and Excel files as they are and uploads them with their type", async () => {
+      mockUploadFlow();
       renderIt();
+      const pdf = new File(["%PDF"], "명세서.pdf", { type: "application/pdf" });
+      // 브라우저가 형식을 못 알려 줘도 확장자로 엑셀로 받는다.
+      const xlsx = new File(["x"], "정산.xlsx", { type: "" });
+      await userEvent.upload(screen.getByTestId("reply-image-input"), [pdf, xlsx]);
+      expect(screen.getByRole("button", { name: "명세서.pdf 빼기" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "정산.xlsx 빼기" })).toBeInTheDocument();
+      expect(screen.queryByRole("img", { name: "명세서.pdf" })).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "발송" }));
+      expect(await screen.findByText("답변이 발송되었습니다.")).toBeInTheDocument();
+      const uploadsCall = vi.mocked(global.fetch).mock.calls.find(([url]) => String(url).endsWith("/reply/uploads"))!;
+      expect(JSON.parse(String(uploadsCall[1]?.body)).files).toEqual([
+        { name: "명세서.pdf", type: "application/pdf", size: 4 },
+        { name: "정산.xlsx", type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", size: 1 },
+      ]);
+      expect(uploadToSignedUrl).toHaveBeenCalledWith("inq-1/messages/u1-정산.xlsx", "t1", expect.any(File), {
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      expect(shrinkImage).not.toHaveBeenCalled();
+    });
+
+    it("refuses a document over 5MB because it cannot be shrunk", async () => {
+      renderIt();
+      const big = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.pdf", { type: "application/pdf" });
+      await userEvent.upload(screen.getByTestId("reply-image-input"), [big]);
+      expect(await screen.findByText("PDF·엑셀 파일은 5MB까지 붙일 수 있습니다.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "big.pdf 빼기" })).not.toBeInTheDocument();
+    });
+
+    it("hides the attach button in memo mode", async () => {
+      renderIt();
+      expect(screen.getByRole("button", { name: "첨부" })).toBeInTheDocument();
       await userEvent.click(screen.getByRole("tab", { name: "메모" }));
-      expect(screen.queryByRole("button", { name: "사진" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "첨부" })).not.toBeInTheDocument();
     });
   });
 

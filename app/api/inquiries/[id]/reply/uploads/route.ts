@@ -5,7 +5,7 @@ import { getSupabaseServerClient } from "@/lib/supabase";
 import { requireAdminSession } from "@/lib/require-admin-session";
 import {
   ATTACHMENT_BUCKET,
-  isAllowedImageType,
+  isAllowedReplyType,
   MAX_IMAGE_BYTES,
   MAX_REPLY_IMAGES,
   MAX_REPLY_TOTAL_BYTES,
@@ -14,7 +14,7 @@ import {
 } from "@/lib/attachment-rules";
 
 /**
- * 답변에 붙일 사진의 서명 업로드 주소를 내준다. 사진은 Vercel 함수 본문 제한(4.5MB)을
+ * 답변에 붙일 사진·PDF·엑셀의 서명 업로드 주소를 내준다. 파일은 Vercel 함수 본문 제한(4.5MB)을
  * 넘기 쉬워 브라우저가 이 주소로 버킷에 바로 올리고, 발송할 때 경로만 보낸다.
  * 경로는 서버가 정하고 문의 id 아래에 둔다 — 발송 라우트가 그 접두어를 확인한다.
  */
@@ -42,9 +42,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
   const files = parsed.data.files;
   for (const file of files) {
-    if (!isAllowedImageType(file.type)) {
+    if (!isAllowedReplyType(file.type)) {
       return NextResponse.json({ success: false, error: "bad_type" }, { status: 400 });
     }
+    // 사진은 작성란이 미리 줄여 오고, 문서는 줄일 수 없어 버킷 상한 그대로 막는다.
     if (file.size > MAX_IMAGE_BYTES) {
       return NextResponse.json({ success: false, error: "too_large" }, { status: 400 });
     }

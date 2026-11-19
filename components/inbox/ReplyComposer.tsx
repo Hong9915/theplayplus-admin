@@ -9,12 +9,14 @@ import { evidenceKind, type EvidenceKind } from "@/lib/suggest-evidence";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { shrinkImage } from "@/lib/shrink-image";
 import {
-  ALLOWED_IMAGE_TYPES,
   ATTACHMENT_BUCKET,
   isAllowedImageType,
   MAX_IMAGE_BYTES,
   MAX_REPLY_IMAGES,
   MAX_REPLY_TOTAL_BYTES,
+  REPLY_FILE_ACCEPT,
+  replyFileType,
+  type AllowedReplyType,
 } from "@/lib/attachment-rules";
 
 type Mode = "reply" | "note";
@@ -24,10 +26,14 @@ const AUTOSAVE_DELAY_MS = 2000;
 /** 입력창이 늘어나는 상한. 그 위로는 안에서 스크롤한다. */
 const MAX_BOX_HEIGHT_PX = 288;
 
-/** 답변에 붙일 사진. 발송 때 버킷에 올리고, 올린 경로는 기억해 다시 보낼 때 또 올리지 않는다. */
+/**
+ * 답변에 붙일 사진·PDF·엑셀. 발송 때 버킷에 올리고, 올린 경로는 기억해 다시 보낼 때 또
+ * 올리지 않는다. type은 브라우저가 비워 준 형식을 확장자로 채운 값이고, 미리보기는 사진만 만든다.
+ */
 interface PendingImage {
   key: string;
   file: File;
+  type: AllowedReplyType;
   previewUrl: string;
   uploaded: { path: string; fileName: string } | null;
 }
@@ -51,14 +57,14 @@ function revokePreviewUrl(url: string) {
   }
 }
 
-/** 버킷에 올리는 경로를 받아 사진을 올린다. 이미 올린 사진은 건너뛴다. */
+/** 버킷에 올리는 경로를 받아 첨부를 올린다. 이미 올린 것은 건너뛴다. */
 async function uploadPendingImages(inquiryId: string, images: PendingImage[]): Promise<PendingImage[]> {
   const todo = images.filter((image) => !image.uploaded);
   if (todo.length === 0) return images;
 
   const response = await fetch(`/api/inquiries/${inquiryId}/reply/uploads`, {
     method: "POST",
-    body: JSON.stringify({ files: todo.map((image) => ({ name: image.file.name, type: image.file.type, size: image.file.size })) }),
+    body: JSON.stringify({ files: todo.map((image) => ({ name: image.file.name, type: image.type, size: image.file.size })) }),
   });
   const json = (await response.json()) as { success: boolean; uploads?: Array<{ path: string; token: string; fileName: string }> };
   if (!json.success || !json.uploads || json.uploads.length !== todo.length) throw new Error("sign_failed");
@@ -68,7 +74,7 @@ async function uploadPendingImages(inquiryId: string, images: PendingImage[]): P
   await Promise.all(
     todo.map(async (image, index) => {
       const target = json.uploads![index];
-      const { error } = await storage.uploadToSignedUrl(target.path, target.token, image.file, { contentType: image.file.type });
+      const { error } = await storage.uploadToSignedUrl(target.path, target.token, image.file, { contentType: image.type });
       if (error) throw error;
       done.set(image.key, { path: target.path, fileName: target.fileName });
     })
@@ -170,46 +176,52 @@ export default function ReplyComposer({
 
   /**
    * 고른·붙여넣은·끌어다 놓은 파일을 규칙에 맞는 것만 더한다. 5MB(버킷 상한)를 넘는 사진은
-   * JPEG로 줄여서 붙인다. 걸러낸 이유는 한 줄로 알린다.
+   * JPEG로 줄여서 붙이고, PDF·엑셀은 줄일 수 없어 5MB를 넘으면 뺀다. 걸러낸 이유는 한 줄로 알린다.
    */
   async function addFiles(files: File[]) {
     if (files.length === 0) return;
     let reason: string | null = null;
-    const prepared: File[] = [];
+    const prepared: Array<{ file: File; type: AllowedReplyType }> = [];
     for (const file of files) {
-      if (!isAllowedImageType(file.type)) {
-        reason = "PNG·JPG·GIF·WEBP 사진만 붙일 수 있습니다.";
+      const type = replyFileType(file.name, file.type);
+      if (!type) {
+        reason = "사진(PNG·JPG·GIF·WEBP)과 PDF·엑셀 파일만 붙일 수 있습니다.";
         continue;
       }
       if (file.size > MAX_IMAGE_BYTES) {
+        if (!isAllowedImageType(type)) {
+          reason = "PDF·엑셀 파일은 5MB까지 붙일 수 있습니다.";
+          continue;
+        }
         const shrunk = await shrinkImage(file, MAX_IMAGE_BYTES);
         if (!shrunk) {
           reason = "사진을 5MB 아래로 줄이지 못했습니다.";
           continue;
         }
-        prepared.push(shrunk);
+        prepared.push({ file: shrunk, type: "image/jpeg" });
         continue;
       }
-      prepared.push(file);
+      prepared.push({ file, type });
     }
 
-    // 줄이는 사이 다른 사진이 더해졌을 수 있어 지금 상태로 센다.
+    // 줄이는 사이 다른 파일이 더해졌을 수 있어 지금 상태로 센다.
     const existing = imagesRef.current;
     const accepted: PendingImage[] = [];
     let count = existing.length;
     let total = existing.reduce((sum, image) => sum + image.file.size, 0);
-    for (const file of prepared) {
+    for (const { file, type } of prepared) {
       if (count >= MAX_REPLY_IMAGES) {
-        reason = `사진은 한 번에 ${MAX_REPLY_IMAGES}장까지 붙일 수 있습니다.`;
+        reason = `첨부는 한 번에 ${MAX_REPLY_IMAGES}개까지 붙일 수 있습니다.`;
         continue;
       }
       if (total + file.size > MAX_REPLY_TOTAL_BYTES) {
-        reason = "사진은 합쳐서 15MB까지 붙일 수 있습니다.";
+        reason = "첨부는 합쳐서 15MB까지 붙일 수 있습니다.";
         continue;
       }
       count += 1;
       total += file.size;
-      accepted.push({ key: `img-${++imageKeySeq}`, file, previewUrl: createPreviewUrl(file), uploaded: null });
+      const previewUrl = isAllowedImageType(type) ? createPreviewUrl(file) : "";
+      accepted.push({ key: `img-${++imageKeySeq}`, file, type, previewUrl, uploaded: null });
     }
     if (accepted.length > 0) setImages((current) => [...current, ...accepted]);
     if (reason) {
@@ -315,7 +327,7 @@ export default function ReplyComposer({
       } catch {
         setSubmitting(false);
         setMessageTone("error");
-        setMessage("사진을 올리지 못했습니다. 다시 시도해주세요.");
+        setMessage("첨부 파일을 올리지 못했습니다. 다시 시도해주세요.");
         return;
       }
     }
@@ -340,7 +352,7 @@ export default function ReplyComposer({
       if (json.error === "attachment_failed") {
         // 올린 파일을 서버가 못 읽었다. 다음 시도에서 새로 올리게 기억을 지운다.
         setImages((current) => current.map((image) => ({ ...image, uploaded: null })));
-        setMessage("사진을 붙이지 못해 발송하지 않았습니다. 다시 시도해주세요.");
+        setMessage("첨부 파일을 붙이지 못해 발송하지 않았습니다. 다시 시도해주세요.");
       } else {
         setMessage("발송 실패, 다시 시도해주세요.");
       }
@@ -363,7 +375,7 @@ export default function ReplyComposer({
     }
     if (json.warning === "attachment_save_failed") {
       setMessageTone("warning");
-      setMessage("답변과 사진은 발송되었지만 사진 기록 저장에는 실패했습니다. 대화에 사진이 보이지 않을 수 있습니다.");
+      setMessage("답변과 첨부는 발송되었지만 첨부 기록 저장에는 실패했습니다. 대화에 첨부가 보이지 않을 수 있습니다.");
       return;
     }
     setMessageTone("success");
@@ -458,10 +470,21 @@ export default function ReplyComposer({
           className="w-full bg-transparent px-3.5 pt-3 pb-1 text-[14.5px] leading-[1.65] resize-none focus:outline-none placeholder:text-muted/80"
         />
         {isReply && images.length > 0 && (
-          <ul aria-label="붙인 사진" className="flex flex-wrap gap-2 px-3.5 pt-1 pb-2">
+          <ul aria-label="붙인 첨부" className="flex flex-wrap gap-2 px-3.5 pt-1 pb-2">
             {images.map((image) => (
               <li key={image.key} className="relative">
-                {image.previewUrl ? (
+                {!isAllowedImageType(image.type) ? (
+                  <span
+                    title={image.file.name}
+                    className="h-16 max-w-[200px] rounded-lg ring-1 ring-line bg-well flex items-center gap-2 pl-2.5 pr-3.5 text-[12.5px] text-ink-2"
+                  >
+                    <DocumentIcon />
+                    <span className="flex flex-col min-w-0">
+                      <span className="truncate font-medium">{image.file.name}</span>
+                      <span className="text-[11px] text-muted tabular-nums">{formatFileSize(image.file.size)}</span>
+                    </span>
+                  </span>
+                ) : image.previewUrl ? (
                   <img
                     src={image.previewUrl}
                     alt={image.file.name}
@@ -507,7 +530,7 @@ export default function ReplyComposer({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept={ALLOWED_IMAGE_TYPES.join(",")}
+                accept={REPLY_FILE_ACCEPT}
                 multiple
                 hidden
                 data-testid="reply-image-input"
@@ -521,15 +544,13 @@ export default function ReplyComposer({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={submitting || writing}
-                title="사진 붙이기 (붙여넣기·끌어다 놓기도 됩니다)"
+                title="사진·PDF·엑셀 붙이기 (끌어다 놓기도 됩니다, 사진은 붙여넣기도 됩니다)"
                 className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg text-[13.5px] font-semibold text-muted hover:text-ink hover:bg-well disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 shrink-0"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="3" y="4" width="18" height="16" rx="2.5" />
-                  <circle cx="9" cy="10" r="1.75" />
-                  <path d="m21 16-5-5-9 9" />
+                  <path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" />
                 </svg>
-                사진
+                첨부
               </button>
             </>
           )}
@@ -648,4 +669,19 @@ function EvidenceIcon({ kind }: { kind: EvidenceKind }) {
         </svg>
       );
   }
+}
+
+/** 작성란에 붙인 PDF·엑셀 칩의 아이콘. */
+function DocumentIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-muted shrink-0">
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+    </svg>
+  );
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }

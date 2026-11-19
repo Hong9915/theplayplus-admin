@@ -2,6 +2,7 @@ import type { TimelineEntry } from "@/lib/timeline";
 import type { AttachmentWithUrl } from "@/lib/inquiries";
 import type { CategoryLabelMaps } from "@/lib/categories";
 import { emailLocalPart, formatReceivedAt } from "@/lib/format";
+import { isDocumentFileName } from "@/lib/attachment-rules";
 import StatusBadge from "@/components/ui/StatusBadge";
 import ScrollToCurrent from "@/components/inbox/ScrollToCurrent";
 import TranslatableBody from "@/components/inbox/TranslatableBody";
@@ -56,13 +57,32 @@ function Avatar({ entry }: { entry: MessageEntry }) {
 function Attachments({ attachments, alignEnd = false }: { attachments: AttachmentWithUrl[]; alignEnd?: boolean }) {
   if (attachments.length === 0) return null;
   return (
-    <ul className={`flex flex-wrap gap-2 text-xs ${alignEnd ? "justify-end" : ""}`} aria-label="첨부 사진">
+    <ul className={`flex flex-wrap gap-2 text-xs ${alignEnd ? "justify-end" : ""}`} aria-label="첨부 파일">
       {attachments.map((attachment) => (
         <li key={attachment.id} className="flex flex-col gap-1 max-w-[240px]">
-          {attachment.signedUrl ? (
+          {isDocumentFileName(attachment.fileName) ? (
+            // 답변에 붙여 보낸 PDF·엑셀. 그림이 아니니 이름만 보이는 내려받기 칩으로 그린다.
+            attachment.signedUrl ? (
+              <a
+                href={attachment.signedUrl}
+                target="_blank"
+                rel="noreferrer"
+                title="열기·내려받기"
+                className="flex items-center gap-2 h-10 pl-2.5 pr-3.5 rounded-[10px] ring-1 ring-line bg-panel text-[12.5px] text-ink-2 hover:bg-well transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-muted shrink-0">
+                  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 3v5h5" />
+                </svg>
+                <span className="truncate font-medium">{attachment.fileName}</span>
+              </a>
+            ) : (
+              <span className="text-muted">{attachment.fileName} (링크 생성 실패)</span>
+            )
+          ) : attachment.signedUrl ? (
             <>
               <a href={attachment.signedUrl} target="_blank" rel="noreferrer" title="원본 크기로 열기" className="block rounded-[10px] overflow-hidden ring-1 ring-line bg-black/5">
-                {/* 첨부 버킷은 이미지 MIME만 허용하므로 항상 <img>로 렌더링한다. */}
+                {/* PDF·엑셀은 위에서 갈렸고, 나머지 첨부는 버킷이 이미지 MIME만 받으므로 <img>로 그린다. */}
                 <img src={attachment.signedUrl} alt={attachment.fileName} loading="lazy" width={240} height={192} className="max-h-48 w-auto max-w-full object-contain" />
               </a>
               <span className="text-muted truncate">{attachment.fileName}</span>
