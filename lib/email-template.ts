@@ -32,6 +32,7 @@ export const COMPANY = {
   registrationNo: "847-81-03647",
   address: "서울특별시 구로구 디지털로31길 38-21 이앤씨벤처드림타워3차 6층 602호",
   siteUrl: "https://www.theplayplus.com/",
+  contactUrl: "https://www.theplayplus.com/contact",
 } as const;
 
 const COLORS = {
@@ -136,7 +137,11 @@ export function renderReplyEmailHtml(input: ReplyEmailInput): string {
         </tr>
 
         <tr>
-          <td style="padding:32px 40px 0 40px;">
+          <td style="padding:32px 40px 0 40px;font-family:${FONT};font-size:13px;line-height:1.7;color:${COLORS.muted};">이 답변에 대해 더 궁금하신 점은 이 메일에 바로 답장해 주시면 같은 담당자가 이어서 확인해 드립니다. 다른 내용의 문의는 <a href="${escapeHtml(input.contactUrl)}" style="color:${COLORS.accent};font-weight:500;text-decoration:none;">고객센터</a>에서 새로 접수해 주시면 담당 부서로 바로 전달되어 더 빠르게 답변드릴 수 있습니다.</td>
+        </tr>
+
+        <tr>
+          <td style="padding:24px 40px 0 40px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${COLORS.surface};">
               <tr>
                 <td style="padding:24px 28px;">
@@ -149,10 +154,6 @@ export function renderReplyEmailHtml(input: ReplyEmailInput): string {
               </tr>
             </table>
           </td>
-        </tr>
-
-        <tr>
-          <td style="padding:24px 40px 0 40px;font-family:${FONT};font-size:13px;line-height:1.7;color:${COLORS.muted};">추가로 문의하실 내용이 있다면 <a href="${escapeHtml(input.contactUrl)}" style="color:${COLORS.accent};font-weight:500;text-decoration:none;">문의하기</a> 페이지를 이용해 주세요. 이 메일에 직접 답장하셔도 같은 담당자에게 전달됩니다.</td>
         </tr>
 
         <tr>
@@ -189,6 +190,9 @@ export function renderReplyEmailText(input: ReplyEmailInput): string {
   const lines = [
     input.replyBody,
     "",
+    "이 답변에 대해 더 궁금하신 점은 이 메일에 바로 답장해 주세요.",
+    `다른 내용의 문의는 고객센터(${input.contactUrl})에서 새로 접수해 주시면 더 빠르게 답변드릴 수 있습니다.`,
+    "",
     "----------------------------------------",
     "[고객님께서 문의하신 내용]",
     input.inquiry.inquiryNo ? `접수번호: ${input.inquiry.inquiryNo}` : null,
@@ -197,8 +201,6 @@ export function renderReplyEmailText(input: ReplyEmailInput): string {
     `제목: ${input.inquiry.title}`,
     "",
     input.inquiry.content,
-    "",
-    `추가 문의: ${input.contactUrl}`,
     "",
     `${COMPANY.name} · ${input.contactEmail}`,
   ];

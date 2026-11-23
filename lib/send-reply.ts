@@ -111,7 +111,7 @@ export async function sendInquiryReply(supabase: SupabaseClient, input: SendRepl
       content: inquiry.content,
     },
     logoCid: EMAIL_LOGO_CID,
-    contactUrl: COMPANY.siteUrl,
+    contactUrl: COMPANY.contactUrl,
     contactEmail: mailboxSender(mailbox),
   };
 
