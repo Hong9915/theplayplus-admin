@@ -33,6 +33,9 @@ export const COMPANY = {
   address: "서울특별시 구로구 디지털로31길 38-21 이앤씨벤처드림타워3차 6층 602호",
   siteUrl: "https://www.theplayplus.com/",
   contactUrl: "https://www.theplayplus.com/contact",
+  /** theplayplus-web 고객센터 페이지의 운영 시간과 맞춘다. */
+  hours: "평일 10:00–18:00",
+  hoursClosed: "주말·공휴일 휴무",
 } as const;
 
 const COLORS = {
@@ -46,6 +49,7 @@ const COLORS = {
   surface: "#F5F2F0",
   outer: "#ECE9E6",
   accent: "#EA581F",
+  accentSoft: "#FDF1EB",
 } as const;
 
 const FONT = `'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', Helvetica, Arial, sans-serif`;
@@ -112,7 +116,11 @@ export function renderReplyEmailHtml(input: ReplyEmailInput): string {
                     </tr>
                   </table>
                 </td>
-                <td align="right" valign="middle" style="font-family:${FONT};font-size:13px;font-weight:500;color:${COLORS.mutedOnDark};letter-spacing:0.02em;">고객센터</td>
+                <td align="right" valign="middle" style="font-family:${FONT};text-align:right;">
+                  <div style="font-size:13px;font-weight:500;color:#FFFFFF;letter-spacing:0.02em;">고객센터</div>
+                  <div style="margin-top:4px;font-size:12px;line-height:1.5;color:${COLORS.mutedOnDark};white-space:nowrap;">${COMPANY.hours}</div>
+                  <div style="font-size:12px;line-height:1.5;color:${COLORS.mutedOnDark};white-space:nowrap;">${COMPANY.hoursClosed}</div>
+                </td>
               </tr>
             </table>
           </td>
@@ -137,7 +145,30 @@ export function renderReplyEmailHtml(input: ReplyEmailInput): string {
         </tr>
 
         <tr>
-          <td style="padding:32px 40px 0 40px;font-family:${FONT};font-size:13px;line-height:1.7;color:${COLORS.muted};">이 답변에 대해 더 궁금하신 점은 이 메일에 바로 답장해 주시면 같은 담당자가 이어서 확인해 드립니다. 다른 내용의 문의는 <a href="${escapeHtml(input.contactUrl)}" style="color:${COLORS.accent};font-weight:500;text-decoration:none;">고객센터</a>에서 새로 접수해 주시면 담당 부서로 바로 전달되어 더 빠르게 답변드릴 수 있습니다.</td>
+          <td style="padding:32px 40px 0 40px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${COLORS.accentSoft};border-left:4px solid ${COLORS.accent};">
+              <tr>
+                <td style="padding:20px 24px;font-family:${FONT};">
+                  <div style="font-size:15px;font-weight:700;color:${COLORS.text};">추가 문의 안내</div>
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;">
+                    <tr>
+                      <td valign="top" style="padding:0 8px 6px 0;font-size:14px;line-height:1.7;color:${COLORS.accent};font-weight:700;">·</td>
+                      <td valign="top" style="padding:0 0 6px 0;font-size:14px;line-height:1.7;color:${COLORS.body};"><strong style="color:${COLORS.text};">이 답변에 대한 추가 질문</strong>은 이 메일에 바로 답장해 주세요. 같은 담당자가 이어서 확인해 드립니다.</td>
+                    </tr>
+                    <tr>
+                      <td valign="top" style="padding:0 8px 0 0;font-size:14px;line-height:1.7;color:${COLORS.accent};font-weight:700;">·</td>
+                      <td valign="top" style="padding:0;font-size:14px;line-height:1.7;color:${COLORS.body};"><strong style="color:${COLORS.text};">다른 내용의 문의</strong>는 고객센터에서 새로 접수해 주세요. 담당 부서로 바로 전달되어 더 빠르게 답변드릴 수 있습니다.</td>
+                    </tr>
+                  </table>
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:16px;">
+                    <tr>
+                      <td style="background-color:${COLORS.accent};border-radius:4px;"><a href="${escapeHtml(input.contactUrl)}" style="display:inline-block;padding:10px 20px;font-family:${FONT};font-size:14px;font-weight:700;color:#FFFFFF;text-decoration:none;">고객센터에서 새 문의하기 →</a></td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
         </tr>
 
         <tr>
@@ -190,8 +221,10 @@ export function renderReplyEmailText(input: ReplyEmailInput): string {
   const lines = [
     input.replyBody,
     "",
-    "이 답변에 대해 더 궁금하신 점은 이 메일에 바로 답장해 주세요.",
-    `다른 내용의 문의는 고객센터(${input.contactUrl})에서 새로 접수해 주시면 더 빠르게 답변드릴 수 있습니다.`,
+    "[추가 문의 안내]",
+    "- 이 답변에 대한 추가 질문은 이 메일에 바로 답장해 주세요. 같은 담당자가 이어서 확인해 드립니다.",
+    `- 다른 내용의 문의는 고객센터(${input.contactUrl})에서 새로 접수해 주세요. 담당 부서로 바로 전달되어 더 빠르게 답변드릴 수 있습니다.`,
+    `- 고객센터 운영 시간: ${COMPANY.hours} (${COMPANY.hoursClosed})`,
     "",
     "----------------------------------------",
     "[고객님께서 문의하신 내용]",
