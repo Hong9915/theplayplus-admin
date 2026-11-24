@@ -219,6 +219,37 @@ describe("stripQuotedReply", () => {
     expect(stripQuotedReply("답장입니다\n> 원문\n> 원문2")).toBe("답장입니다");
   });
 
+  it("drops our branded email that Naver Mail quotes as plain text without a separator", async () => {
+    const { stripQuotedReply } = await import("@/lib/gmail");
+    const quoted = [
+      "보스 생명력도 안 보여요.",
+      "빠른 조치해주세요",
+      "",
+      "",
+      "THE PLAY+",
+      "",
+      "고객센터",
+      "평일 10:00–18:00",
+      "",
+      "숲의 소환단 고객센터",
+      "문의하신 내용에 대한 답변입니다",
+      "안녕하세요.",
+    ].join("\n");
+    expect(stripQuotedReply(quoted)).toBe("보스 생명력도 안 보여요.\n빠른 조치해주세요");
+  });
+
+  it("drops our email from its title line when the header line is missing", async () => {
+    const { stripQuotedReply } = await import("@/lib/gmail");
+    expect(stripQuotedReply("확인 부탁드려요\n\n숲의 소환단 고객센터\n문의하신 내용에 대한 답변입니다\n본문")).toBe(
+      "확인 부탁드려요"
+    );
+  });
+
+  it("keeps a reply that merely mentions THE PLAY+", async () => {
+    const { stripQuotedReply } = await import("@/lib/gmail");
+    expect(stripQuotedReply("THE PLAY+\n고마워요")).toBe("THE PLAY+\n고마워요");
+  });
+
   it("keeps text that has no quote", async () => {
     const { stripQuotedReply } = await import("@/lib/gmail");
     expect(stripQuotedReply("그냥 본문\n두 줄")).toBe("그냥 본문\n두 줄");

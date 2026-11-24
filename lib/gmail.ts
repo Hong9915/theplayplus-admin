@@ -411,18 +411,35 @@ export function extractPlainText(payload: gmail_v1.Schema$MessagePart | undefine
 /**
  * 사용자가 메일 앱에서 답장하면 우리가 보낸 본문이 인용문으로 딸려온다.
  * "On ... wrote:" / "님이 작성:" 같은 구분선 아래는 잘라낸다.
+ *
+ * 네이버 메일은 구분선도 `>`도 없이 우리 HTML 메일을 글자로 풀어 그대로 붙인다
+ * (2026-11-23 실측). 그래서 우리 메일 머리(로고 옆 "THE PLAY+" 다음 줄 "고객센터")나
+ * 제목 줄("문의하신 내용에 대한 답변입니다", 그 앞 줄은 "{게임} 고객센터")에서도 자른다.
  */
 export function stripQuotedReply(text: string): string {
   const lines = text.split(/\r?\n/);
   const cut = lines.findIndex(
-    (line) =>
+    (line, index) =>
       /^On .+wrote:\s*$/.test(line.trim()) ||
       /님이 작성:\s*$/.test(line.trim()) ||
       /^-{2,}\s*Original Message\s*-{2,}$/i.test(line.trim()) ||
-      /^>/.test(line)
+      /^>/.test(line) ||
+      isOurEmailHeader(lines, index)
   );
-  const kept = cut === -1 ? lines : lines.slice(0, cut);
+  const titleIndex = lines.findIndex((line) => line.trim() === OUR_EMAIL_TITLE);
+  const titleCut = titleIndex === -1 ? -1 : Math.max(0, titleIndex - 1);
+  const cuts = [cut, titleCut].filter((value) => value !== -1);
+  const kept = cuts.length === 0 ? lines : lines.slice(0, Math.min(...cuts));
   return kept.join("\n").trim();
+}
+
+const OUR_EMAIL_TITLE = "문의하신 내용에 대한 답변입니다";
+
+/** 이 줄이 "THE PLAY+"이고 다음 빈칸 아닌 줄이 "고객센터"면 우리 메일 머리다. */
+function isOurEmailHeader(lines: string[], index: number): boolean {
+  if (lines[index].trim() !== "THE PLAY+") return false;
+  const next = lines.slice(index + 1).find((line) => line.trim() !== "");
+  return next?.trim() === "고객센터";
 }
 
 function header(headers: gmail_v1.Schema$MessagePartHeader[] | undefined, name: string): string | null {
